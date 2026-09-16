@@ -3,7 +3,11 @@
 // Also used identically from Node (scripts/generate-seed.mjs) since Node 19+
 // exposes the same `crypto.subtle` global.
 
-const ITERATIONS = 120000;
+// Capped at 100000 — the maximum PBKDF2 iteration count the Cloudflare
+// Workers runtime's WebCrypto implementation allows (higher values throw
+// "NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+// supported" at verify time in production, even though Node has no such cap).
+const ITERATIONS = 100000;
 const KEY_LENGTH_BITS = 256;
 
 function toHex(buffer) {
