@@ -1,0 +1,24 @@
+{
+  "name": "rahma-mall-crm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RAHMA MALL — Live Call Team CRM. Cloudflare Workers + D1 + Durable Objects backend, static SPA frontend.",
+  "scripts": {
+    "dev": "wrangler dev --local --persist-to .wrangler/state",
+    "dev:remote": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply rahma_mall_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply rahma_mall_db --remote",
+    "db:seed:local": "wrangler d1 execute rahma_mall_db --local --file=./worker/seed/seed.sql",
+    "db:seed:remote": "wrangler d1 execute rahma_mall_db --remote --file=./worker/seed/seed.sql",
+    "seed:hash": "node scripts/generate-seed.mjs",
+    "deploy": "wrangler deploy",
+    "pages:deploy": "wrangler pages deploy frontend/public --project-name=rahma-mall-crm"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "xlsx": "^0.18.5"
+  }
+}
