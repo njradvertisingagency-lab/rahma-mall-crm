@@ -54,7 +54,7 @@
     card.appendChild(el('div', { class: 'kpi-grid' }, [
       ['موزّع', me.assigned], ['مغلق', me.closed], ['متابعات مكتملة', me.followupsCompleted], ['متابعات متأخرة', me.followupsOverdue],
     ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value' }, [String(v)]), el('div', { class: 'kpi-label' }, [l])]))));
-    card.appendChild(el('div', { class: 'mt-16' }, [el('div', { class: 'flex-between mb-8' }, ['نسبة الإنجاز', Math.round(me.completionRate * 100) + '%']), el('div', { class: 'progress-bar' }, [el('div', { style: `width:${Math.round(me.completionRate * 100)}%` })])]));
+    card.appendChild(el('div', { class: 'mt-16' }, [el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['نسبة الإنجاز']), el('span', {}, [Math.round(me.completionRate * 100) + '%'])]), el('div', { class: 'progress-bar' }, [el('div', { style: `width:${Math.round(me.completionRate * 100)}%` })])]));
     container.appendChild(card);
     return container;
   });
@@ -107,7 +107,7 @@
       ['lead-scores', 'تقرير تقييم العملاء المحتملين', 'تقييم حي وواضح لكل العملاء المفتوحين.'],
       ['products', 'تقرير اهتمام بالمنتجات', 'عدد العملاء حسب كل منتج مهتم به.'],
       ['sales', 'تقرير المبيعات', 'كل عملية شراء بالإجمالي والمرتجعات وصافي الإيراد.'],
-      ['sales-attribution', 'تقرير فريق الاتصال ← المبيعات', 'موزّع/شوهد/تم التواصل/صفقات/إيراد لكل موظف.'],
+      ['sales-attribution', 'تقرير التواصل ← المبيعات', 'موزّع/شوهد/تم التواصل/صفقات/إيراد لكل موظف.'],
     ];
     container.appendChild(el('div', { class: 'kpi-grid' }, reports.map(([key, title, desc]) =>
       el('div', { class: 'card card-pad' }, [

@@ -120,7 +120,7 @@
 
     async function showDistributionDetail(distId) {
       const detail = await api('/distributions/' + distId);
-      const body = el('div', {}, Object.entries(detail.perEmployee).map(([name, count]) => el('div', { class: 'flex-between mb-8' }, [name, String(count)])));
+      const body = el('div', {}, Object.entries(detail.perEmployee).map(([name, count]) => el('div', { class: 'flex-between mb-8' }, [el('span', {}, [name]), el('span', {}, [String(count)])])));
       const backdrop = document.createElement('div');
       backdrop.className = 'modal-backdrop';
       backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };

@@ -278,7 +278,7 @@ const ROUTES = [];
 App.route = (pattern, handler, opts) => ROUTES.push({ pattern, handler, roles: opts && opts.roles });
 
 function matchRoute(hash) {
-  const path = hash.replace(/^#/, '') || '/dashboard';
+  const path = (hash.replace(/^#/, '') || '/dashboard').split('?')[0] || '/dashboard';
   for (const r of ROUTES) {
     const keys = [];
     const regex = new RegExp('^' + r.pattern.replace(/:[^/]+/g, (m) => { keys.push(m.slice(1)); return '([^/]+)'; }) + '$');

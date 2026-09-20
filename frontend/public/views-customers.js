@@ -15,6 +15,33 @@
 
   const SEGMENTS = ['', 'NEW', 'INTERESTED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED'];
   const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', INTERESTED: 'مهتم', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يوجد رد', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد' };
+  const BULK_STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED'];
+  const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
+
+  function modal(title, bodyNode, footerNodes) {
+    const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } });
+    const m = el('div', { class: 'modal' }, [
+      el('div', { class: 'modal-header' }, [el('div', { class: 'modal-title' }, [title]), el('button', { class: 'modal-close', onclick: () => close() }, ['✕'])]),
+      el('div', { class: 'modal-body' }, [bodyNode]),
+      el('div', { class: 'modal-footer' }, footerNodes || []),
+    ]);
+    backdrop.appendChild(m);
+    document.body.appendChild(backdrop);
+    function close() { backdrop.remove(); }
+    return { close, el: backdrop };
+  }
+
+  function pickFromList(title, label, options, labels) {
+    return new Promise((resolve) => {
+      const sel = el('select', {}, options.map((v) => el('option', { value: v }, [labels[v] || v])));
+      const body = el('div', { class: 'field' }, [el('label', {}, [label]), sel]);
+      const dlg = modal(title, body, []);
+      dlg.el.querySelector('.modal-footer').append(
+        el('button', { class: 'btn btn-outline', onclick: () => { dlg.close(); resolve(null); } }, ['إلغاء']),
+        el('button', { class: 'btn btn-primary', onclick: () => { const v = sel.value; dlg.close(); resolve(v); } }, ['تطبيق'])
+      );
+    });
+  }
 
   async function customersListView() {
     const user = App.state.user;
@@ -233,17 +260,17 @@
     }
 
     async function bulkStatus() {
-      const status = prompt('الحالة الجديدة (NEW, CALLING, NO_ANSWER, BUSY, FOLLOW_UP, INTERESTED, NOT_INTERESTED):');
+      const status = await pickFromList('تغيير الحالة للمحدد', `الحالة الجديدة (${state.selected.size} عميل)`, BULK_STATUSES, STATUS_LABELS);
       if (!status) return;
-      await api('/customers/bulk', { method: 'POST', body: { customerIds: [...state.selected], action: 'STATUS', status: status.toUpperCase() } });
+      await api('/customers/bulk', { method: 'POST', body: { customerIds: [...state.selected], action: 'STATUS', status } });
       toast('تم تحديث الحالة للمحدد', 'success');
       state.selected.clear();
       load();
     }
     async function bulkPriority() {
-      const p = prompt('الأولوية الجديدة (LOW, NORMAL, HIGH, URGENT):');
+      const p = await pickFromList('تغيير الأولوية للمحدد', `الأولوية الجديدة (${state.selected.size} عميل)`, PRIORITIES, PRIORITY_LABELS);
       if (!p) return;
-      await api('/customers/bulk', { method: 'POST', body: { customerIds: [...state.selected], action: 'PRIORITY', priority: p.toUpperCase() } });
+      await api('/customers/bulk', { method: 'POST', body: { customerIds: [...state.selected], action: 'PRIORITY', priority: p } });
       toast('تم تحديث الأولوية للمحدد', 'success');
       state.selected.clear();
       load();

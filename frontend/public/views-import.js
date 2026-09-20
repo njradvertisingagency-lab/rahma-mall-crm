@@ -21,9 +21,17 @@
       el('button', { class: 'btn btn-primary', onclick: () => runPreview({ text: pasteBox.value }) }, ['معاينة الاستيراد']),
     ]);
 
-    const fileInput = el('input', { type: 'file', accept: '.csv,.xlsx,.xls' });
+    const fileInput = el('input', { type: 'file', accept: '.csv,.xlsx,.xls', style: 'display:none' });
+    const fileNameLabel = el('span', { class: 'muted', style: 'font-size:13px' }, ['لم يتم اختيار أي ملف']);
+    const chooseFileBtn = el('button', { type: 'button', class: 'btn btn-outline btn-sm', onclick: () => fileInput.click() }, ['📁 اختيار ملف']);
+    fileInput.addEventListener('change', () => {
+      fileNameLabel.textContent = fileInput.files[0] ? fileInput.files[0].name : 'لم يتم اختيار أي ملف';
+    });
     const fileCard = el('div', { class: 'card card-pad', style: 'display:none' }, [
-      el('div', { class: 'field' }, [el('label', {}, ['ارفع ملف CSV أو Excel (يدعم أعمدة الهاتف والاسم والمصدر والحملة والمنتج تلقائيًا)']), fileInput]),
+      el('div', { class: 'field' }, [
+        el('label', {}, ['ارفع ملف CSV أو Excel (يدعم أعمدة الهاتف والاسم والمصدر والحملة والمنتج تلقائيًا)']),
+        el('div', { style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap' }, [chooseFileBtn, fileNameLabel, fileInput]),
+      ]),
       el('button', { class: 'btn btn-primary', onclick: runFilePreview }, ['معاينة الاستيراد']),
     ]);
 
