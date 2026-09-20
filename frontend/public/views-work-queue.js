@@ -6,14 +6,14 @@
     const user = App.state.user;
     const employeeId = user.employeeId;
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['🎯 My Work Queue'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['🎯 قائمة مهامي'])]));
 
     const goalCard = el('div', { class: 'card card-pad mb-16' });
     const suggestionsCard = el('div', { class: 'card card-pad mb-16' });
     const queueCard = el('div', { class: 'card card-pad' });
     container.appendChild(goalCard);
     container.appendChild(suggestionsCard);
-    container.appendChild(el('div', { class: 'section-title' }, ['Next Customers to Handle']));
+    container.appendChild(el('div', { class: 'section-title' }, ['العملاء التاليين للتعامل معهم']));
     container.appendChild(queueCard);
 
     async function load() {
@@ -29,13 +29,13 @@
 
     function renderGoal(p) {
       goalCard.innerHTML = '';
-      goalCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, [`Today's Goal — ${p.goalDate}`]));
+      goalCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, [`هدف اليوم — ${App.fmt.date(p.goalDate)}`]));
       if (!p.hasGoal) {
-        goalCard.appendChild(el('div', { class: 'muted' }, ['No goal has been set for you today by your Team Leader.']));
+        goalCard.appendChild(el('div', { class: 'muted' }, ['لم يحدد لك قائد الفريق هدفًا اليوم.']));
         return;
       }
       const rows = [
-        ['Customers Handled', p.customers], ['Seen', p.seen], ['Contacted', p.contacted], ['Follow-ups Completed', p.followups],
+        ['عملاء تم التعامل معهم', p.customers], ['تمت رؤيتهم', p.seen], ['تم التواصل معهم', p.contacted], ['متابعات مكتملة', p.followups],
       ];
       rows.forEach(([label, v]) => {
         const pct = v.target > 0 ? Math.min(100, Math.round((v.done / v.target) * 100)) : 0;
@@ -44,14 +44,14 @@
           el('div', { class: 'progress-bar' }, [el('div', { style: `width:${pct}%` })]),
         ]));
       });
-      goalCard.appendChild(el('div', { class: 'flex-between mt-8', style: 'font-weight:700' }, [el('span', {}, ['Overall']), el('span', {}, [p.overallPercent + '%'])]));
+      goalCard.appendChild(el('div', { class: 'flex-between mt-8', style: 'font-weight:700' }, [el('span', {}, ['الإجمالي']), el('span', {}, [p.overallPercent + '%'])]));
     }
 
     function renderSuggestions(suggestions) {
       suggestionsCard.innerHTML = '';
-      suggestionsCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['💡 Smart Follow-up Suggestions']));
+      suggestionsCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['💡 اقتراحات ذكية للمتابعة']));
       if (suggestions.length === 0) {
-        suggestionsCard.appendChild(el('div', { class: 'muted' }, ['No suggestions right now.']));
+        suggestionsCard.appendChild(el('div', { class: 'muted' }, ['لا توجد اقتراحات حاليًا.']));
         return;
       }
       suggestions.forEach((s) => {
@@ -65,19 +65,19 @@
     function renderQueue(queue) {
       queueCard.innerHTML = '';
       if (queue.length === 0) {
-        queueCard.appendChild(el('div', { class: 'empty-state' }, ['No open customers right now.']));
+        queueCard.appendChild(el('div', { class: 'empty-state' }, ['لا يوجد عملاء مفتوحين حاليًا.']));
         return;
       }
       queueCard.appendChild(el('div', { class: 'table-wrap' }, [
         el('table', { class: 'data-table' }, [
-          el('thead', {}, [el('tr', {}, ['Customer', 'Phone', 'Status', 'Priority', 'Why', ''].map((h) => el('th', {}, [h])))]),
+          el('thead', {}, [el('tr', {}, ['العميل', 'الهاتف', 'الحالة', 'الأولوية', 'السبب', ''].map((h) => el('th', {}, [h])))]),
           el('tbody', {}, queue.map((c) => el('tr', {}, [
             el('td', {}, [el('a', { href: '#/customers/' + c.id, style: 'font-weight:700' }, [c.name || c.id])]),
             el('td', { class: 'mono' }, [c.phone]),
             el('td', {}, [badges.status(c.status)]),
             el('td', {}, [badges.priority(c.priority)]),
             el('td', { class: 'faint', style: 'font-size:12px' }, [c.reasons.join(' · ')]),
-            el('td', {}, [el('button', { class: 'btn btn-sm btn-primary', onclick: () => App.navigate('#/customers/' + c.id) }, ['Open'])]),
+            el('td', {}, [el('button', { class: 'btn btn-sm btn-primary', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح'])]),
           ]))),
         ]),
       ]));

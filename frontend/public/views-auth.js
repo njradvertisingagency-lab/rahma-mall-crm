@@ -11,9 +11,9 @@
     async function render() {
       container.innerHTML = '';
       const brand = el('div', { class: 'login-brand' }, [
-        el('div', { class: 'logo' }, ['RAHMA MALL']),
-        el('div', { class: 'title' }, ['LIVE CALL TEAM CRM']),
-        el('div', { class: 'subtitle' }, ['Customer Distribution & Team Management']),
+        el('div', { class: 'logo' }, ['رحمة مول']),
+        el('div', { class: 'title' }, ['نظام إدارة فريق المكالمات']),
+        el('div', { class: 'subtitle' }, ['توزيع العملاء وإدارة الفريق']),
       ]);
       container.appendChild(brand);
 
@@ -22,18 +22,18 @@
           el('div', { class: 'login-cards' }, [
             el('div', { class: 'login-card', onclick: () => { screen = 'tl-form'; render(); } }, [
               el('div', { class: 'icon' }, ['🧑‍💼']),
-              el('div', { class: 'label' }, ['TEAM LEADER']),
-              el('div', { class: 'desc' }, ['Manage the whole team, distribute customers, view analytics.']),
+              el('div', { class: 'label' }, ['قائد الفريق']),
+              el('div', { class: 'desc' }, ['إدارة الفريق بالكامل، توزيع العملاء، ومتابعة التحليلات.']),
             ]),
             el('div', { class: 'login-card', onclick: async () => { screen = 'employee-pick'; await loadEmployees(); render(); } }, [
               el('div', { class: 'icon' }, ['👥']),
-              el('div', { class: 'label' }, ['EMPLOYEES']),
-              el('div', { class: 'desc' }, ['Handle your assigned customers and follow-ups.']),
+              el('div', { class: 'label' }, ['الموظفين']),
+              el('div', { class: 'desc' }, ['متابعة عملائك ومهامك الخاصة.']),
             ]),
           ])
         );
       } else if (screen === 'tl-form') {
-        container.appendChild(renderLoginForm('Teamleader-optional', 'Team Leader Login', true));
+        container.appendChild(renderLoginForm('Teamleader-optional', 'تسجيل دخول قائد الفريق', true));
       } else if (screen === 'employee-pick') {
         container.appendChild(
           el('div', { class: 'employee-pick-grid' }, employees.map((e) =>
@@ -43,9 +43,9 @@
             ])
           ))
         );
-        container.appendChild(el('button', { class: 'btn btn-outline mt-16', onclick: () => { screen = 'pick'; render(); } }, ['← Back']));
+        container.appendChild(el('button', { class: 'btn btn-outline mt-16', onclick: () => { screen = 'pick'; render(); } }, ['← رجوع']));
       } else if (screen === 'employee-form') {
-        container.appendChild(renderLoginForm(selectedEmployee.username, `Welcome, ${selectedEmployee.name}`, false));
+        container.appendChild(renderLoginForm(selectedEmployee.username, `أهلاً بك، ${selectedEmployee.name}`, false));
       }
     }
 
@@ -54,7 +54,7 @@
         const data = await api('/auth/employees-public');
         employees = data.employees;
       } catch (e) {
-        toast('Could not load employee list', 'error');
+        toast('تعذّر تحميل قائمة الموظفين', 'error');
       }
     }
 
@@ -62,24 +62,24 @@
       const card = el('div', { class: 'login-form-card' });
       const heading = el('div', { class: 'modal-title mb-16' }, [title]);
       const usernameField = isTeamLeader
-        ? el('div', { class: 'field' }, [el('label', {}, ['Username']), el('input', { id: 'f-username', value: '', placeholder: 'Teamleader' })])
+        ? el('div', { class: 'field' }, [el('label', {}, ['اسم المستخدم']), el('input', { id: 'f-username', value: '', placeholder: 'Teamleader' })])
         : el('input', { id: 'f-username', type: 'hidden', value: prefillUsername });
       const passwordField = el('div', { class: 'field' }, [
-        el('label', {}, ['Password']),
+        el('label', {}, ['كلمة المرور']),
         el('input', { id: 'f-password', type: 'password' }),
       ]);
       const toggleRow = el('div', { class: 'password-toggle-row' }, [
-        el('label', { class: 'checkbox-row' }, [el('input', { type: 'checkbox', id: 'f-showpw', onchange: (e) => { document.getElementById('f-password').type = e.target.checked ? 'text' : 'password'; } }), 'Show password']),
-        el('label', { class: 'checkbox-row' }, [el('input', { type: 'checkbox', id: 'f-remember' }), 'Remember me']),
+        el('label', { class: 'checkbox-row' }, [el('input', { type: 'checkbox', id: 'f-showpw', onchange: (e) => { document.getElementById('f-password').type = e.target.checked ? 'text' : 'password'; } }), 'إظهار كلمة المرور']),
+        el('label', { class: 'checkbox-row' }, [el('input', { type: 'checkbox', id: 'f-remember' }), 'تذكرني']),
       ]);
       const errorBox = el('div', { class: 'error-text', style: 'display:none' });
-      const submit = el('button', { class: 'btn btn-primary btn-block', onclick: onSubmit }, ['LOGIN']);
-      const back = el('button', { class: 'btn btn-outline btn-block mt-8', onclick: () => { screen = 'pick'; render(); } }, ['← Back']);
+      const submit = el('button', { class: 'btn btn-primary btn-block', onclick: onSubmit }, ['تسجيل الدخول']);
+      const back = el('button', { class: 'btn btn-outline btn-block mt-8', onclick: () => { screen = 'pick'; render(); } }, ['← رجوع']);
 
       async function onSubmit() {
         errorBox.style.display = 'none';
         submit.disabled = true;
-        submit.textContent = 'Signing in…';
+        submit.textContent = 'جارِ الدخول…';
         const username = isTeamLeader ? document.getElementById('f-username').value.trim() || 'Teamleader' : prefillUsername;
         const password = document.getElementById('f-password').value;
         const remember = document.getElementById('f-remember').checked;
@@ -90,11 +90,11 @@
           App.refreshNotifications();
           App.navigate('#/dashboard');
         } catch (e) {
-          errorBox.textContent = e.message || 'Invalid username or password';
+          errorBox.textContent = e.message || 'اسم المستخدم أو كلمة المرور غير صحيحة';
           errorBox.style.display = 'block';
         } finally {
           submit.disabled = false;
-          submit.textContent = 'LOGIN';
+          submit.textContent = 'تسجيل الدخول';
         }
       }
 

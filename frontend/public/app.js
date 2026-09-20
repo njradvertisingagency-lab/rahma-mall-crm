@@ -1,4 +1,4 @@
-// RAHMA MALL — Live Call Team CRM. Frontend SPA (no build step; plain ES modules-free JS).
+// رحمة مول — نظام إدارة فريق المكالمات المباشر. واجهة الموقع (بدون خطوة بناء).
 'use strict';
 
 const App = (window.App = {
@@ -16,7 +16,7 @@ const App = (window.App = {
 });
 
 // ---------------------------------------------------------------------------
-// Tiny event bus so views can react to live WebSocket events without polling.
+// ناقل أحداث بسيط حتى تتفاعل الصفحات مع أحداث الاتصال المباشر بدون استعلام متكرر.
 // ---------------------------------------------------------------------------
 App.on = (evt, fn) => {
   (App.listeners[evt] = App.listeners[evt] || []).push(fn);
@@ -36,7 +36,7 @@ App.emit = (evt, payload) => {
 };
 
 // ---------------------------------------------------------------------------
-// DOM helpers
+// أدوات مساعدة لبناء عناصر الصفحة
 // ---------------------------------------------------------------------------
 function el(tag, props, children) {
   const node = document.createElement(tag);
@@ -55,34 +55,37 @@ function el(tag, props, children) {
 }
 App.el = el;
 
+// نستخدم أرقامًا لاتينية (numberingSystem: latn) مع أسماء الأشهر بالعربي —
+// هذا هو المتعارف عليه في البرامج التجارية المصرية.
 function fmtDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('ar-EG-u-nu-latn', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 function timeAgo(iso) {
   if (!iso) return '—';
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return 'just now';
-  if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-  return Math.floor(s / 86400) + 'd ago';
+  if (s < 60) return 'الآن';
+  if (s < 3600) return 'منذ ' + Math.floor(s / 60) + ' د';
+  if (s < 86400) return 'منذ ' + Math.floor(s / 3600) + ' س';
+  return 'منذ ' + Math.floor(s / 86400) + ' يوم';
 }
 App.fmt = { dateTime: fmtDateTime, date: fmtDate, ago: timeAgo };
 
 const STATUS_LABELS = {
-  NEW: 'New', CALLING: 'Calling', NO_ANSWER: 'No Answer', BUSY: 'Busy',
-  FOLLOW_UP: 'Follow-up', INTERESTED: 'Interested', NOT_INTERESTED: 'Not Interested', CLOSED: 'Closed',
+  NEW: 'جديد', CALLING: 'جاري الاتصال', NO_ANSWER: 'لا يوجد رد', BUSY: 'مشغول',
+  FOLLOW_UP: 'متابعة', INTERESTED: 'مهتم', NOT_INTERESTED: 'غير مهتم', CLOSED: 'مغلق',
 };
 function statusBadge(status) {
   return el('span', { class: 'badge badge-' + status.toLowerCase() }, [STATUS_LABELS[status] || status]);
 }
+const PRIORITY_LABELS = { LOW: 'منخفضة', NORMAL: 'عادية', HIGH: 'عالية', URGENT: 'عاجلة' };
 function priorityBadge(p) {
-  return el('span', { class: 'badge badge-priority-' + p.toLowerCase() }, [p]);
+  return el('span', { class: 'badge badge-priority-' + p.toLowerCase() }, [PRIORITY_LABELS[p] || p]);
 }
 function waBadge(status) {
   const labels = { NOT_CONTACTED: 'لم يتم التواصل', CONTACT_INITIATED: 'تم التواصل واتساب', SENT: 'تم الإرسال', DELIVERED: 'تم التسليم', READ: 'تمت القراءة', FAILED: 'فشل الإرسال' };
@@ -90,45 +93,43 @@ function waBadge(status) {
 }
 function availabilityBadge(a) {
   const cls = { AVAILABLE: 'available', BUSY: 'busy-emp', ON_BREAK: 'on_break', UNAVAILABLE: 'unavailable' }[a] || 'unavailable';
-  const labels = { AVAILABLE: 'Available', BUSY: 'Busy', ON_BREAK: 'On Break', UNAVAILABLE: 'Unavailable' };
+  const labels = { AVAILABLE: 'متاح', BUSY: 'مشغول', ON_BREAK: 'في استراحة', UNAVAILABLE: 'غير متاح' };
   return el('span', { class: 'badge badge-' + cls }, [labels[a] || a]);
 }
-// Real presence — separate from the manual `availability` field above.
+// حالة الاتصال الفعلية — مختلفة عن حقل "الإتاحة" اليدوي أعلاه.
 function presenceBadge(presence) {
   presence = presence || { online: false, activityState: 'OFFLINE' };
   const state = presence.online ? presence.activityState : 'OFFLINE';
   const cls = { ACTIVE: 'available', IDLE: 'on_break', OFFLINE: 'unavailable' }[state] || 'unavailable';
   const dot = { ACTIVE: '🟢', IDLE: '🟡', OFFLINE: '⚪' }[state] || '⚪';
-  const labels = { ACTIVE: 'Active', IDLE: 'Idle', OFFLINE: 'Offline' };
+  const labels = { ACTIVE: 'نشط الآن', IDLE: 'خامل', OFFLINE: 'غير متصل' };
   return el('span', { class: 'badge badge-' + cls }, [dot + ' ' + (labels[state] || state)]);
 }
 function slaBadge(level) {
-  if (!level || level === 'OK') return el('span', { class: 'badge', style: 'background:var(--surface-2);color:var(--muted)' }, ['OK']);
-  if (level === 'WARNING') return el('span', { class: 'badge', style: 'background:#fef3c7;color:#92400e' }, ['⚠ Warning']);
-  return el('span', { class: 'badge', style: 'background:#fee2e2;color:#991b1b' }, ['🔴 Breached']);
+  if (!level || level === 'OK') return el('span', { class: 'badge', style: 'background:var(--surface-2);color:var(--muted)' }, ['ضمن الموعد']);
+  if (level === 'WARNING') return el('span', { class: 'badge', style: 'background:#fef3c7;color:#92400e' }, ['⚠ اقترب الموعد']);
+  return el('span', { class: 'badge', style: 'background:#fee2e2;color:#991b1b' }, ['🔴 تم تجاوز الموعد']);
 }
 function dealStatusBadge(status) {
   const map = {
     NO_PURCHASE: ['—', 'background:var(--surface-2);color:var(--muted)'],
-    BRANCH_VISIT: ['🏪 Branch Visit', 'background:#e0e7ff;color:#3730a3'],
-    COMPLETED: ['✓ Deal Done', 'background:#dcfce7;color:#166534'],
-    CANCELLED: ['✕ Cancelled', 'background:var(--surface-2);color:var(--muted)'],
-    REFUNDED: ['↩ Refunded', 'background:#fee2e2;color:#991b1b'],
-    PARTIALLY_REFUNDED: ['↩ Partial Refund', 'background:#fef3c7;color:#92400e'],
+    BRANCH_VISIT: ['🏪 زيارة فرع', 'background:#e0e7ff;color:#3730a3'],
+    COMPLETED: ['✓ تمت الصفقة', 'background:#dcfce7;color:#166534'],
+    CANCELLED: ['✕ ملغاة', 'background:var(--surface-2);color:var(--muted)'],
+    REFUNDED: ['↩ مسترجعة', 'background:#fee2e2;color:#991b1b'],
+    PARTIALLY_REFUNDED: ['↩ استرجاع جزئي', 'background:#fef3c7;color:#92400e'],
   };
   const [label, style] = map[status] || [status, ''];
   return el('span', { class: 'badge', style }, [label]);
 }
 App.badges = { status: statusBadge, priority: priorityBadge, whatsapp: waBadge, availability: availabilityBadge, presence: presenceBadge, sla: slaBadge, dealStatus: dealStatusBadge };
+App.labels = { status: STATUS_LABELS, priority: PRIORITY_LABELS };
 
 // ---------------------------------------------------------------------------
-// API client
+// الاتصال بالـ API
 // ---------------------------------------------------------------------------
-// Production is deployed split-origin: the frontend lives on Cloudflare
-// Pages (rahma-mall-crm.pages.dev) while the API + WebSocket stay on this
-// Worker's own workers.dev domain. Local dev serves both from the same
-// origin via wrangler's [assets] binding, so API_BASE/WS_BASE stay empty
-// there and every call is same-origin exactly as before.
+// الموقع منشور على ووركر واحد يقدّم الواجهة والـ API معًا من نفس النطاق، لكن
+// نُبقي هذا الاحتياط لأي نشر منفصل مستقبلًا (مثلاً استضافة الواجهة على نطاق آخر).
 const PROD_API_ORIGIN = 'https://rahma-mall-crm.njradvertisingagency.workers.dev';
 const PROD_WS_ORIGIN = 'wss://rahma-mall-crm.njradvertisingagency.workers.dev';
 const API_BASE = location.hostname.endsWith('.pages.dev') ? PROD_API_ORIGIN : '';
@@ -145,21 +146,21 @@ async function api(path, opts) {
   if (res.status === 401) {
     App.state.user = null;
     if (location.hash !== '#/login') location.hash = '#/login';
-    throw new Error('Not authenticated');
+    throw new Error('يجب تسجيل الدخول');
   }
   const contentType = res.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await res.json().catch(() => ({})) : await res.text();
   if (!res.ok) {
-    const message = (data && data.error && data.error.message) || 'Request failed';
+    const message = (data && data.error && data.error.message) || 'فشل الطلب';
     throw new Error(message);
   }
   return data;
 }
 App.api = api;
-App.apiBase = API_BASE; // exposed so views can build direct links (CSV export, etc.) that work cross-origin too
+App.apiBase = API_BASE; // مُستخدم لبناء روابط مباشرة (مثل تصدير CSV) تعمل حتى لو اختلف النطاق
 
 // ---------------------------------------------------------------------------
-// Toasts
+// الإشعارات المنبثقة (Toasts)
 // ---------------------------------------------------------------------------
 function toast(message, type) {
   let stack = document.querySelector('.toast-stack');
@@ -174,7 +175,7 @@ function toast(message, type) {
 App.toast = toast;
 
 // ---------------------------------------------------------------------------
-// Theme
+// المظهر (فاتح / داكن)
 // ---------------------------------------------------------------------------
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', App.state.theme);
@@ -187,7 +188,7 @@ App.toggleTheme = () => {
 applyTheme();
 
 // ---------------------------------------------------------------------------
-// WebSocket real-time connection
+// اتصال WebSocket المباشر
 // ---------------------------------------------------------------------------
 const RT = {
   ws: null,
@@ -206,7 +207,7 @@ const RT = {
       App.state.wsStatus = 'LIVE';
       RT.backoff = 1000;
       App.emit('ws-status', App.state.wsStatus);
-      App.emit('ws-reconnected'); // views resync current data on (re)connect
+      App.emit('ws-reconnected'); // الصفحات تُحدّث بياناتها عند إعادة الاتصال
     };
     ws.onclose = () => {
       if (RT.intentionalClose) {
@@ -239,19 +240,19 @@ const RT = {
 };
 App.rt = RT;
 
-// Live notifications: any NOTIFICATION_CREATED / assignment / status event refreshes the bell.
-App.on('rt:NOTIFICATION_CREATED', () => { toast('🔔 ' + 'You have a new notification', 'info'); refreshNotifications(); });
+// الإشعارات المباشرة: أي حدث تعيين/حالة جديد يُحدّث الجرس فورًا.
+App.on('rt:NOTIFICATION_CREATED', () => { toast('🔔 لديك إشعار جديد', 'info'); refreshNotifications(); });
 App.on('rt:CUSTOMER_ASSIGNED', () => refreshNotifications());
 App.on('rt:FOLLOWUP_OVERDUE', () => refreshNotifications());
 App.on('rt:CUSTOMER_REASSIGNED', () => refreshNotifications());
 App.on('rt:SLA_BREACHED', () => refreshNotifications());
 App.on('rt:SLA_WARNING', () => refreshNotifications());
 
-// Sales/Deal-Done toasts — team leader only sees these (server scopes the broadcast).
-App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🎉 Deal Done — ${p.customerId} — ${p.amount} EGP at ${p.branchName || ''}`, 'success'); });
-App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🏪 Branch visit — ${p.customerId} at ${p.branchName || ''}`, 'info'); });
-App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ Refund recorded — ${p.customerId}`, 'info'); });
-App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ Partial refund — ${p.customerId}`, 'info'); });
+// إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
+App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
+App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
+App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
+App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
 
 async function refreshNotifications() {
   if (!App.state.user) return;
@@ -265,17 +266,15 @@ async function refreshNotifications() {
 App.refreshNotifications = refreshNotifications;
 
 // ---------------------------------------------------------------------------
-// Router
+// الموجّه (Router)
 // ---------------------------------------------------------------------------
 const ROUTES = [];
-// Optional third argument: { roles: ['team_leader'] } restricts a route to those roles.
-// This is a UX/defense-in-depth guard only — every mutating (and most reading) endpoint
-// is ALSO enforced server-side regardless of what the client renders. But without this,
-// an employee who edits the URL hash (e.g. to #/distribute) would still have the full
-// page shell built and run its data-loading calls (some of which, like the unassigned
-// customers list and full employee roster, are not themselves role-restricted reads),
-// exposing information the employee should never see even though the actual mutating
-// action would separately 403. So unauthorized routes must never even invoke the handler.
+// المعامل الثالث الاختياري: { roles: ['team_leader'] } يقصر الصفحة على هذه الأدوار.
+// هذا حماية إضافية من جهة الواجهة فقط — كل نقطة تعديل (وأغلب نقاط القراءة)
+// محمية أيضًا من جهة السيرفر بغض النظر عمّا تعرضه الواجهة. لكن بدون هذا الفحص
+// هنا، موظف يُعدّل الرابط يدويًا (مثلاً إلى #/distribute) سيظل يبني الصفحة
+// بالكامل وتُنفَّذ استدعاءات تحميل بياناتها (وبعضها غير محمي في القراءة أصلاً)
+// فيرى بيانات لا يجب أن يراها حتى لو فشل الإجراء الفعلي لاحقًا من السيرفر.
 App.route = (pattern, handler, opts) => ROUTES.push({ pattern, handler, roles: opts && opts.roles });
 
 function matchRoute(hash) {
@@ -293,12 +292,10 @@ function matchRoute(hash) {
   return null;
 }
 
-// Every route handler may attach a `.cleanup()` to the view it returns (to unsubscribe
-// real-time event listeners registered via App.on). The shell itself also subscribes to
-// events (connection badge, notification bell) and is fully rebuilt on every navigation.
-// Both MUST be torn down before the next render, otherwise listeners accumulate forever
-// (each carrying stale DOM references) and eventually throw / leak memory as the user
-// navigates around the app.
+// كل معالج صفحة يمكنه إرفاق `.cleanup()` بالعنصر الذي يُعيده (لإلغاء الاشتراك في
+// أحداث الاتصال المباشر). القالب العام (الشريط الجانبي والعلوي) يشترك أيضًا في
+// أحداث (شارة الاتصال وجرس الإشعارات) ويُعاد بناؤه بالكامل في كل تنقل. يجب
+// إلغاء الاثنين قبل الرسم التالي وإلا تتراكم المستمعات وتُسبب أخطاء أو تسريب ذاكرة.
 let currentViewCleanup = null;
 let currentShellCleanup = null;
 function teardownPreviousRender() {
@@ -341,11 +338,11 @@ async function renderRoute() {
     if (match && match.roles && !match.roles.includes(App.state.user.role)) {
       view = el('div', { class: 'empty-state' }, [
         el('div', { class: 'icon' }, ['🚫']),
-        el('div', { style: 'font-weight:700;margin-bottom:4px' }, ['Access Denied']),
-        el('div', { class: 'muted' }, ["You don't have permission to view this page."]),
+        el('div', { style: 'font-weight:700;margin-bottom:4px' }, ['غير مصرح بالدخول']),
+        el('div', { class: 'muted' }, ['ليس لديك صلاحية لعرض هذه الصفحة.']),
       ]);
     } else {
-      view = match ? await match.handler(match.params) : el('div', {}, ['Not found']);
+      view = match ? await match.handler(match.params) : el('div', {}, ['الصفحة غير موجودة']);
     }
     content.innerHTML = '';
     content.appendChild(view);
@@ -353,39 +350,39 @@ async function renderRoute() {
   } catch (err) {
     console.error(err);
     content.innerHTML = '';
-    content.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['⚠️']), err.message || 'Something went wrong']));
+    content.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['⚠️']), err.message || 'حدث خطأ ما']));
   }
 }
 window.addEventListener('hashchange', renderRoute);
 App.navigate = (hash) => { location.hash = hash; };
 
 // ---------------------------------------------------------------------------
-// App shell (sidebar + topbar)
+// القالب العام للموقع (الشريط الجانبي والشريط العلوي)
 // ---------------------------------------------------------------------------
 const NAV_TL = [
-  ['dashboard', '📊', 'Dashboard'],
-  ['command-center', '🎛️', 'Command Center'],
-  ['customers', '👥', 'Customers'],
-  ['import', '📥', 'Import Customers'],
-  ['distribute', '🔀', 'Distribute'],
-  ['employees', '🧑‍💼', 'Employees'],
-  ['followups', '⏰', 'Follow-ups'],
-  ['analytics', '📈', 'Analytics'],
-  ['leaderboard', '🏆', 'Leaderboard'],
-  ['reports', '🧾', 'Reports'],
-  ['activity', '🕒', 'Activity Log'],
-  ['notifications', '🔔', 'Notifications'],
-  ['ai', '🤖', 'AI Assistant'],
-  ['settings', '⚙️', 'Settings'],
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['command-center', '🎛️', 'مركز التحكم'],
+  ['customers', '👥', 'العملاء'],
+  ['import', '📥', 'استيراد عملاء'],
+  ['distribute', '🔀', 'توزيع العملاء'],
+  ['employees', '🧑‍💼', 'الموظفين'],
+  ['followups', '⏰', 'المتابعات'],
+  ['analytics', '📈', 'التحليلات'],
+  ['leaderboard', '🏆', 'لوحة الصدارة'],
+  ['reports', '🧾', 'التقارير'],
+  ['activity', '🕒', 'سجل الأنشطة'],
+  ['notifications', '🔔', 'الإشعارات'],
+  ['ai', '🤖', 'المساعد الذكي'],
+  ['settings', '⚙️', 'الإعدادات'],
 ];
 const NAV_EMPLOYEE = [
-  ['dashboard', '📊', 'Dashboard'],
-  ['work-queue', '🎯', 'My Work Queue'],
-  ['my-customers', '👥', 'My Customers'],
-  ['followups', '⏰', 'Follow-ups'],
-  ['notifications', '🔔', 'Notifications'],
-  ['my-performance', '📈', 'My Performance'],
-  ['profile', '🙍', 'Profile'],
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['work-queue', '🎯', 'قائمة مهامي'],
+  ['my-customers', '👥', 'عملائي'],
+  ['followups', '⏰', 'المتابعات'],
+  ['notifications', '🔔', 'الإشعارات'],
+  ['my-performance', '📈', 'أدائي'],
+  ['profile', '🙍', 'الملف الشخصي'],
 ];
 
 function renderShell() {
@@ -395,8 +392,8 @@ function renderShell() {
 
   const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
     el('div', { class: 'sidebar-brand' }, [
-      el('div', { class: 'logo' }, ['RAHMA MALL']),
-      el('div', { class: 'sub' }, ['LIVE CALL TEAM CRM']),
+      el('div', { class: 'logo' }, ['رحمة مول']),
+      el('div', { class: 'sub' }, ['نظام إدارة فريق المكالمات']),
     ]),
     el('div', { class: 'nav' }, nav.map(([path, icon, label]) =>
       el('div', {
@@ -405,7 +402,7 @@ function renderShell() {
       }, [el('span', { class: 'nav-icon' }, [icon]), label])
     )),
     el('div', { class: 'sidebar-footer' }, [
-      el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode']),
+      el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
     ]),
   ]);
 
@@ -415,7 +412,7 @@ function renderShell() {
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
       el('input', {
-        placeholder: 'Search phone, ID, name, campaign…', onkeydown: (e) => {
+        placeholder: 'ابحث بالهاتف، الكود، الاسم، الحملة…', onkeydown: (e) => {
           if (e.key === 'Enter' && e.target.value.trim()) App.navigate('#/customers?q=' + encodeURIComponent(e.target.value.trim()));
         },
       }),
@@ -424,8 +421,8 @@ function renderShell() {
     notifBell,
     el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
       el('div', { class: 'avatar avatar-sm' }, [(user.displayName || '?')[0].toUpperCase()]),
-      el('div', {}, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'Team Leader' : 'Employee'])]),
-      el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['Logout']),
+      el('div', {}, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
+      el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
     ]),
   ]);
 
@@ -436,16 +433,17 @@ function renderShell() {
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
+const CONN_LABELS = { LIVE: 'مباشر', RECONNECTING: 'جارِ إعادة الاتصال', OFFLINE: 'غير متصل' };
 function renderConnBadge() {
   const wrap = el('div', { class: 'conn-badge conn-' + App.state.wsStatus.toLowerCase() }, [
     el('span', { class: 'dot' + (App.state.wsStatus === 'LIVE' ? ' pulse' : '') }),
-    App.state.wsStatus === 'LIVE' ? 'LIVE' : App.state.wsStatus === 'RECONNECTING' ? 'RECONNECTING' : 'OFFLINE',
+    CONN_LABELS[App.state.wsStatus] || App.state.wsStatus,
   ]);
   wrap.offEvt = App.on('ws-status', () => {
     wrap.className = 'conn-badge conn-' + App.state.wsStatus.toLowerCase();
     wrap.innerHTML = '';
     wrap.appendChild(el('span', { class: 'dot' + (App.state.wsStatus === 'LIVE' ? ' pulse' : '') }));
-    wrap.appendChild(document.createTextNode(App.state.wsStatus === 'LIVE' ? 'LIVE' : App.state.wsStatus === 'RECONNECTING' ? 'RECONNECTING' : 'OFFLINE'));
+    wrap.appendChild(document.createTextNode(CONN_LABELS[App.state.wsStatus] || App.state.wsStatus));
   });
   return wrap;
 }
@@ -475,7 +473,7 @@ async function doLogout() {
 }
 
 // ---------------------------------------------------------------------------
-// Boot
+// الإقلاع
 // ---------------------------------------------------------------------------
 async function boot() {
   try {

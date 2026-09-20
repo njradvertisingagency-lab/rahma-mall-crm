@@ -16,10 +16,10 @@
 
   App.route('/analytics', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['Analytics'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['التحليلات'])]));
 
-    const rangeSel = el('select', {}, [['today', 'Today'], ['yesterday', 'Yesterday'], ['7d', 'Last 7 Days'], ['30d', 'Last 30 Days']].map(([v, l]) => el('option', { value: v, selected: v === '7d' || undefined }, [l])));
-    container.appendChild(el('div', { class: 'filters-bar' }, [rangeSel, el('button', { class: 'btn btn-sm btn-outline', onclick: load }, ['Refresh'])]));
+    const rangeSel = el('select', {}, [['today', 'اليوم'], ['yesterday', 'أمس'], ['7d', 'آخر ٧ أيام'], ['30d', 'آخر ٣٠ يوم']].map(([v, l]) => el('option', { value: v, selected: v === '7d' || undefined }, [l])));
+    container.appendChild(el('div', { class: 'filters-bar' }, [rangeSel, el('button', { class: 'btn btn-sm btn-outline', onclick: load }, ['تحديث'])]));
 
     const grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px' });
     container.appendChild(grid);
@@ -28,16 +28,16 @@
     async function load() {
       const data = await api('/analytics/charts?range=' + rangeSel.value);
       grid.innerHTML = '';
-      grid.appendChild(chartCard('Customers by Employee', data.customersByEmployee));
-      grid.appendChild(chartCard('Status Distribution', data.statusDistribution));
-      grid.appendChild(chartCard('Daily Activity', data.dailyActivity));
-      grid.appendChild(chartCard('By Source', data.bySource));
-      grid.appendChild(chartCard('By Campaign', data.byCampaign));
+      grid.appendChild(chartCard('العملاء حسب الموظف', data.customersByEmployee));
+      grid.appendChild(chartCard('توزيع الحالات', data.statusDistribution));
+      grid.appendChild(chartCard('النشاط اليومي', data.dailyActivity));
+      grid.appendChild(chartCard('حسب المصدر', data.bySource));
+      grid.appendChild(chartCard('حسب الحملة', data.byCampaign));
     }
     function chartCard(title, rows) {
-      const card = el('div', { class: 'card card-pad' });
+      const card = el('div', { class: 'card card-pad', style: 'min-width:0' });
       card.appendChild(el('div', { style: 'font-weight:800;margin-bottom:8px' }, [title]));
-      card.appendChild(rows.length ? barChart(rows) : el('div', { class: 'muted' }, ['No data for this range.']));
+      card.appendChild(rows.length ? barChart(rows) : el('div', { class: 'muted' }, ['لا توجد بيانات في هذه الفترة.']));
       return card;
     }
     await load();
@@ -46,21 +46,21 @@
 
   App.route('/my-performance', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['My Performance'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['أدائي'])]));
     const { employees } = await api('/employees');
     const me = employees[0];
     const card = el('div', { class: 'card card-pad' });
     card.appendChild(el('div', { class: 'kpi-grid' }, [
-      ['Assigned', me.assigned], ['Closed', me.closed], ['Follow-ups Completed', me.followupsCompleted], ['Follow-ups Overdue', me.followupsOverdue],
+      ['موزّع', me.assigned], ['مغلق', me.closed], ['متابعات مكتملة', me.followupsCompleted], ['متابعات متأخرة', me.followupsOverdue],
     ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value' }, [String(v)]), el('div', { class: 'kpi-label' }, [l])]))));
-    card.appendChild(el('div', { class: 'mt-16' }, [el('div', { class: 'flex-between mb-8' }, ['Completion Rate', Math.round(me.completionRate * 100) + '%']), el('div', { class: 'progress-bar' }, [el('div', { style: `width:${Math.round(me.completionRate * 100)}%` })])]));
+    card.appendChild(el('div', { class: 'mt-16' }, [el('div', { class: 'flex-between mb-8' }, ['نسبة الإنجاز', Math.round(me.completionRate * 100) + '%']), el('div', { class: 'progress-bar' }, [el('div', { style: `width:${Math.round(me.completionRate * 100)}%` })])]));
     container.appendChild(card);
     return container;
   });
 
   App.route('/leaderboard', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['Leaderboard'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['لوحة الصدارة'])]));
     const { employees, weights } = await api('/employees');
     let sortKey = 'performanceScore';
     const box = el('div');
@@ -72,7 +72,7 @@
       box.appendChild(el('div', { class: 'table-wrap' }, [
         el('table', { class: 'data-table' }, [
           el('thead', {}, [el('tr', {}, [
-            ['name', 'Employee'], ['assigned', 'Assigned'], ['closed', 'Closed'], ['followupsCompleted', 'Follow-ups'], ['followupsOverdue', 'Overdue'], ['completionRate', 'Completion'], ['performanceScore', 'Score'],
+            ['name', 'الموظف'], ['assigned', 'موزّع'], ['closed', 'مغلق'], ['followupsCompleted', 'المتابعات'], ['followupsOverdue', 'متأخر'], ['completionRate', 'الإنجاز'], ['performanceScore', 'النقاط'],
           ].map(([key, label]) => el('th', { style: 'cursor:pointer', onclick: () => { sortKey = key; render(); } }, [label + (sortKey === key ? ' ▾' : '')])))]),
           el('tbody', {}, sorted.map((e, i) => el('tr', {}, [
             el('td', {}, [el('span', { style: 'font-weight:800' }, [i === 0 ? '🏆 ' : '']), e.name]),
@@ -92,27 +92,27 @@
 
   App.route('/reports', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['Report Center'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['مركز التقارير'])]));
     const reports = [
-      ['customers', 'Customer Report', 'All customers with current status, assignment and dates.'],
-      ['employees', 'Employee Report', 'Per-employee performance summary.'],
-      ['activity', 'Activity Report', 'Full audit trail (who / what / when).'],
-      ['followups', 'Follow-up Report', 'All scheduled, completed and overdue follow-ups.'],
-      ['status', 'Status Report', 'Customer counts by status.'],
-      ['whatsapp', 'WhatsApp Contact Report', 'Every WhatsApp contact initiated, by customer and employee.'],
-      ['call-attempts', 'Call Attempts Report', 'Every logged call attempt and its outcome.'],
-      ['sla', 'SLA Report', 'Live snapshot of every customer currently in SLA warning or breach.'],
-      ['seen', 'Seen / Not-Seen Report', 'Per-employee seen vs. not-seen customer counts.'],
-      ['lead-scores', 'Lead Score Report', 'Live, explainable lead scores for all open customers.'],
-      ['products', 'Product Interest Report', 'Customer counts per product of interest.'],
-      ['sales', 'Sales Report', 'Every purchase transaction with totals, refunds and net revenue.'],
-      ['sales-attribution', 'Call Team → Sales Attribution', 'Assigned/seen/contacted/deals/revenue per employee.'],
+      ['customers', 'تقرير العملاء', 'كل العملاء بحالتهم الحالية والتعيين والتواريخ.'],
+      ['employees', 'تقرير الموظفين', 'ملخص أداء كل موظف.'],
+      ['activity', 'تقرير الأنشطة', 'سجل تدقيق كامل (من / ماذا / متى).'],
+      ['followups', 'تقرير المتابعات', 'كل المتابعات المجدولة والمكتملة والمتأخرة.'],
+      ['status', 'تقرير الحالات', 'عدد العملاء حسب كل حالة.'],
+      ['whatsapp', 'تقرير تواصل واتساب', 'كل تواصل عبر واتساب، حسب العميل والموظف.'],
+      ['call-attempts', 'تقرير محاولات الاتصال', 'كل محاولة اتصال مسجّلة ونتيجتها.'],
+      ['sla', 'تقرير مواعيد الخدمة', 'لقطة حية لكل عميل في حالة تحذير أو تجاوز للموعد.'],
+      ['seen', 'تقرير تمت رؤيته / لم يُرَ', 'عدد العملاء الذين تمت رؤيتهم مقابل لم يتم لكل موظف.'],
+      ['lead-scores', 'تقرير تقييم العملاء المحتملين', 'تقييم حي وواضح لكل العملاء المفتوحين.'],
+      ['products', 'تقرير اهتمام بالمنتجات', 'عدد العملاء حسب كل منتج مهتم به.'],
+      ['sales', 'تقرير المبيعات', 'كل عملية شراء بالإجمالي والمرتجعات وصافي الإيراد.'],
+      ['sales-attribution', 'تقرير فريق الاتصال ← المبيعات', 'موزّع/شوهد/تم التواصل/صفقات/إيراد لكل موظف.'],
     ];
     container.appendChild(el('div', { class: 'kpi-grid' }, reports.map(([key, title, desc]) =>
       el('div', { class: 'card card-pad' }, [
         el('div', { style: 'font-weight:800' }, [title]),
         el('div', { class: 'muted mt-8', style: 'font-size:12.5px' }, [desc]),
-        el('a', { class: 'btn btn-primary btn-sm mt-12', href: App.apiBase + '/api/reports/' + key, target: '_blank' }, ['⬇ Export CSV']),
+        el('a', { class: 'btn btn-primary btn-sm mt-12', href: App.apiBase + '/api/reports/' + key, target: '_blank' }, ['⬇ تصدير CSV']),
       ])
     )));
     return container;
@@ -121,17 +121,17 @@
   App.route('/ai', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['AI Assistant']),
+      el('div', { class: 'page-title' }, ['المساعد الذكي']),
       el('div', { class: 'flex gap-8' }, [
-        el('button', { class: 'btn btn-outline', onclick: generateSummary }, ['Generate Daily Summary']),
-        el('button', { class: 'btn btn-outline', onclick: generateInsights }, ['Generate Operational Insights']),
+        el('button', { class: 'btn btn-outline', onclick: generateSummary }, ['إنشاء ملخص اليوم']),
+        el('button', { class: 'btn btn-outline', onclick: generateInsights }, ['إنشاء ملاحظات تشغيلية']),
       ]),
     ]));
 
     const chatBox = el('div', { class: 'card card-pad', style: 'min-height:260px;max-height:420px;overflow-y:auto;margin-bottom:14px' });
     container.appendChild(chatBox);
-    const input = el('input', { placeholder: 'Ask about your data, e.g. "How many customers are unassigned?"' });
-    container.appendChild(el('div', { class: 'flex gap-8' }, [input, el('button', { class: 'btn btn-primary', onclick: ask }, ['Ask'])]));
+    const input = el('input', { placeholder: 'اسأل عن بياناتك، مثال: "كام عميل غير موزّع؟"' });
+    container.appendChild(el('div', { class: 'flex gap-8' }, [input, el('button', { class: 'btn btn-primary', onclick: ask }, ['اسأل'])]));
 
     function addMsg(text, who) {
       chatBox.appendChild(el('div', { class: 'mb-12', style: who === 'user' ? 'text-align:end' : '' }, [
@@ -139,7 +139,7 @@
       ]));
       chatBox.scrollTop = chatBox.scrollHeight;
     }
-    addMsg('Ask me things like "How many customers were closed today?" or "Which employees have overdue follow-ups?" — every answer comes straight from the database.', 'ai');
+    addMsg('اسألني أشياء مثل "كام عميل تم إغلاقه اليوم؟" أو "مين الموظفين اللي عندهم متابعات متأخرة؟" — كل إجابة تُؤخذ مباشرة من قاعدة البيانات.', 'ai');
 
     async function ask() {
       const q = input.value.trim();
@@ -150,7 +150,7 @@
         const res = await api('/ai/ask', { method: 'POST', body: { question: q } });
         addMsg(res.answer, 'ai');
       } catch (e) {
-        addMsg('Error: ' + e.message, 'ai');
+        addMsg('حدث خطأ: ' + e.message, 'ai');
       }
     }
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') ask(); });
@@ -158,7 +158,7 @@
     async function generateSummary() {
       const { summary } = await api('/ai/daily-summary');
       addMsg(
-        `Team summary (${summary.timeRange}) — ${summary.totalCustomers} total (${summary.assigned} assigned, ${summary.unassigned} unassigned). ${summary.closedToday} closed today, ${summary.interested} interested, ${summary.followUp} in follow-up, ${summary.overdue} overdue follow-ups, ${summary.reopenedToday} reopened today. SLA: ${summary.slaBreaches} breach(es), ${summary.slaWarnings} warning(s). Sales: ${summary.dealsToday} deal(s) today, ${summary.netRevenueToday.toLocaleString()} EGP net revenue today.`,
+        `ملخص الفريق (${summary.timeRange}) — الإجمالي ${summary.totalCustomers} (${summary.assigned} موزّع، ${summary.unassigned} غير موزّع). ${summary.closedToday} تم إغلاقهم اليوم، ${summary.interested} مهتم، ${summary.followUp} قيد المتابعة، ${summary.overdue} متابعة متأخرة، ${summary.reopenedToday} أُعيد فتحه اليوم. مواعيد الخدمة: ${summary.slaBreaches} تجاوز، ${summary.slaWarnings} تحذير. المبيعات: ${summary.dealsToday} صفقة اليوم، صافي إيراد ${summary.netRevenueToday.toLocaleString()} ج.م اليوم.`,
         'ai'
       );
     }

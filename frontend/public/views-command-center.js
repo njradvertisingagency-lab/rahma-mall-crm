@@ -27,29 +27,29 @@
   App.route('/command-center', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['🎛️ Live Command Center']),
-      el('button', { class: 'btn btn-outline btn-sm', onclick: () => load() }, ['↻ Refresh']),
+      el('div', { class: 'page-title' }, ['🎛️ مركز التحكم المباشر']),
+      el('button', { class: 'btn btn-outline btn-sm', onclick: () => load() }, ['↻ تحديث']),
     ]));
 
     const presenceRow = el('div', { class: 'kpi-grid' });
     const salesRow = el('div', { class: 'kpi-grid' });
-    const attentionCard = el('div', { class: 'card card-pad' });
-    const funnelCard = el('div', { class: 'card card-pad' });
+    const attentionCard = el('div', { class: 'card card-pad', style: 'min-width:0' });
+    const funnelCard = el('div', { class: 'card card-pad', style: 'min-width:0' });
     const employeeTableCard = el('div', { class: 'card card-pad' });
     const reassignCard = el('div', { class: 'card card-pad' });
 
-    container.appendChild(el('div', { class: 'section-title' }, ['Team Presence']));
+    container.appendChild(el('div', { class: 'section-title' }, ['تواجد الفريق']));
     container.appendChild(presenceRow);
-    container.appendChild(el('div', { class: 'section-title' }, ["Today's Sales"]));
+    container.appendChild(el('div', { class: 'section-title' }, ['مبيعات اليوم']));
     container.appendChild(salesRow);
 
     const grid2 = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:16px' }, [attentionCard, funnelCard]);
     if (window.innerWidth < 880) grid2.style.gridTemplateColumns = '1fr';
     container.appendChild(grid2);
 
-    container.appendChild(el('div', { class: 'section-title' }, ['Live Employee Table']));
+    container.appendChild(el('div', { class: 'section-title' }, ['جدول الموظفين المباشر']));
     container.appendChild(employeeTableCard);
-    container.appendChild(el('div', { class: 'section-title' }, ['Smart Reassignment Suggestions']));
+    container.appendChild(el('div', { class: 'section-title' }, ['اقتراحات إعادة التوزيع الذكية']));
     container.appendChild(reassignCard);
 
     async function load() {
@@ -73,28 +73,28 @@
 
     function renderPresence(p) {
       presenceRow.innerHTML = '';
-      presenceRow.appendChild(kpi(p.total, 'Total Employees'));
-      presenceRow.appendChild(kpi(p.online, 'Active Now', 'var(--success, #16a34a)'));
-      presenceRow.appendChild(kpi(p.idle, 'Idle', '#b45309'));
-      presenceRow.appendChild(kpi(p.offline, 'Offline', 'var(--muted)'));
+      presenceRow.appendChild(kpi(p.total, 'إجمالي الموظفين'));
+      presenceRow.appendChild(kpi(p.online, 'نشط الآن', 'var(--success, #16a34a)'));
+      presenceRow.appendChild(kpi(p.idle, 'غير نشط', '#b45309'));
+      presenceRow.appendChild(kpi(p.offline, 'غير متصل', 'var(--muted)'));
     }
 
     function renderSales(s) {
       salesRow.innerHTML = '';
-      salesRow.appendChild(kpi(s.dealsToday, 'Deals Today'));
-      salesRow.appendChild(kpi(s.branchVisitsToday, 'Branch Visits'));
-      salesRow.appendChild(kpi(s.grossRevenueToday.toLocaleString(), 'Gross Revenue'));
-      salesRow.appendChild(kpi(s.refundsToday.toLocaleString(), 'Refunds'));
-      salesRow.appendChild(kpi(s.netRevenueToday.toLocaleString(), 'Net Revenue', 'var(--success, #16a34a)'));
-      salesRow.appendChild(kpi(s.averageOrderValueToday.toLocaleString(), 'Avg Order Value'));
-      salesRow.appendChild(kpi(s.conversionRate + '%', 'Visit → Deal Conversion'));
+      salesRow.appendChild(kpi(s.dealsToday, 'صفقات اليوم'));
+      salesRow.appendChild(kpi(s.branchVisitsToday, 'زيارات الفرع'));
+      salesRow.appendChild(kpi(s.grossRevenueToday.toLocaleString(), 'إجمالي الإيراد'));
+      salesRow.appendChild(kpi(s.refundsToday.toLocaleString(), 'المرتجعات'));
+      salesRow.appendChild(kpi(s.netRevenueToday.toLocaleString(), 'صافي الإيراد', 'var(--success, #16a34a)'));
+      salesRow.appendChild(kpi(s.averageOrderValueToday.toLocaleString(), 'متوسط قيمة الطلب'));
+      salesRow.appendChild(kpi(s.conversionRate + '%', 'تحويل الزيارة ← صفقة'));
     }
 
     function renderAttention(items) {
       attentionCard.innerHTML = '';
-      attentionCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['🚨 Needs Attention (ranked by severity)']));
+      attentionCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['🚨 يحتاج انتباه (مرتب حسب الخطورة)']));
       if (items.length === 0) {
-        attentionCard.appendChild(el('div', { class: 'muted' }, ['Nothing needs attention right now.']));
+        attentionCard.appendChild(el('div', { class: 'muted' }, ['لا يوجد ما يحتاج انتباه الآن.']));
         return;
       }
       items.forEach((item) => {
@@ -103,7 +103,7 @@
         const sevBg = item.severity === 'CRITICAL' ? '#fee2e2' : '#fef3c7';
         const row = el('div', { class: 'flex-between mb-8', style: `padding:8px 10px;border-radius:8px;background:${sevBg}` }, [
           el('span', { style: `color:${sevColor};font-weight:700;font-size:13px` }, [(item.severity === 'CRITICAL' ? '🔴 ' : '🟠 ') + item.label]),
-          link ? el('a', { href: link, class: 'btn btn-sm btn-outline' }, ['View →']) : null,
+          link ? el('a', { href: link, class: 'btn btn-sm btn-outline' }, ['عرض ←']) : null,
         ]);
         attentionCard.appendChild(row);
       });
@@ -111,12 +111,12 @@
 
     function renderFunnel(funnel) {
       funnelCard.innerHTML = '';
-      funnelCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, [`Today's Funnel (Revenue: ${funnel.revenue.toLocaleString()} EGP)`]));
+      funnelCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, [`قمع اليوم (الإيراد: ${funnel.revenue.toLocaleString()} ج.م)`]));
       funnel.stages.forEach((s) => {
         funnelCard.appendChild(el('div', { class: 'mb-8' }, [
           el('div', { class: 'flex-between', style: 'font-size:12.5px' }, [
             el('span', {}, [s.label]),
-            el('span', { class: 'muted' }, [`${s.count} (${s.percentOfLeads}% of leads${s.conversionFromPrev !== null ? `, ${s.conversionFromPrev}% from prev` : ''})`]),
+            el('span', { class: 'muted' }, [`${s.count} (${s.percentOfLeads}% من العملاء${s.conversionFromPrev !== null ? `، ${s.conversionFromPrev}% من المرحلة السابقة` : ''})`]),
           ]),
           el('div', { class: 'progress-bar' }, [el('div', { style: `width:${Math.min(100, s.percentOfLeads)}%` })]),
         ]));
@@ -128,7 +128,7 @@
       const seenByEmp = Object.fromEntries((seenSummary || []).map((s) => [s.employeeId, s]));
       employeeTableCard.appendChild(el('div', { class: 'table-wrap' }, [
         el('table', { class: 'data-table' }, [
-          el('thead', {}, [el('tr', {}, ['Employee', 'Presence', 'Availability', 'Assigned', 'Seen', 'Closed', 'Follow-ups', 'Overdue', 'Completion', 'Score'].map((h) => el('th', {}, [h])))]),
+          el('thead', {}, [el('tr', {}, ['الموظف', 'الحضور', 'الإتاحة', 'موزّع', 'تمت رؤيته', 'مغلق', 'المتابعات', 'متأخر', 'الإنجاز', 'النقاط'].map((h) => el('th', {}, [h])))]),
           el('tbody', {}, rows.map((e) => {
             const seen = seenByEmp[e.id];
             return el('tr', {}, [
@@ -136,7 +136,7 @@
               el('td', {}, [badges.presence(e.presence)]),
               el('td', {}, [badges.availability(e.availability)]),
               el('td', {}, [String(e.assigned)]),
-              el('td', {}, [seen ? `${seen.seen}/${seen.assigned}${seen.notSeen > 0 ? ` (${seen.notSeen} not seen)` : ''}` : '—']),
+              el('td', {}, [seen ? `${seen.seen}/${seen.assigned}${seen.notSeen > 0 ? ` (${seen.notSeen} لم تتم رؤيته)` : ''}` : '—']),
               el('td', {}, [String(e.closed)]),
               el('td', {}, [String(e.followupsCompleted)]),
               el('td', {}, [String(e.followupsOverdue)]),
@@ -151,19 +151,19 @@
     function renderReassign(suggestions) {
       reassignCard.innerHTML = '';
       if (suggestions.length === 0) {
-        reassignCard.appendChild(el('div', { class: 'muted' }, ['No reassignment suggestions right now.']));
+        reassignCard.appendChild(el('div', { class: 'muted' }, ['لا توجد اقتراحات لإعادة التوزيع الآن.']));
         return;
       }
       suggestions.forEach((s) => {
         reassignCard.appendChild(el('div', { class: 'flex-between mb-8', style: 'padding:8px 10px;border-radius:8px;background:var(--surface-2)' }, [
           el('div', {}, [
             el('div', { style: 'font-weight:700' }, [s.employeeName]),
-            el('div', { class: 'faint' }, [s.reasons.join(' · ') + ` — ${s.openAssignedCustomers} open customer(s)`]),
+            el('div', { class: 'faint' }, [s.reasons.join(' · ') + ` — ${s.openAssignedCustomers} عميل مفتوح`]),
           ]),
-          el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/distribute') }, ['Go to Distribute']),
+          el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/distribute') }, ['الذهاب إلى التوزيع']),
         ]));
       });
-      reassignCard.appendChild(el('div', { class: 'faint mt-8' }, ['Suggestions only — any reassignment always requires manual Team Leader approval.']));
+      reassignCard.appendChild(el('div', { class: 'faint mt-8' }, ['اقتراحات فقط — أي إعادة توزيع تتطلب دائمًا موافقة يدوية من قائد الفريق.']));
     }
 
     await load();
