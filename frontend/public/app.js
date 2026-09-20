@@ -1,4 +1,4 @@
-// رحمة مول — نظام إدارة فريق المكالمات المباشر. واجهة الموقع (بدون خطوة بناء).
+// رحمة مول — نظام إدارة فريق المبيعات المباشر. واجهة الموقع (بدون خطوة بناء).
 'use strict';
 
 const App = (window.App = {
@@ -393,10 +393,10 @@ function renderShell() {
   const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
     el('div', { class: 'sidebar-brand' }, [
       el('div', { class: 'brand-row' }, [
-        el('div', { class: 'brand-mark' }, ['ر']),
+        el('div', { class: 'brand-mark' }, [el('img', { src: '/logo.png', alt: 'رحمة مول' })]),
         el('div', {}, [
           el('div', { class: 'logo' }, ['رحمة مول']),
-          el('div', { class: 'sub' }, ['نظام إدارة فريق المكالمات']),
+          el('div', { class: 'sub' }, ['نظام إدارة فريق المبيعات']),
         ]),
       ]),
     ]),

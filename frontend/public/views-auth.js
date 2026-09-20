@@ -11,8 +11,9 @@
     async function render() {
       container.innerHTML = '';
       const brand = el('div', { class: 'login-brand' }, [
+        el('img', { src: '/logo.png', alt: 'رحمة مول', class: 'login-logo-img' }),
         el('div', { class: 'logo' }, ['رحمة مول']),
-        el('div', { class: 'title' }, ['نظام إدارة فريق المكالمات']),
+        el('div', { class: 'title' }, ['نظام إدارة فريق المبيعات']),
         el('div', { class: 'subtitle' }, ['توزيع العملاء وإدارة الفريق']),
       ]);
       container.appendChild(brand);

@@ -122,10 +122,10 @@ button { font-family: inherit; }
 .sidebar-brand { padding: 18px 20px; border-bottom: 1px solid var(--border); }
 .brand-row { display: flex; align-items: center; gap: 11px; }
 .brand-mark {
-  width: 36px; height: 36px; flex-shrink: 0; border-radius: var(--radius-sm); background: var(--brand);
-  color: var(--brand-foreground);
-  display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800;
+  width: 34px; height: 34px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
 }
+.brand-mark img { width: 100%; height: 100%; object-fit: contain; }
 .sidebar-brand .logo { font-weight: 700; font-size: 15.5px; line-height: 1.3; }
 .sidebar-brand .sub { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; font-weight: 500; }
 .nav { flex: 1; overflow-y: auto; padding: 12px 12px; }
@@ -264,6 +264,7 @@ table.data-table tr:hover td { background: var(--surface-2); }
 /* ---------- تسجيل الدخول ---------- */
 .login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; }
 .login-brand { text-align: center; margin-bottom: 28px; }
+.login-logo-img { width: 56px; height: 56px; object-fit: contain; margin-bottom: 10px; }
 .login-brand .logo { font-size: 24px; font-weight: 800; }
 .login-brand .title { font-size: 13.5px; font-weight: 600; color: var(--text); margin-top: 5px; }
 .login-brand .subtitle { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
