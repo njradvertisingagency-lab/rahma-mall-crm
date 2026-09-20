@@ -26,7 +26,7 @@ export class TeamRoom {
     if (url.pathname === '/websocket') {
       const upgradeHeader = request.headers.get('Upgrade');
       if (upgradeHeader !== 'websocket') {
-        return new Response('Expected websocket', { status: 426 });
+        return new Response('مطلوب اتصال websocket', { status: 426 });
       }
       const identity = JSON.parse(request.headers.get('X-Rahma-Identity') || '{}');
       const pair = new WebSocketPair();
@@ -38,7 +38,7 @@ export class TeamRoom {
       return new Response(null, { status: 101, webSocket: client });
     }
 
-    return new Response('Not found', { status: 404 });
+    return new Response('غير موجود', { status: 404 });
   }
 
   /** Push `{ type: event, payload, ts }` to every socket matched by `audience`. */
