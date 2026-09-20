@@ -408,6 +408,7 @@ function renderShell() {
     )),
     el('div', { class: 'sidebar-footer' }, [
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
+      el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
     ]),
   ]);
 

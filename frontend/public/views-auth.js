@@ -48,6 +48,7 @@
       } else if (screen === 'employee-form') {
         container.appendChild(renderLoginForm(selectedEmployee.username, `أهلاً بك، ${selectedEmployee.name}`, false));
       }
+      container.appendChild(el('div', { class: 'dev-credit login-page-credit' }, ['Developed by Ahmed Nagy']));
     }
 
     async function loadEmployees() {

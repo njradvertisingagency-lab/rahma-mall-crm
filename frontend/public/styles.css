@@ -138,6 +138,8 @@ button { font-family: inherit; }
 .nav-item.active { background: var(--brand-soft); color: var(--text); font-weight: 600; }
 .nav-icon { width: 20px; text-align: center; }
 .sidebar-footer { padding: 16px; border-top: 1px solid var(--border); }
+.dev-credit { text-align: center; font-size: 10.5px; color: var(--text-faint); margin-top: 10px; letter-spacing: 0.02em; }
+.login-page-credit { margin-top: 32px; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .topbar {
@@ -262,13 +264,16 @@ table.data-table tr:hover td { background: var(--surface-2); }
 .modal-close { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-muted); }
 
 /* ---------- تسجيل الدخول ---------- */
-.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; }
-.login-brand { text-align: center; margin-bottom: 28px; }
-.login-logo-img { width: 56px; height: 56px; object-fit: contain; margin-bottom: 10px; }
-.login-brand .logo { font-size: 24px; font-weight: 800; }
-.login-brand .title { font-size: 13.5px; font-weight: 600; color: var(--text); margin-top: 5px; }
-.login-brand .subtitle { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
-.login-cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 640px; }
+.login-screen {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 0%, var(--brand-soft), var(--bg) 60%); padding: 32px 20px;
+}
+.login-brand { text-align: center; margin-bottom: 36px; display: flex; flex-direction: column; align-items: center; }
+.login-logo-img { width: 52px; height: 52px; object-fit: contain; margin-bottom: 14px; }
+.login-brand .logo { font-size: 22px; font-weight: 800; }
+.login-brand .title { font-size: 13.5px; font-weight: 600; color: var(--text-muted); margin-top: 6px; }
+.login-brand .subtitle { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.login-cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 520px; }
 .login-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 24px; width: 240px;
   text-align: center; cursor: pointer; box-shadow: var(--shadow-xs); transition: 0.15s;
