@@ -238,7 +238,7 @@
       if (state.archived && user.role === 'team_leader') {
         rowActions.push(el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة']));
       }
-      cells.push(el('div', { class: 'flex gap-8' }, rowActions));
+      cells.push(el('div', { class: 'flex gap-8 wrap' }, rowActions));
       return el('tr', {}, cells.map((c2) => el('td', {}, [c2])));
     }
 

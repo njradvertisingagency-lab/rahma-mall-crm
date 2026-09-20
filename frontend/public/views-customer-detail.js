@@ -145,7 +145,7 @@
         ])));
       const input = el('input', { placeholder: 'أضف منتجًا…', style: 'max-width:220px' });
       wrap.appendChild(list);
-      wrap.appendChild(el('div', { class: 'flex gap-8' }, [input, el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
+      wrap.appendChild(el('div', { class: 'flex gap-8 wrap' }, [input, el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
         if (!input.value.trim()) return;
         await api('/customers/' + data.customer.id + '/products', { method: 'POST', body: { product: input.value.trim() } });
         input.value = '';
@@ -206,7 +206,7 @@
     function renderSalesSection() {
       const wrap = el('div', { class: 'card card-pad' });
       const canRecordPurchase = App.state.user.role === 'team_leader';
-      wrap.appendChild(el('div', { class: 'flex gap-8 mb-12' }, [
+      wrap.appendChild(el('div', { class: 'flex gap-8 mb-12 wrap' }, [
         el('button', { class: 'btn btn-sm btn-outline', onclick: () => logBranchVisit() }, ['🏪 زيارة فرع']),
         canRecordPurchase ? el('button', { class: 'btn btn-sm btn-success', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']) : null,
       ]));
@@ -243,7 +243,7 @@
       const itemsList = el('ul', { style: 'margin:6px 0 0;padding-inline-start:18px;font-size:12px' }, (p.items || []).map((it) => el('li', {}, [`${it.product_name} × ${it.quantity} @ ${it.unit_price} = ${it.subtotal}`])));
       card.appendChild(itemsList);
       if (App.state.user.role === 'team_leader' && p.status !== 'CANCELLED') {
-        const actions = el('div', { class: 'flex gap-8 mt-8' });
+        const actions = el('div', { class: 'flex gap-8 mt-8 wrap' });
         if (p.status === 'COMPLETED' || p.status === 'PARTIALLY_REFUNDED') {
           actions.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: () => openRefundModal(p) }, ['↩ استرجاع']));
         }
@@ -306,7 +306,7 @@
       function addItemRow() {
         const row = { productName: el('input', { placeholder: 'المنتج' }), sku: el('input', { placeholder: 'SKU (اختياري)', style: 'max-width:100px' }), qty: el('input', { type: 'number', value: '1', min: '1', style: 'max-width:70px' }), price: el('input', { type: 'number', value: '0', step: '0.01', style: 'max-width:100px' }), discount: el('input', { type: 'number', value: '0', step: '0.01', style: 'max-width:90px' }) };
         items.push(row);
-        itemsBox.appendChild(el('div', { class: 'flex gap-8 mb-8', style: 'align-items:center' }, [
+        itemsBox.appendChild(el('div', { class: 'flex gap-8 mb-8 wrap', style: 'align-items:center' }, [
           row.productName, row.sku, row.qty, row.price, row.discount,
           el('button', { class: 'btn btn-sm', onclick: () => { const idx = items.indexOf(row); if (idx > -1) items.splice(idx, 1); rowEl.remove(); recalc(); } }, ['✕']),
         ]));
@@ -564,8 +564,8 @@
         const body = el('div', {}, ['لا يمكن التواصل عبر واتساب — رقم الهاتف غير صالح.']);
         const dlg = modal('واتساب', body, []);
         dlg.el.querySelector('.modal-footer').append(
-          el('button', { class: 'btn btn-outline', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ الرقم', 'success'); } }, ['نسخ الرقم']),
-          el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء'])
+          el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+          el('button', { class: 'btn btn-outline', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ الرقم', 'success'); } }, ['نسخ الرقم'])
         );
         return;
       }

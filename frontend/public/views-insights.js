@@ -123,7 +123,7 @@
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['المساعد الذكي']),
-      el('div', { class: 'flex gap-8' }, [
+      el('div', { class: 'flex gap-8 wrap' }, [
         el('button', { class: 'btn btn-outline', onclick: generateSummary }, ['إنشاء ملخص اليوم']),
         el('button', { class: 'btn btn-outline', onclick: generateInsights }, ['إنشاء ملاحظات تشغيلية']),
       ]),
@@ -132,7 +132,7 @@
     const chatBox = el('div', { class: 'card card-pad', style: 'min-height:260px;max-height:420px;overflow-y:auto;margin-bottom:14px' });
     container.appendChild(chatBox);
     const input = el('input', { placeholder: 'اسأل عن بياناتك، مثال: "كام عميل غير موزّع؟"' });
-    container.appendChild(el('div', { class: 'flex gap-8' }, [input, el('button', { class: 'btn btn-primary', onclick: ask }, ['اسأل'])]));
+    container.appendChild(el('div', { class: 'flex gap-8 wrap' }, [input, el('button', { class: 'btn btn-primary', onclick: ask }, ['اسأل'])]));
 
     function addMsg(text, who) {
       chatBox.appendChild(el('div', { class: 'mb-12', style: who === 'user' ? 'text-align:end' : '' }, [

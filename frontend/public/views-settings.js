@@ -86,7 +86,7 @@
     }
     await loadBranches();
     const newBranchInput = el('input', { placeholder: 'اسم الفرع الجديد', style: 'max-width:220px' });
-    branchesCard.appendChild(el('div', { class: 'flex gap-8' }, [
+    branchesCard.appendChild(el('div', { class: 'flex gap-8 wrap' }, [
       newBranchInput,
       el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
         if (!newBranchInput.value.trim()) return;

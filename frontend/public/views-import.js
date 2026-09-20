@@ -100,7 +100,7 @@
         ]),
       ]));
 
-      resultBox.appendChild(el('div', { class: 'flex gap-8 mt-16' }, [
+      resultBox.appendChild(el('div', { class: 'flex gap-8 mt-16 wrap' }, [
         el('button', { class: 'btn btn-outline', onclick: () => { resultBox.innerHTML = ''; currentToken = null; } }, ['إلغاء']),
         el('button', { class: 'btn btn-primary', disabled: s.newCustomers === 0 || undefined, onclick: commitImport }, [`استيراد العملاء (${s.newCustomers})`]),
       ]));

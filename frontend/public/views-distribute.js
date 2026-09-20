@@ -51,7 +51,7 @@
     const previewBox = el('div', { class: 'mt-16' });
     card.appendChild(previewBox);
 
-    card.appendChild(el('div', { class: 'flex gap-8 mt-16' }, [
+    card.appendChild(el('div', { class: 'flex gap-8 mt-16 wrap' }, [
       el('button', { class: 'btn btn-outline', onclick: () => previewDistribution() }, ['معاينة التوزيع']),
       el('button', { class: 'btn btn-primary', onclick: () => confirmDistribution() }, ['توزيع']),
     ]));

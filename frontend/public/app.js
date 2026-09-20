@@ -427,7 +427,7 @@ function renderShell() {
     notifBell,
     el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
       el('div', { class: 'avatar avatar-sm' }, [(user.displayName || '?')[0].toUpperCase()]),
-      el('div', {}, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
+      el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
       el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
     ]),
   ]);
