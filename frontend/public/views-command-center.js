@@ -99,11 +99,13 @@
       }
       items.forEach((item) => {
         const link = filterToLink(item.filter);
-        const sevColor = item.severity === 'CRITICAL' ? '#991b1b' : '#92400e';
-        const sevBg = item.severity === 'CRITICAL' ? '#fee2e2' : '#fef3c7';
-        const row = el('div', { class: 'flex-between mb-8', style: `padding:8px 10px;border-radius:8px;background:${sevBg}` }, [
-          el('span', { style: `color:${sevColor};font-weight:700;font-size:13px` }, [(item.severity === 'CRITICAL' ? '🔴 ' : '🟠 ') + item.label]),
-          link ? el('a', { href: link, class: 'btn btn-sm btn-outline' }, ['عرض ←']) : null,
+        const sev = item.severity === 'CRITICAL' ? 'critical' : 'warning';
+        const row = el('div', { class: 'alert-row alert-row-' + sev }, [
+          el('div', { class: 'alert-row-main' }, [
+            el('span', { class: 'alert-row-dot' }),
+            el('span', { class: 'alert-row-label' }, [item.label]),
+          ]),
+          link ? el('a', { href: link, class: 'alert-row-action' }, [el('span', {}, ['عرض']), el('span', { class: 'chevron' })]) : null,
         ]);
         attentionCard.appendChild(row);
       });
