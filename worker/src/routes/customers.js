@@ -196,9 +196,9 @@ customerRoutes.get('/:id', async (c) => {
     )
     .bind(id)
     .first();
-  if (!row) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!row) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && row.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   // Seen is recorded ONLY here — an actual, explicit open of the customer's
@@ -258,10 +258,10 @@ customerRoutes.post('/', requireRole('team_leader'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const { valid, normalized, reason } = normalizeEgyptPhone(body.phone);
-  if (!valid) return jsonError(c, 400, `Invalid Egyptian phone number (${reason})`, 'INVALID_PHONE');
+  if (!valid) return jsonError(c, 400, `رقم هاتف مصري غير صالح (${PHONE_REASON_LABELS[reason] || reason})`, 'INVALID_PHONE');
 
   const dup = await db.prepare(`SELECT id FROM customers WHERE normalized_phone = ? AND archived = 0`).bind(normalized).first();
-  if (dup) return jsonError(c, 409, 'A customer with this phone number already exists: ' + dup.id, 'DUPLICATE_PHONE');
+  if (dup) return jsonError(c, 409, 'يوجد عميل بهذا الرقم بالفعل: ' + dup.id, 'DUPLICATE_PHONE');
 
   const id = await nextCustomerId(db);
   await db
@@ -289,7 +289,7 @@ customerRoutes.post('/import/preview', requireRole('team_leader'), async (c) => 
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.formData();
     const file = form.get('file');
-    if (!file) return jsonError(c, 400, 'No file uploaded', 'NO_FILE');
+    if (!file) return jsonError(c, 400, 'لم يتم رفع أي ملف', 'NO_FILE');
     const name = file.name || '';
     const buf = await file.arrayBuffer();
     if (name.toLowerCase().endsWith('.csv')) {
@@ -305,7 +305,7 @@ customerRoutes.post('/import/preview', requireRole('team_leader'), async (c) => 
     } else if (body.csv) {
       records = parseCsvToRecords(body.csv).records;
     } else {
-      return jsonError(c, 400, 'Provide `text` (pasted numbers) or `csv` (CSV content)', 'NO_INPUT');
+      return jsonError(c, 400, 'أرسل `text` (أرقام ملصوقة) أو `csv` (محتوى CSV)', 'NO_INPUT');
     }
   }
 
@@ -330,10 +330,10 @@ customerRoutes.post('/import/commit', requireRole('team_leader'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const stash = await db.prepare(`SELECT value FROM settings WHERE key = ?`).bind('import_preview_' + body.token).first();
-  if (!stash) return jsonError(c, 400, 'Import preview expired or not found — please re-run the preview', 'PREVIEW_EXPIRED');
+  if (!stash) return jsonError(c, 400, 'انتهت صلاحية معاينة الاستيراد أو لم يتم العثور عليها — يرجى إعادة المعاينة', 'PREVIEW_EXPIRED');
   const { rows } = JSON.parse(stash.value);
   const newRows = rows.filter((r) => r.status === 'NEW');
-  if (newRows.length === 0) return jsonError(c, 400, 'Nothing new to import', 'NOTHING_TO_IMPORT');
+  if (newRows.length === 0) return jsonError(c, 400, 'لا يوجد جديد للاستيراد', 'NOTHING_TO_IMPORT');
 
   const createdIds = [];
   for (const r of newRows) {
@@ -364,12 +364,12 @@ customerRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
   if (body.version && body.version !== existing.version) {
-    return jsonError(c, 409, 'This customer was modified by someone else — refresh and retry', 'VERSION_CONFLICT');
+    return jsonError(c, 409, 'تم تعديل هذا العميل من قبل شخص آخر — يرجى تحديث الصفحة والمحاولة مرة أخرى', 'VERSION_CONFLICT');
   }
   const fields = [];
   const binds = [];
@@ -385,11 +385,11 @@ customerRoutes.patch('/:id', async (c) => {
     }
   }
   if ('priority' in body) {
-    if (!PRIORITIES.includes(body.priority)) return jsonError(c, 400, 'Invalid priority', 'INVALID_PRIORITY');
+    if (!PRIORITIES.includes(body.priority)) return jsonError(c, 400, 'أولوية غير صالحة', 'INVALID_PRIORITY');
     fields.push('priority = ?');
     binds.push(body.priority);
   }
-  if (fields.length === 0) return jsonError(c, 400, 'No fields to update', 'NO_FIELDS');
+  if (fields.length === 0) return jsonError(c, 400, 'لا توجد حقول للتحديث', 'NO_FIELDS');
   fields.push('updated_at = ?', 'version = version + 1');
   binds.push(nowIso());
   binds.push(id);
@@ -411,12 +411,12 @@ customerRoutes.patch('/:id/status', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const toStatus = body.status;
-  if (!STATUSES.includes(toStatus)) return jsonError(c, 400, 'Invalid status', 'INVALID_STATUS');
+  if (!STATUSES.includes(toStatus)) return jsonError(c, 400, 'حالة غير صالحة', 'INVALID_STATUS');
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   let closedReason = null;
@@ -424,10 +424,10 @@ customerRoutes.patch('/:id/status', async (c) => {
   let closedBy = null;
   if (toStatus === 'CLOSED') {
     if (!body.closedReason || !CLOSED_REASONS.includes(body.closedReason)) {
-      return jsonError(c, 400, 'A valid closed reason is required to close a customer', 'CLOSED_REASON_REQUIRED');
+      return jsonError(c, 400, 'سبب إغلاق صالح مطلوب لإغلاق العميل', 'CLOSED_REASON_REQUIRED');
     }
     if (body.closedReason === 'Other' && !body.closedReasonText) {
-      return jsonError(c, 400, 'Custom text is required when reason is "Other"', 'CLOSED_REASON_TEXT_REQUIRED');
+      return jsonError(c, 400, 'النص المخصص مطلوب عند اختيار سبب "أخرى"', 'CLOSED_REASON_TEXT_REQUIRED');
     }
     closedReason = body.closedReason === 'Other' ? `Other: ${body.closedReasonText}` : body.closedReason;
     closedAt = nowIso();
@@ -469,8 +469,8 @@ customerRoutes.post('/:id/reopen', requireRole('team_leader'), async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
-  if (existing.status !== 'CLOSED') return jsonError(c, 400, 'Only closed customers can be reopened', 'NOT_CLOSED');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
+  if (existing.status !== 'CLOSED') return jsonError(c, 400, 'يمكن إعادة فتح العملاء المغلقين فقط', 'NOT_CLOSED');
 
   await db
     .prepare(`UPDATE customers SET status = 'FOLLOW_UP', closed_at = NULL, closed_reason = NULL, closed_by = NULL, updated_at = ?, version = version + 1 WHERE id = ?`)
@@ -490,12 +490,12 @@ customerRoutes.post('/:id/notes', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
-  if (!body.note || !String(body.note).trim()) return jsonError(c, 400, 'Note text is required', 'EMPTY_NOTE');
+  if (!body.note || !String(body.note).trim()) return jsonError(c, 400, 'نص الملاحظة مطلوب', 'EMPTY_NOTE');
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   const res = await db
@@ -518,12 +518,12 @@ customerRoutes.post('/:id/products', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const product = String(body.product || '').trim();
-  if (!product) return jsonError(c, 400, 'Product name is required', 'MISSING_PRODUCT');
+  if (!product) return jsonError(c, 400, 'اسم المنتج مطلوب', 'MISSING_PRODUCT');
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   await db.prepare(`INSERT OR IGNORE INTO customer_products (customer_id, product) VALUES (?, ?)`).bind(id, product).run();
@@ -539,9 +539,9 @@ customerRoutes.delete('/:id/products/:product', async (c) => {
   const id = c.req.param('id');
   const product = decodeURIComponent(c.req.param('product'));
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
   await db.prepare(`DELETE FROM customer_products WHERE customer_id = ? AND product = ?`).bind(id, product).run();
   return c.json({ ok: true });
@@ -555,9 +555,9 @@ customerRoutes.post('/:id/call', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
   await logActivity(db, { actor: user, action: 'CALL_INITIATED', entityType: 'customer', entityId: id, metadata: { phone: existing.normalized_phone } });
   return c.json({ ok: true });
@@ -574,12 +574,12 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
-  if (!CALL_OUTCOMES.includes(body.outcome)) return jsonError(c, 400, 'A valid call outcome is required', 'INVALID_OUTCOME');
+  if (!CALL_OUTCOMES.includes(body.outcome)) return jsonError(c, 400, 'نتيجة اتصال صالحة مطلوبة', 'INVALID_OUTCOME');
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   const res = await db
@@ -625,12 +625,12 @@ customerRoutes.post('/bulk', requireRole('team_leader'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const ids = Array.isArray(body.customerIds) ? body.customerIds : [];
-  if (ids.length === 0) return jsonError(c, 400, 'No customers selected', 'NO_SELECTION');
+  if (ids.length === 0) return jsonError(c, 400, 'لم يتم اختيار عملاء', 'NO_SELECTION');
   const action = body.action;
 
   let affected = 0;
   if (action === 'STATUS') {
-    if (!STATUSES.includes(body.status)) return jsonError(c, 400, 'Invalid status', 'INVALID_STATUS');
+    if (!STATUSES.includes(body.status)) return jsonError(c, 400, 'حالة غير صالحة', 'INVALID_STATUS');
     for (const id of ids) {
       const existing = await db.prepare(`SELECT status FROM customers WHERE id = ?`).bind(id).first();
       if (!existing) continue;
@@ -639,7 +639,7 @@ customerRoutes.post('/bulk', requireRole('team_leader'), async (c) => {
       affected++;
     }
   } else if (action === 'PRIORITY') {
-    if (!PRIORITIES.includes(body.priority)) return jsonError(c, 400, 'Invalid priority', 'INVALID_PRIORITY');
+    if (!PRIORITIES.includes(body.priority)) return jsonError(c, 400, 'أولوية غير صالحة', 'INVALID_PRIORITY');
     for (const id of ids) {
       await db.prepare(`UPDATE customers SET priority = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(body.priority, nowIso(), id).run();
       affected++;
@@ -650,7 +650,7 @@ customerRoutes.post('/bulk', requireRole('team_leader'), async (c) => {
       affected++;
     }
   } else {
-    return jsonError(c, 400, 'Unsupported bulk action (use the /distributions or /reassignments endpoints for assignment changes)', 'UNSUPPORTED_ACTION');
+    return jsonError(c, 400, 'إجراء جماعي غير مدعوم (استخدم نقاط /distributions أو /reassignments لتغييرات التعيين)', 'UNSUPPORTED_ACTION');
   }
 
   await logActivity(db, { actor: user, action: 'BULK_' + action, entityType: 'customer', entityId: null, metadata: { count: affected, ids } });

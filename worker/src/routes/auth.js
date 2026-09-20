@@ -27,7 +27,7 @@ authRoutes.post('/login', async (c) => {
   const password = String(body.password || '');
   const remember = !!body.remember;
 
-  if (!username || !password) return jsonError(c, 400, 'Username and password are required', 'MISSING_FIELDS');
+  if (!username || !password) return jsonError(c, 400, 'اسم المستخدم وكلمة المرور مطلوبان', 'MISSING_FIELDS');
 
   const db = c.env.DB;
   const user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
@@ -42,7 +42,7 @@ authRoutes.post('/login', async (c) => {
 
   if (!ok) {
     await logActivity(db, { actor: null, action: 'LOGIN_FAILED', entityType: 'user', entityId: username });
-    return jsonError(c, 401, 'Invalid username or password', 'INVALID_CREDENTIALS');
+    return jsonError(c, 401, 'اسم المستخدم أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
   }
 
   const userAgent = c.req.header('user-agent') || '';
@@ -105,12 +105,12 @@ authRoutes.post('/change-password', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { currentPassword, newPassword } = body;
   if (!currentPassword || !newPassword || String(newPassword).length < 8) {
-    return jsonError(c, 400, 'New password must be at least 8 characters', 'WEAK_PASSWORD');
+    return jsonError(c, 400, 'يجب أن تتكون كلمة المرور الجديدة من ٨ أحرف على الأقل', 'WEAK_PASSWORD');
   }
   const db = c.env.DB;
   const row = await db.prepare(`SELECT * FROM users WHERE id = ?`).bind(user.id).first();
   const ok = await verifyPassword(currentPassword, row.password_salt, row.password_hash);
-  if (!ok) return jsonError(c, 401, 'Current password is incorrect', 'BAD_CURRENT_PASSWORD');
+  if (!ok) return jsonError(c, 401, 'كلمة المرور الحالية غير صحيحة', 'BAD_CURRENT_PASSWORD');
 
   const salt = randomSaltHex();
   const hash = await hashPassword(newPassword, salt);

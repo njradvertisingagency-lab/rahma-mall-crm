@@ -16,8 +16,8 @@ savedFilterRoutes.post('/', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const name = String(body.name || '').trim();
-  if (!name) return jsonError(c, 400, 'Filter name is required', 'MISSING_NAME');
-  if (!body.query || typeof body.query !== 'object') return jsonError(c, 400, 'Filter query is required', 'MISSING_QUERY');
+  if (!name) return jsonError(c, 400, 'اسم الفلتر مطلوب', 'MISSING_NAME');
+  if (!body.query || typeof body.query !== 'object') return jsonError(c, 400, 'معايير الفلتر مطلوبة', 'MISSING_QUERY');
 
   const existing = await db.prepare(`SELECT id FROM saved_filters WHERE user_id = ? AND name = ?`).bind(user.id, name).first();
   if (existing) {
@@ -33,7 +33,7 @@ savedFilterRoutes.delete('/:id', async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const existing = await db.prepare(`SELECT id FROM saved_filters WHERE id = ? AND user_id = ?`).bind(id, user.id).first();
-  if (!existing) return jsonError(c, 404, 'Filter not found', 'NOT_FOUND');
+  if (!existing) return jsonError(c, 404, 'الفلتر غير موجود', 'NOT_FOUND');
   await db.prepare(`DELETE FROM saved_filters WHERE id = ?`).bind(id).run();
   return c.json({ ok: true });
 });

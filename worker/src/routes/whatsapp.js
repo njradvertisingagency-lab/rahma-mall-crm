@@ -61,7 +61,7 @@ whatsappRoutes.post('/customers/:id/initiate', async (c) => {
 
   const { valid, normalized } = normalizeEgyptPhone(customer.phone);
   if (!valid) return jsonError(c, 400, 'لا يمكن التواصل عبر واتساب — رقم الهاتف غير صالح.', 'INVALID_PHONE');
-  if (!body.message || !String(body.message).trim()) return jsonError(c, 400, 'Message is required', 'EMPTY_MESSAGE');
+  if (!body.message || !String(body.message).trim()) return jsonError(c, 400, 'الرسالة مطلوبة', 'EMPTY_MESSAGE');
 
   const employeeId = customer.assigned_employee_id ?? (user.role === 'employee' ? user.employeeId : null);
   const ts = nowIso();

@@ -38,12 +38,12 @@ followupRoutes.post('/customers/:customerId', async (c) => {
   const db = c.env.DB;
   const customerId = c.req.param('customerId');
   const body = await c.req.json().catch(() => ({}));
-  if (!body.scheduledFor) return jsonError(c, 400, 'scheduledFor (ISO date-time) is required', 'MISSING_SCHEDULE');
+  if (!body.scheduledFor) return jsonError(c, 400, 'التاريخ والوقت مطلوبان', 'MISSING_SCHEDULE');
 
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(customerId).first();
-  if (!customer) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
+  if (!customer) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
   if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your customer', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
   }
 
   const employeeId = customer.assigned_employee_id;
@@ -97,9 +97,9 @@ followupRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Follow-up not found', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'Not your follow-up', 'FORBIDDEN_OWNERSHIP');
-  if (existing.status !== 'UPCOMING') return jsonError(c, 400, 'Only open follow-ups can be edited', 'NOT_EDITABLE');
+  if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
+  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
+  if (existing.status !== 'UPCOMING') return jsonError(c, 400, 'يمكن تعديل المتابعات المفتوحة فقط', 'NOT_EDITABLE');
 
   const fields = [];
   const binds = [];
@@ -115,7 +115,7 @@ followupRoutes.patch('/:id', async (c) => {
     fields.push('notes = ?');
     binds.push(body.notes);
   }
-  if (fields.length === 0) return jsonError(c, 400, 'No fields to update', 'NO_FIELDS');
+  if (fields.length === 0) return jsonError(c, 400, 'لا توجد حقول للتحديث', 'NO_FIELDS');
   binds.push(id);
   await db.prepare(`UPDATE followups SET ${fields.join(', ')} WHERE id = ?`).bind(...binds).run();
   if (body.scheduledFor) {
@@ -131,8 +131,8 @@ followupRoutes.post('/:id/complete', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Follow-up not found', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'Not your follow-up', 'FORBIDDEN_OWNERSHIP');
+  if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
+  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
 
   await db.prepare(`UPDATE followups SET status = 'COMPLETED', completed_at = ?, completed_by = ? WHERE id = ?`).bind(nowIso(), user.id, id).run();
   const stillOpen = await db.prepare(`SELECT MIN(scheduled_for) AS next FROM followups WHERE customer_id = ? AND status = 'UPCOMING'`).bind(existing.customer_id).first();
@@ -147,8 +147,8 @@ followupRoutes.post('/:id/cancel', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
-  if (!existing) return jsonError(c, 404, 'Follow-up not found', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'Not your follow-up', 'FORBIDDEN_OWNERSHIP');
+  if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
+  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
   await db.prepare(`UPDATE followups SET status = 'CANCELLED', cancelled_at = ? WHERE id = ?`).bind(nowIso(), id).run();
   await logActivity(db, { actor: user, action: 'FOLLOWUP_CANCELLED', entityType: 'customer', entityId: existing.customer_id, metadata: { followupId: id } });
   return c.json({ ok: true });
@@ -168,8 +168,8 @@ export async function sweepOverdueFollowups(env) {
       await createNotification(db, {
         userId: emp.user_id,
         type: 'FOLLOWUP_OVERDUE',
-        title: 'Follow-up overdue',
-        message: `A scheduled follow-up for customer ${f.customer_id} is now overdue.`,
+        title: 'متابعة متأخرة',
+        message: `المتابعة المجدولة للعميل ${f.customer_id} أصبحت متأخرة الآن.`,
         entityType: 'customer',
         entityId: f.customer_id,
       });

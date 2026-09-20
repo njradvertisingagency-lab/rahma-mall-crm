@@ -46,16 +46,16 @@ employeeRoutes.patch('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
 
   if (user.role === 'employee' && user.employeeId !== id) {
-    return jsonError(c, 403, 'You may only update your own availability', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'يمكنك فقط تحديث إتاحتك الخاصة', 'FORBIDDEN_OWNERSHIP');
   }
   if (user.role === 'employee' && ('active' in body)) {
-    return jsonError(c, 403, 'Only the Team Leader can activate/deactivate employees', 'FORBIDDEN_ROLE');
+    return jsonError(c, 403, 'فقط قائد الفريق يمكنه تفعيل أو إيقاف الموظفين', 'FORBIDDEN_ROLE');
   }
 
   const fields = [];
   const binds = [];
   if ('availability' in body) {
-    if (!AVAILABILITY.includes(body.availability)) return jsonError(c, 400, 'Invalid availability value', 'INVALID_AVAILABILITY');
+    if (!AVAILABILITY.includes(body.availability)) return jsonError(c, 400, 'قيمة الإتاحة غير صالحة', 'INVALID_AVAILABILITY');
     fields.push('availability = ?');
     binds.push(body.availability);
   }
@@ -63,7 +63,7 @@ employeeRoutes.patch('/:id', async (c) => {
     fields.push('active = ?');
     binds.push(body.active ? 1 : 0);
   }
-  if (fields.length === 0) return jsonError(c, 400, 'No fields to update', 'NO_FIELDS');
+  if (fields.length === 0) return jsonError(c, 400, 'لا توجد حقول للتحديث', 'NO_FIELDS');
   fields.push('updated_at = ?');
   binds.push(nowIso(), id);
 
@@ -83,7 +83,7 @@ employeeRoutes.patch('/:id', async (c) => {
 employeeRoutes.get('/:id/work-queue', async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
-  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'You may only view your own work queue', 'FORBIDDEN_OWNERSHIP');
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط عرض قائمة مهامك الخاصة', 'FORBIDDEN_OWNERSHIP');
   const queue = await getEmployeeWorkQueue(c.env.DB, id, Number(c.req.query('limit')) || 20);
   return c.json({ queue });
 });
@@ -93,7 +93,7 @@ employeeRoutes.get('/:id/work-queue', async (c) => {
 employeeRoutes.get('/:id/followup-suggestions', async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
-  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'You may only view your own suggestions', 'FORBIDDEN_OWNERSHIP');
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط عرض اقتراحاتك الخاصة', 'FORBIDDEN_OWNERSHIP');
   const suggestions = await getFollowupSuggestions(c.env.DB, id);
   return c.json({ suggestions });
 });
@@ -102,7 +102,7 @@ employeeRoutes.get('/:id/followup-suggestions', async (c) => {
 employeeRoutes.get('/:id/daily-goal', async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
-  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'You may only view your own goal', 'FORBIDDEN_OWNERSHIP');
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط عرض هدفك الخاص', 'FORBIDDEN_OWNERSHIP');
   const goalDate = c.req.query('date') || new Date().toISOString().slice(0, 10);
   const progress = await getDailyGoalProgress(c.env.DB, id, goalDate);
   return c.json({ progress });

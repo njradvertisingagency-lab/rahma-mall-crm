@@ -67,20 +67,20 @@ reportRoutes.get('/customers', async (c) => {
     .all();
 
   const csv = toCsv(rows.results, [
-    { label: 'Customer ID', value: 'id' },
-    { label: 'Phone', value: 'phone' },
-    { label: 'Name', value: 'name' },
-    { label: 'Assigned Employee', value: 'employee_name' },
-    { label: 'Status', value: 'status' },
-    { label: 'Priority', value: 'priority' },
-    { label: 'Source', value: 'source' },
-    { label: 'Campaign', value: 'campaign' },
-    { label: 'Created At', value: 'created_at' },
-    { label: 'Assigned At', value: 'assigned_at' },
-    { label: 'Last Updated', value: 'updated_at' },
-    { label: 'Next Follow-up', value: 'next_follow_up_at' },
-    { label: 'Closed At', value: 'closed_at' },
-    { label: 'Closed Reason', value: 'closed_reason' },
+    { label: 'كود العميل', value: 'id' },
+    { label: 'الهاتف', value: 'phone' },
+    { label: 'الاسم', value: 'name' },
+    { label: 'الموظف المسؤول', value: 'employee_name' },
+    { label: 'الحالة', value: 'status' },
+    { label: 'الأولوية', value: 'priority' },
+    { label: 'المصدر', value: 'source' },
+    { label: 'الحملة', value: 'campaign' },
+    { label: 'تاريخ الإنشاء', value: 'created_at' },
+    { label: 'تاريخ التعيين', value: 'assigned_at' },
+    { label: 'آخر تحديث', value: 'updated_at' },
+    { label: 'المتابعة القادمة', value: 'next_follow_up_at' },
+    { label: 'تاريخ الإغلاق', value: 'closed_at' },
+    { label: 'سبب الإغلاق', value: 'closed_reason' },
   ]);
   return csvResponse(c, `customers-report-${Date.now()}.csv`, csv);
 });
@@ -89,15 +89,15 @@ reportRoutes.get('/employees', async (c) => {
   const db = c.env.DB;
   const { stats } = await computeAllEmployeeStats(db);
   const csv = toCsv(stats, [
-    { label: 'Employee', value: (r) => r.employee.name },
-    { label: 'Assigned', value: 'assigned' },
-    { label: 'Closed', value: 'closed' },
-    { label: 'Interested', value: 'interested' },
-    { label: 'Follow-ups Total', value: 'followupsTotal' },
-    { label: 'Follow-ups Completed', value: 'followupsCompleted' },
-    { label: 'Follow-ups Overdue', value: 'followupsOverdue' },
-    { label: 'Completion Rate', value: (r) => (r.completionRate * 100).toFixed(1) + '%' },
-    { label: 'Performance Score', value: 'performanceScore' },
+    { label: 'الموظف', value: (r) => r.employee.name },
+    { label: 'موزّع', value: 'assigned' },
+    { label: 'مغلق', value: 'closed' },
+    { label: 'مهتم', value: 'interested' },
+    { label: 'إجمالي المتابعات', value: 'followupsTotal' },
+    { label: 'المتابعات المكتملة', value: 'followupsCompleted' },
+    { label: 'المتابعات المتأخرة', value: 'followupsOverdue' },
+    { label: 'نسبة الإنجاز', value: (r) => (r.completionRate * 100).toFixed(1) + '%' },
+    { label: 'نقاط الأداء', value: 'performanceScore' },
   ]);
   return csvResponse(c, `employee-report-${Date.now()}.csv`, csv);
 });
@@ -112,13 +112,13 @@ reportRoutes.get('/activity', async (c) => {
   binds.push(...dr.binds);
   const rows = await db.prepare(`SELECT * FROM activity_logs WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT 5000`).bind(...binds).all();
   const csv = toCsv(rows.results, [
-    { label: 'Timestamp', value: 'created_at' },
-    { label: 'Actor', value: 'actor_name' },
-    { label: 'Role', value: 'actor_role' },
-    { label: 'Action', value: 'action' },
-    { label: 'Entity Type', value: 'entity_type' },
-    { label: 'Entity ID', value: 'entity_id' },
-    { label: 'Metadata', value: 'metadata' },
+    { label: 'التوقيت', value: 'created_at' },
+    { label: 'المستخدم', value: 'actor_name' },
+    { label: 'الدور', value: 'actor_role' },
+    { label: 'الإجراء', value: 'action' },
+    { label: 'نوع الكيان', value: 'entity_type' },
+    { label: 'كود الكيان', value: 'entity_id' },
+    { label: 'بيانات إضافية', value: 'metadata' },
   ]);
   return csvResponse(c, `activity-report-${Date.now()}.csv`, csv);
 });
@@ -129,14 +129,14 @@ reportRoutes.get('/followups', async (c) => {
     .prepare(`SELECT f.*, e.name AS employee_name, c.name AS customer_name, c.phone FROM followups f LEFT JOIN employees e ON e.id = f.employee_id LEFT JOIN customers c ON c.id = f.customer_id ORDER BY f.scheduled_for DESC LIMIT 5000`)
     .all();
   const csv = toCsv(rows.results, [
-    { label: 'Customer ID', value: 'customer_id' },
-    { label: 'Customer', value: 'customer_name' },
-    { label: 'Phone', value: 'phone' },
-    { label: 'Employee', value: 'employee_name' },
-    { label: 'Scheduled For', value: 'scheduled_for' },
-    { label: 'Status', value: 'status' },
-    { label: 'Reason', value: 'reason' },
-    { label: 'Completed At', value: 'completed_at' },
+    { label: 'كود العميل', value: 'customer_id' },
+    { label: 'العميل', value: 'customer_name' },
+    { label: 'الهاتف', value: 'phone' },
+    { label: 'الموظف', value: 'employee_name' },
+    { label: 'موعد المتابعة', value: 'scheduled_for' },
+    { label: 'الحالة', value: 'status' },
+    { label: 'السبب', value: 'reason' },
+    { label: 'تاريخ الإنجاز', value: 'completed_at' },
   ]);
   return csvResponse(c, `followups-report-${Date.now()}.csv`, csv);
 });
@@ -167,13 +167,13 @@ reportRoutes.get('/whatsapp', async (c) => {
     .bind(...binds)
     .all();
   const csv = toCsv(rows.results, [
-    { label: 'Customer ID', value: 'customer_id' },
-    { label: 'Customer', value: 'customer_name' },
-    { label: 'Employee', value: 'employee_name' },
-    { label: 'Phone', value: 'phone' },
-    { label: 'Status', value: 'status' },
-    { label: 'Message', value: 'message' },
-    { label: 'Initiated At', value: 'initiated_at' },
+    { label: 'كود العميل', value: 'customer_id' },
+    { label: 'العميل', value: 'customer_name' },
+    { label: 'الموظف', value: 'employee_name' },
+    { label: 'الهاتف', value: 'phone' },
+    { label: 'الحالة', value: 'status' },
+    { label: 'الرسالة', value: 'message' },
+    { label: 'تاريخ البدء', value: 'initiated_at' },
   ]);
   return csvResponse(c, `whatsapp-report-${Date.now()}.csv`, csv);
 });
@@ -182,8 +182,8 @@ reportRoutes.get('/status', async (c) => {
   const db = c.env.DB;
   const rows = await db.prepare(`SELECT status, COUNT(*) AS n FROM customers WHERE archived = 0 GROUP BY status`).all();
   const csv = toCsv(rows.results, [
-    { label: 'Status', value: 'status' },
-    { label: 'Count', value: 'n' },
+    { label: 'الحالة', value: 'status' },
+    { label: 'العدد', value: 'n' },
   ]);
   return csvResponse(c, `status-report-${Date.now()}.csv`, csv);
 });
@@ -200,14 +200,14 @@ reportRoutes.get('/call-attempts', async (c) => {
     )
     .all();
   const csv = toCsv(rows.results, [
-    { label: 'Customer ID', value: 'customer_id' },
-    { label: 'Customer', value: 'customer_name' },
-    { label: 'Phone', value: 'phone' },
-    { label: 'Employee', value: 'employee_name' },
-    { label: 'Outcome', value: 'outcome' },
-    { label: 'Notes', value: 'notes' },
-    { label: 'Attempted By', value: 'attempted_by_name' },
-    { label: 'Created At', value: 'created_at' },
+    { label: 'كود العميل', value: 'customer_id' },
+    { label: 'العميل', value: 'customer_name' },
+    { label: 'الهاتف', value: 'phone' },
+    { label: 'الموظف', value: 'employee_name' },
+    { label: 'النتيجة', value: 'outcome' },
+    { label: 'ملاحظات', value: 'notes' },
+    { label: 'بواسطة', value: 'attempted_by_name' },
+    { label: 'تاريخ الإنشاء', value: 'created_at' },
   ]);
   return csvResponse(c, `call-attempts-report-${Date.now()}.csv`, csv);
 });
@@ -232,11 +232,11 @@ reportRoutes.get('/sla', async (c) => {
   const empNames = await db.prepare(`SELECT id, name FROM employees`).all();
   const empMap = Object.fromEntries(empNames.results.map((e) => [e.id, e.name]));
   const csv = toCsv(filtered, [
-    { label: 'Customer ID', value: 'customer_id' },
-    { label: 'Employee', value: (r) => empMap[r.employee_id] || '—' },
-    { label: 'Rule', value: 'rule' },
-    { label: 'Elapsed Minutes', value: 'elapsed_minutes' },
-    { label: 'Level', value: 'level' },
+    { label: 'كود العميل', value: 'customer_id' },
+    { label: 'الموظف', value: (r) => empMap[r.employee_id] || '—' },
+    { label: 'القاعدة', value: 'rule' },
+    { label: 'الدقائق المنقضية', value: 'elapsed_minutes' },
+    { label: 'المستوى', value: 'level' },
   ]);
   return csvResponse(c, `sla-report-${Date.now()}.csv`, csv);
 });
@@ -245,10 +245,10 @@ reportRoutes.get('/seen', async (c) => {
   const db = c.env.DB;
   const summary = await getSeenSummaryByEmployee(db);
   const csv = toCsv(summary, [
-    { label: 'Employee', value: 'employeeName' },
-    { label: 'Assigned', value: 'assigned' },
-    { label: 'Seen', value: 'seen' },
-    { label: 'Not Seen', value: 'notSeen' },
+    { label: 'الموظف', value: 'employeeName' },
+    { label: 'موزّع', value: 'assigned' },
+    { label: 'تمت رؤيته', value: 'seen' },
+    { label: 'لم تتم رؤيته', value: 'notSeen' },
   ]);
   return csvResponse(c, `seen-report-${Date.now()}.csv`, csv);
 });
@@ -267,11 +267,11 @@ reportRoutes.get('/lead-scores', async (c) => {
   }
   rows.sort((a, b) => b.score - a.score);
   const csv = toCsv(rows, [
-    { label: 'Customer ID', value: 'id' },
-    { label: 'Name', value: 'name' },
-    { label: 'Employee', value: 'employee' },
-    { label: 'Lead Score', value: 'score' },
-    { label: 'Reasons', value: 'reasons' },
+    { label: 'كود العميل', value: 'id' },
+    { label: 'الاسم', value: 'name' },
+    { label: 'الموظف', value: 'employee' },
+    { label: 'تقييم العميل', value: 'score' },
+    { label: 'الأسباب', value: 'reasons' },
   ]);
   return csvResponse(c, `lead-score-report-${Date.now()}.csv`, csv);
 });
@@ -280,8 +280,8 @@ reportRoutes.get('/products', async (c) => {
   const db = c.env.DB;
   const rows = await db.prepare(`SELECT product, COUNT(*) AS n FROM customer_products GROUP BY product ORDER BY n DESC`).all();
   const csv = toCsv(rows.results, [
-    { label: 'Product', value: 'product' },
-    { label: 'Customers Interested', value: 'n' },
+    { label: 'المنتج', value: 'product' },
+    { label: 'عدد العملاء المهتمين', value: 'n' },
   ]);
   return csvResponse(c, `products-report-${Date.now()}.csv`, csv);
 });
@@ -305,23 +305,23 @@ reportRoutes.get('/sales', async (c) => {
     .bind(...binds)
     .all();
   const csv = toCsv(rows.results, [
-    { label: 'Purchase ID', value: 'id' },
-    { label: 'Customer ID', value: 'customer_id' },
-    { label: 'Customer', value: 'customer_name' },
-    { label: 'Employee', value: 'employee_name' },
-    { label: 'Branch', value: 'branch_name' },
-    { label: 'Purchase At', value: 'purchase_at' },
-    { label: 'Invoice #', value: 'invoice_number' },
-    { label: 'Order ID', value: 'order_id' },
-    { label: 'Subtotal', value: 'subtotal' },
-    { label: 'Discount', value: 'discount_total' },
-    { label: 'Tax', value: 'tax_total' },
-    { label: 'Total', value: 'total_amount' },
-    { label: 'Refunded', value: 'refunded_amount' },
-    { label: 'Net', value: (r) => Math.round((r.total_amount - r.refunded_amount) * 100) / 100 },
-    { label: 'Payment Method', value: 'payment_method' },
-    { label: 'Status', value: 'status' },
-    { label: 'Source', value: 'source' },
+    { label: 'كود عملية الشراء', value: 'id' },
+    { label: 'كود العميل', value: 'customer_id' },
+    { label: 'العميل', value: 'customer_name' },
+    { label: 'الموظف', value: 'employee_name' },
+    { label: 'الفرع', value: 'branch_name' },
+    { label: 'تاريخ الشراء', value: 'purchase_at' },
+    { label: 'رقم الفاتورة', value: 'invoice_number' },
+    { label: 'رقم الطلب', value: 'order_id' },
+    { label: 'الإجمالي الفرعي', value: 'subtotal' },
+    { label: 'الخصم', value: 'discount_total' },
+    { label: 'الضريبة', value: 'tax_total' },
+    { label: 'الإجمالي', value: 'total_amount' },
+    { label: 'المسترجع', value: 'refunded_amount' },
+    { label: 'الصافي', value: (r) => Math.round((r.total_amount - r.refunded_amount) * 100) / 100 },
+    { label: 'طريقة الدفع', value: 'payment_method' },
+    { label: 'الحالة', value: 'status' },
+    { label: 'المصدر', value: 'source' },
   ]);
   return csvResponse(c, `sales-report-${Date.now()}.csv`, csv);
 });
@@ -360,18 +360,18 @@ reportRoutes.get('/sales-attribution', async (c) => {
     });
   }
   const csv = toCsv(rows, [
-    { label: 'Employee', value: 'employee' },
-    { label: 'Assigned', value: 'assigned' },
-    { label: 'Seen', value: 'seen' },
-    { label: 'Contacted', value: 'contacted' },
-    { label: 'Interested', value: 'interested' },
-    { label: 'Branch Visits', value: 'branchVisits' },
-    { label: 'Deals', value: 'deals' },
-    { label: 'Gross Revenue', value: 'gross' },
-    { label: 'Refunds', value: 'refunds' },
-    { label: 'Net Revenue', value: 'net' },
-    { label: 'Conversion % (Assigned→Deal)', value: 'conversion' },
-    { label: 'Avg Order Value', value: 'aov' },
+    { label: 'الموظف', value: 'employee' },
+    { label: 'موزّع', value: 'assigned' },
+    { label: 'تمت رؤيته', value: 'seen' },
+    { label: 'تم التواصل', value: 'contacted' },
+    { label: 'مهتم', value: 'interested' },
+    { label: 'زيارات الفرع', value: 'branchVisits' },
+    { label: 'الصفقات', value: 'deals' },
+    { label: 'إجمالي الإيراد', value: 'gross' },
+    { label: 'المرتجعات', value: 'refunds' },
+    { label: 'صافي الإيراد', value: 'net' },
+    { label: 'نسبة التحويل (موزّع ← صفقة)', value: 'conversion' },
+    { label: 'متوسط قيمة الطلب', value: 'aov' },
   ]);
   return csvResponse(c, `call-team-sales-attribution-${Date.now()}.csv`, csv);
 });

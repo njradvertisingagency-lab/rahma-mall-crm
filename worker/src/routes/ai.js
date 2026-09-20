@@ -10,7 +10,7 @@ aiRoutes.post('/ask', async (c) => {
   const db = c.env.DB;
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  if (!body.question || !String(body.question).trim()) return jsonError(c, 400, 'question is required', 'MISSING_QUESTION');
+  if (!body.question || !String(body.question).trim()) return jsonError(c, 400, 'السؤال مطلوب', 'MISSING_QUESTION');
   const result = await answerQuestion(db, body.question, user);
   await logActivity(db, { actor: user, action: 'AI_QUESTION_ASKED', entityType: 'ai', entityId: null, metadata: { question: body.question } });
   return c.json(result);

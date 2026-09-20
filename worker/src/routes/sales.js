@@ -26,9 +26,9 @@ salesRoutes.get('/settings', async (c) => {
 
 async function loadCustomerForSale(db, user, customerId) {
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(customerId).first();
-  if (!customer) return { error: { status: 404, message: 'Customer not found', code: 'NOT_FOUND' } };
+  if (!customer) return { error: { status: 404, message: 'العميل غير موجود', code: 'NOT_FOUND' } };
   if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return { error: { status: 403, message: 'Not your customer', code: 'FORBIDDEN_OWNERSHIP' } };
+    return { error: { status: 403, message: 'هذا ليس عميلك', code: 'FORBIDDEN_OWNERSHIP' } };
   }
   return { customer };
 }
@@ -36,7 +36,7 @@ async function loadCustomerForSale(db, user, customerId) {
 function handleServiceError(c, err) {
   if (err && err.status) return jsonError(c, err.status, err.message, err.code);
   console.error(err);
-  return jsonError(c, 500, 'Unexpected error', 'INTERNAL');
+  return jsonError(c, 500, 'حدث خطأ غير متوقع', 'INTERNAL');
 }
 
 // ---------------------------------------------------------------------------
@@ -51,9 +51,9 @@ salesRoutes.post('/branches', requireRole('team_leader'), async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const name = String(body.name || '').trim();
-  if (!name) return jsonError(c, 400, 'Branch name is required', 'MISSING_NAME');
+  if (!name) return jsonError(c, 400, 'اسم الفرع مطلوب', 'MISSING_NAME');
   const existing = await db.prepare(`SELECT id FROM branches WHERE name = ?`).bind(name).first();
-  if (existing) return jsonError(c, 409, 'A branch with this name already exists', 'DUPLICATE_BRANCH');
+  if (existing) return jsonError(c, 409, 'يوجد فرع بهذا الاسم بالفعل', 'DUPLICATE_BRANCH');
   const res = await db.prepare(`INSERT INTO branches (name) VALUES (?) RETURNING id`).bind(name).first();
   await logActivity(db, { actor: c.get('user'), action: 'BRANCH_CREATED', entityType: 'branch', entityId: String(res.id), metadata: { name } });
   return c.json({ branch: { id: res.id, name, active: 1 } }, 201);
@@ -79,7 +79,7 @@ salesRoutes.post('/customers/:id/branch-visits', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { customer, error } = await loadCustomerForSale(db, user, id);
   if (error) return jsonError(c, error.status, error.message, error.code);
-  if (!body.branchId) return jsonError(c, 400, 'Branch is required', 'MISSING_BRANCH');
+  if (!body.branchId) return jsonError(c, 400, 'الفرع مطلوب', 'MISSING_BRANCH');
 
   try {
     const visit = await createBranchVisit(db, c.env, {
@@ -106,11 +106,11 @@ salesRoutes.post('/customers/:id/purchases', requireRole('team_leader'), async (
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
-  if (!customer) return jsonError(c, 404, 'Customer not found', 'NOT_FOUND');
-  if (!body.branchId) return jsonError(c, 400, 'Branch is required', 'MISSING_BRANCH');
-  if (!Array.isArray(body.items) || body.items.length === 0) return jsonError(c, 400, 'At least one product line is required', 'NO_ITEMS');
+  if (!customer) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
+  if (!body.branchId) return jsonError(c, 400, 'الفرع مطلوب', 'MISSING_BRANCH');
+  if (!Array.isArray(body.items) || body.items.length === 0) return jsonError(c, 400, 'مطلوب صنف واحد على الأقل', 'NO_ITEMS');
   for (const it of body.items) {
-    if (!it.productName || !String(it.productName).trim()) return jsonError(c, 400, 'Each product line needs a product name', 'MISSING_PRODUCT_NAME');
+    if (!it.productName || !String(it.productName).trim()) return jsonError(c, 400, 'كل صنف يحتاج اسم منتج', 'MISSING_PRODUCT_NAME');
   }
 
   try {
@@ -145,10 +145,10 @@ salesRoutes.get('/customers/:id/purchases', async (c) => {
 salesRoutes.get('/purchases/:purchaseId', async (c) => {
   const db = c.env.DB;
   const purchase = await getPurchase(db, Number(c.req.param('purchaseId')));
-  if (!purchase) return jsonError(c, 404, 'Purchase not found', 'NOT_FOUND');
+  if (!purchase) return jsonError(c, 404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
   const user = c.get('user');
   if (user.role === 'employee' && purchase.attributed_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'Not your purchase', 'FORBIDDEN_OWNERSHIP');
+    return jsonError(c, 403, 'هذه ليست عملية الشراء الخاصة بك', 'FORBIDDEN_OWNERSHIP');
   }
   return c.json({ purchase });
 });
@@ -202,7 +202,7 @@ salesRoutes.post('/purchases/:purchaseId/attribution', requireRole('team_leader'
   const db = c.env.DB;
   const purchaseId = Number(c.req.param('purchaseId'));
   const body = await c.req.json().catch(() => ({}));
-  if (body.newEmployeeId === undefined) return jsonError(c, 400, 'newEmployeeId is required', 'MISSING_EMPLOYEE');
+  if (body.newEmployeeId === undefined) return jsonError(c, 400, 'الموظف الجديد المنسوب إليه مطلوب', 'MISSING_EMPLOYEE');
   try {
     const purchase = await changeAttribution(db, c.env, purchaseId, {
       newEmployeeId: body.newEmployeeId === null ? null : Number(body.newEmployeeId),

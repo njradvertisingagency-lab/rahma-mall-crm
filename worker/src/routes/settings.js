@@ -19,7 +19,7 @@ settingsRoutes.patch('/:key', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const key = c.req.param('key');
-  if (!KEYS.includes(key)) return jsonError(c, 400, 'Unknown settings key', 'INVALID_KEY');
+  if (!KEYS.includes(key)) return jsonError(c, 400, 'مفتاح إعدادات غير معروف', 'INVALID_KEY');
   const body = await c.req.json().catch(() => ({}));
   await db
     .prepare(`INSERT INTO settings (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)

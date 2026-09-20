@@ -51,7 +51,7 @@ distributionRoutes.get('/:id', async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   const dist = await db.prepare(`SELECT * FROM distributions WHERE id = ?`).bind(id).first();
-  if (!dist) return jsonError(c, 404, 'Distribution not found', 'NOT_FOUND');
+  if (!dist) return jsonError(c, 404, 'التوزيع غير موجود', 'NOT_FOUND');
   const items = await db
     .prepare(
       `SELECT di.*, e.name AS employee_name FROM distribution_items di JOIN employees e ON e.id = di.employee_id WHERE di.distribution_id = ? ORDER BY e.name`
@@ -70,7 +70,7 @@ distributionRoutes.post('/', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const method = body.method || 'EQUAL';
-  if (!['EQUAL', 'ROUND_ROBIN', 'MANUAL'].includes(method)) return jsonError(c, 400, 'Invalid method', 'INVALID_METHOD');
+  if (!['EQUAL', 'ROUND_ROBIN', 'MANUAL'].includes(method)) return jsonError(c, 400, 'طريقة غير صالحة', 'INVALID_METHOD');
 
   // 1. Resolve candidate customers.
   let customerIds = Array.isArray(body.customerIds) ? body.customerIds.slice() : [];
@@ -78,14 +78,14 @@ distributionRoutes.post('/', async (c) => {
     const rows = await db.prepare(`SELECT id FROM customers WHERE assigned_employee_id IS NULL AND archived = 0 ORDER BY created_at ASC`).all();
     customerIds = rows.results.map((r) => r.id);
   }
-  if (customerIds.length === 0) return jsonError(c, 400, 'No customers selected for distribution', 'NO_CUSTOMERS');
+  if (customerIds.length === 0) return jsonError(c, 400, 'لم يتم اختيار عملاء للتوزيع', 'NO_CUSTOMERS');
 
   // Validate all customer ids exist and are not archived.
   const placeholders = customerIds.map(() => '?').join(',');
   const validRows = await db.prepare(`SELECT id FROM customers WHERE archived = 0 AND id IN (${placeholders})`).bind(...customerIds).all();
   const validSet = new Set(validRows.results.map((r) => r.id));
   customerIds = customerIds.filter((id) => validSet.has(id));
-  if (customerIds.length === 0) return jsonError(c, 400, 'None of the selected customers are valid', 'NO_VALID_CUSTOMERS');
+  if (customerIds.length === 0) return jsonError(c, 400, 'لا يوجد عميل صالح من ضمن المحددين', 'NO_VALID_CUSTOMERS');
 
   let plan; // Map<employeeId, customerId[]>
   let employees;
@@ -94,7 +94,7 @@ distributionRoutes.post('/', async (c) => {
     const manual = body.manualAssignments || {};
     const employeeIds = [...new Set(Object.values(manual).map(Number))];
     employees = await getEligibleEmployees(db, employeeIds, false);
-    if (employees.length === 0) return jsonError(c, 400, 'No valid employees in manual assignment', 'NO_EMPLOYEES');
+    if (employees.length === 0) return jsonError(c, 400, 'لا يوجد موظف صالح في التعيين اليدوي', 'NO_EMPLOYEES');
     plan = new Map(employees.map((e) => [e.id, []]));
     for (const cid of customerIds) {
       const empId = Number(manual[cid]);
@@ -104,13 +104,13 @@ distributionRoutes.post('/', async (c) => {
     const onlyAvailable = body.onlyAvailableEmployees !== false;
     employees = await getEligibleEmployees(db, body.employeeIds, onlyAvailable);
     if (employees.length === 0) {
-      return jsonError(c, 400, 'No eligible (available) employees — select employees manually or mark some as AVAILABLE', 'NO_ELIGIBLE_EMPLOYEES');
+      return jsonError(c, 400, 'لا يوجد موظف متاح — اختر الموظفين يدويًا أو حدد بعضهم كـ"متاح"', 'NO_ELIGIBLE_EMPLOYEES');
     }
     plan = method === 'ROUND_ROBIN' ? planRoundRobin(customerIds, employees) : planEqual(customerIds, employees);
   }
 
   const totalAssigned = [...plan.values()].reduce((s, arr) => s + arr.length, 0);
-  if (totalAssigned === 0) return jsonError(c, 400, 'Distribution plan is empty', 'EMPTY_PLAN');
+  if (totalAssigned === 0) return jsonError(c, 400, 'خطة التوزيع فارغة', 'EMPTY_PLAN');
 
   // 2. Create the distribution record, then apply all assignment mutations
   //    atomically via a single D1 batch so a failure never leaves a partial
@@ -152,8 +152,8 @@ distributionRoutes.post('/', async (c) => {
     await createNotification(db, {
       userId: emp.user_id,
       type: 'ASSIGNMENT',
-      title: 'New customers assigned',
-      message: `${ids.length} new customer${ids.length > 1 ? 's have' : ' has'} been assigned to you.`,
+      title: 'تم تعيين عملاء جدد لك',
+      message: `تم تعيين ${ids.length} عميل جديد لك.`,
       entityType: 'distribution',
       entityId: String(distributionId),
     });
@@ -161,7 +161,7 @@ distributionRoutes.post('/', async (c) => {
     await broadcast(
       c.env,
       'NOTIFICATION_CREATED',
-      { title: 'New customers assigned', message: `${ids.length} new customer${ids.length > 1 ? 's have' : ' has'} been assigned to you.` },
+      { title: 'تم تعيين عملاء جدد لك', message: `تم تعيين ${ids.length} عميل جديد لك.` },
       { scope: 'user', userId: emp.user_id }
     );
   }
@@ -181,12 +181,12 @@ reassignmentRoutes.post('/', async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const customerIds = Array.isArray(body.customerIds) ? body.customerIds : [];
-  if (customerIds.length === 0) return jsonError(c, 400, 'No customers selected', 'NO_SELECTION');
+  if (customerIds.length === 0) return jsonError(c, 400, 'لم يتم اختيار عملاء', 'NO_SELECTION');
 
   if (body.mode === 'SPECIFIC_EMPLOYEE') {
     const employeeId = Number(body.employeeId);
     const emp = await db.prepare(`SELECT * FROM employees WHERE id = ? AND active = 1`).bind(employeeId).first();
-    if (!emp) return jsonError(c, 400, 'Invalid employee', 'INVALID_EMPLOYEE');
+    if (!emp) return jsonError(c, 400, 'موظف غير صالح', 'INVALID_EMPLOYEE');
 
     const ts = nowIso();
     const statements = [];
@@ -200,8 +200,8 @@ reassignmentRoutes.post('/', async (c) => {
     await createNotification(db, {
       userId: emp.user_id,
       type: 'REASSIGNMENT',
-      title: 'Customers reassigned to you',
-      message: `${customerIds.length} customer${customerIds.length > 1 ? 's were' : ' was'} reassigned to you.`,
+      title: 'تم إعادة تعيين عملاء لك',
+      message: `تم إعادة تعيين ${customerIds.length} عميل لك.`,
     });
     await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds, employeeId }, { scope: 'user', userId: emp.user_id });
     await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds, employeeId }, { scope: 'role', role: 'team_leader' });
@@ -211,7 +211,7 @@ reassignmentRoutes.post('/', async (c) => {
   if (body.mode === 'REDISTRIBUTE') {
     const onlyAvailable = body.onlyAvailableEmployees !== false;
     const employees = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results.filter((e) => !onlyAvailable || e.availability === 'AVAILABLE');
-    if (employees.length === 0) return jsonError(c, 400, 'No eligible employees to redistribute to', 'NO_ELIGIBLE_EMPLOYEES');
+    if (employees.length === 0) return jsonError(c, 400, 'لا يوجد موظف مؤهل لإعادة التوزيع إليه', 'NO_ELIGIBLE_EMPLOYEES');
     const plan = planEqual(customerIds, employees);
     const ts = nowIso();
     const statements = [];
@@ -225,7 +225,7 @@ reassignmentRoutes.post('/', async (c) => {
     for (const [employeeId, ids] of plan) {
       if (!ids.length) continue;
       const emp = employees.find((e) => e.id === employeeId);
-      await createNotification(db, { userId: emp.user_id, type: 'REASSIGNMENT', title: 'Customers reassigned to you', message: `${ids.length} customer(s) reassigned to you.` });
+      await createNotification(db, { userId: emp.user_id, type: 'REASSIGNMENT', title: 'تم إعادة تعيين عملاء لك', message: `تم إعادة تعيين ${ids.length} عميل لك.` });
       await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds: ids, employeeId }, { scope: 'user', userId: emp.user_id });
     }
     await logActivity(db, { actor: user, action: 'CUSTOMER_REASSIGNED', entityType: 'customer', entityId: null, metadata: { customerIds, mode: 'REDISTRIBUTE' } });
@@ -233,5 +233,5 @@ reassignmentRoutes.post('/', async (c) => {
     return c.json({ ok: true, reassigned: customerIds.length, perEmployee: Object.fromEntries([...plan].map(([k, v]) => [k, v.length])) });
   }
 
-  return jsonError(c, 400, 'mode must be SPECIFIC_EMPLOYEE or REDISTRIBUTE', 'INVALID_MODE');
+  return jsonError(c, 400, 'يجب أن يكون الوضع تعيين موظف محدد أو إعادة توزيع', 'INVALID_MODE');
 });
