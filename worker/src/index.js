@@ -89,7 +89,7 @@ app.get('/ws', (c) => handleWebSocketUpgrade(c.req.raw, c.env));
 
 app.notFound((c) => {
   if (c.req.path.startsWith('/api/') || c.req.path === '/ws') {
-    return c.json({ error: { message: 'Not found' } }, 404);
+    return c.json({ error: { message: 'غير موجود' } }, 404);
   }
   // Fall through to static assets (the SPA's index.html handles client routes).
   return c.env.ASSETS ? c.env.ASSETS.fetch(c.req.raw) : c.text('Not found', 404);
