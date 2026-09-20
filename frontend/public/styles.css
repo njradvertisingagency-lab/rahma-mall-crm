@@ -149,6 +149,7 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 30;
 }
 .topbar .search { flex: 1; max-width: 420px; }
+.topbar-actions { display: flex; align-items: center; gap: 14px; margin-inline-start: auto; flex-wrap: wrap; justify-content: flex-end; }
 .search input {
   width: 100%; padding: 9px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);
   color: var(--text); font-size: 13.5px; font-family: inherit;
