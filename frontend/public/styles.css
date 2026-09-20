@@ -1,67 +1,69 @@
-/* رحمة مول — نظام إدارة فريق المبيعات. ثيم محايد ونظيف مستوحى من shadcn/ui. */
+/* رحمة مول — نظام إدارة فريق المبيعات. ثيم "Column" — كشف مؤسسي بلون نيلي داكن (Indigo Navy) وأخضر بحري (Seafoam) للبيانات، على خلفية شبه بيضاء باردة. */
 :root {
-  --bg: #fafafa;
+  --bg: #f6f6f8;
   --surface: #ffffff;
-  --surface-2: #f5f5f5;
-  --border: #e5e5e5;
-  --text: #0a0a0a;
-  --text-muted: #737373;
-  --text-faint: #a3a3a3;
-  --brand: #171717;
-  --brand-dark: #000000;
-  --brand-foreground: #fafafa;
-  --brand-soft: rgba(23, 23, 23, 0.08);
-  --brand-2: #2563eb;
-  --brand-2-soft: rgba(37, 99, 235, 0.1);
-  --success: #16a34a;
-  --success-soft: rgba(22, 163, 74, 0.1);
-  --warning: #d97706;
-  --warning-soft: rgba(217, 119, 6, 0.1);
+  --surface-2: #eef0f3;
+  --border: #e3e4e8;
+  --text: #111a4a;
+  --text-muted: #7c7f88;
+  --text-faint: #a9acb6;
+  --brand: #111a4a;
+  --brand-dark: #0a1230;
+  --brand-foreground: #ffffff;
+  --brand-soft: rgba(17, 26, 74, 0.08);
+  --brand-2: #167e6c;
+  --brand-2-soft: rgba(22, 126, 108, 0.1);
+  --success: #167e6c;
+  --success-soft: rgba(22, 126, 108, 0.1);
+  --warning: #ec652b;
+  --warning-soft: rgba(236, 101, 43, 0.1);
   --danger: #e00016;
   --danger-soft: rgba(224, 0, 22, 0.1);
-  --info: #2563eb;
-  --info-soft: rgba(37, 99, 235, 0.1);
-  --gray: #737373;
-  --gray-soft: #f5f5f5;
-  --radius: 14px;
+  --info: #44b48b;
+  --info-soft: rgba(68, 180, 139, 0.1);
+  --gray: #7c7f88;
+  --gray-soft: #eef0f3;
+  --radius: 8px;
   --radius-sm: 8px;
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.07);
-  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.12);
-  --shadow-brand: 0 1px 2px rgba(10, 10, 10, 0.16);
+  --shadow-xs: rgba(18, 22, 30, 0.024) 0px 1px 4px 0px, rgba(18, 22, 30, 0.05) 0px 1px 0px 0px, rgba(18, 22, 30, 0.024) 0px 0px 0px 1px;
+  --shadow-sm: rgba(17, 26, 74, 0.05) 0px 8px 16px 0px, rgba(17, 26, 74, 0.05) 0px 4px 8px 0px;
+  --shadow-md: rgba(0, 0, 0, 0.1) 0px 4px 8px 0px, rgba(0, 0, 0, 0.1) 0px 2px 4px 0px, rgba(0, 0, 0, 0.25) 0px 1px 1px 0px;
+  --shadow-lg: rgba(30, 30, 44, 0.15) 24px 48px 64px 0px, rgba(255, 255, 255, 0.5) 0px 0px 0px 1px inset;
+  --shadow-brand: rgba(17, 26, 74, 0.1) 0px 1px 3px 0px, rgba(17, 26, 74, 0.05) 0px 1px 0px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset, rgba(255, 255, 255, 0.5) 0px 1px 4px 0px inset;
+  --mono-tint: #167e6c;
   --sidebar-w: 258px;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --bg: #0a0a0a;
-  --surface: #171717;
-  --surface-2: #262626;
-  --border: rgba(255, 255, 255, 0.1);
-  --text: #fafafa;
-  --text-muted: #a1a1a1;
-  --text-faint: #737373;
-  --brand: #e5e5e5;
-  --brand-dark: #ffffff;
-  --brand-foreground: #171717;
-  --brand-soft: rgba(229, 229, 229, 0.1);
-  --brand-2: #60a5fa;
-  --brand-2-soft: rgba(96, 165, 250, 0.12);
-  --success: #4ade80;
-  --success-soft: rgba(74, 222, 128, 0.12);
-  --warning: #fbbf24;
-  --warning-soft: rgba(251, 191, 36, 0.12);
+  --bg: #011821;
+  --surface: #0f2436;
+  --surface-2: #163247;
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #f6f6f8;
+  --text-muted: #a9acb6;
+  --text-faint: #7c7f88;
+  --brand: #44b48b;
+  --brand-dark: #167e6c;
+  --brand-foreground: #011821;
+  --brand-soft: rgba(68, 180, 139, 0.14);
+  --brand-2: #88deeb;
+  --brand-2-soft: rgba(136, 222, 235, 0.12);
+  --success: #44b48b;
+  --success-soft: rgba(68, 180, 139, 0.14);
+  --warning: #f2936b;
+  --warning-soft: rgba(242, 147, 107, 0.14);
   --danger: #ff6568;
-  --danger-soft: rgba(255, 101, 104, 0.12);
-  --info: #60a5fa;
-  --info-soft: rgba(96, 165, 250, 0.12);
-  --gray: #a1a1a1;
-  --gray-soft: #262626;
+  --danger-soft: rgba(255, 101, 104, 0.14);
+  --info: #88deeb;
+  --info-soft: rgba(136, 222, 235, 0.12);
+  --gray: #a9acb6;
+  --gray-soft: #163247;
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 12px 30px rgba(0, 0, 0, 0.55);
   --shadow-brand: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --mono-tint: #44b48b;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -98,7 +100,7 @@ button { font-family: inherit; }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn-primary { background: var(--brand); color: var(--brand-foreground); box-shadow: var(--shadow-brand); }
-.btn-primary:hover { background: var(--brand); opacity: 0.85; }
+.btn-primary:hover { background: var(--brand-dark); }
 .btn-outline { background: var(--surface); border-color: var(--border); box-shadow: var(--shadow-xs); }
 .btn-outline:hover { background: var(--surface-2); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
@@ -217,7 +219,7 @@ table.data-table th { text-align: start; padding: 11px 15px; font-size: 12px; fo
 table.data-table td { padding: 11px 15px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 table.data-table tr:last-child td { border-bottom: none; }
 table.data-table tr:hover td { background: var(--surface-2); }
-.mono { font-variant-numeric: tabular-nums; direction: ltr; display: inline-block; }
+.mono { font-variant-numeric: tabular-nums; direction: ltr; display: inline-block; color: var(--mono-tint); font-weight: 600; }
 
 /* ---------- الشارات ---------- */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
@@ -321,12 +323,12 @@ table.data-table tr:hover td { background: var(--surface-2); }
 .timeline-text { font-size: 13.5px; margin-top: 2px; }
 .bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; padding: 10px 4px; }
 .bar-chart .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
-.bar-chart .bar { width: 100%; max-width: 34px; background: var(--brand); border-radius: 4px 4px 0 0; min-height: 3px; transition: 0.2s ease; }
+.bar-chart .bar { width: 100%; max-width: 34px; background: var(--brand-2); border-radius: 4px 4px 0 0; min-height: 3px; transition: 0.2s ease; }
 .bar-chart .bar-col:hover .bar { opacity: 0.8; }
 .bar-chart .bar-label { font-size: 10.5px; color: var(--text-muted); text-align: center; }
 .bar-chart .bar-value { font-size: 11px; font-weight: 700; }
 .progress-bar { height: 8px; border-radius: 6px; background: var(--gray-soft); overflow: hidden; }
-.progress-bar > div { height: 100%; background: var(--brand); }
+.progress-bar > div { height: 100%; background: var(--brand-2); }
 .checklist-item { display: flex; gap: 8px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
 .checklist-item:last-child { border-bottom: none; }
 .sidebar-toggle { display: none; }

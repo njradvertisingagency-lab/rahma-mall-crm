@@ -107,17 +107,17 @@ function presenceBadge(presence) {
 }
 function slaBadge(level) {
   if (!level || level === 'OK') return el('span', { class: 'badge', style: 'background:var(--surface-2);color:var(--muted)' }, ['ضمن الموعد']);
-  if (level === 'WARNING') return el('span', { class: 'badge', style: 'background:#fef3c7;color:#92400e' }, ['⚠ اقترب الموعد']);
-  return el('span', { class: 'badge', style: 'background:#fee2e2;color:#991b1b' }, ['🔴 تم تجاوز الموعد']);
+  if (level === 'WARNING') return el('span', { class: 'badge', style: 'background:#fbe4da;color:#b34d1f' }, ['⚠ اقترب الموعد']);
+  return el('span', { class: 'badge', style: 'background:#fee2e2;color:var(--danger)' }, ['🔴 تم تجاوز الموعد']);
 }
 function dealStatusBadge(status) {
   const map = {
     NO_PURCHASE: ['—', 'background:var(--surface-2);color:var(--muted)'],
-    BRANCH_VISIT: ['🏪 زيارة فرع', 'background:#e0e7ff;color:#3730a3'],
-    COMPLETED: ['✓ تمت الصفقة', 'background:#dcfce7;color:#166534'],
+    BRANCH_VISIT: ['🏪 زيارة فرع', 'background:var(--brand-soft);color:var(--brand)'],
+    COMPLETED: ['✓ تمت الصفقة', 'background:#dff4ec;color:var(--success)'],
     CANCELLED: ['✕ ملغاة', 'background:var(--surface-2);color:var(--muted)'],
-    REFUNDED: ['↩ مسترجعة', 'background:#fee2e2;color:#991b1b'],
-    PARTIALLY_REFUNDED: ['↩ استرجاع جزئي', 'background:#fef3c7;color:#92400e'],
+    REFUNDED: ['↩ مسترجعة', 'background:#fee2e2;color:var(--danger)'],
+    PARTIALLY_REFUNDED: ['↩ استرجاع جزئي', 'background:#fbe4da;color:#b34d1f'],
   };
   const [label, style] = map[status] || [status, ''];
   return el('span', { class: 'badge', style }, [label]);

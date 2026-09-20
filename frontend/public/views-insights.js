@@ -8,7 +8,7 @@
     return el('div', { class: 'bar-chart' }, data.map((d) =>
       el('div', { class: 'bar-col' }, [
         el('div', { class: 'bar-value' }, [String(d.value)]),
-        el('div', { class: 'bar', style: `height:${Math.max(4, (d.value / max) * 120)}px;background:${opts.color || 'var(--brand)'}` }),
+        el('div', { class: 'bar', style: `height:${Math.max(4, (d.value / max) * 120)}px;background:${opts.color || 'var(--brand-2)'}` }),
         el('div', { class: 'bar-label' }, [String(d.label).slice(0, 10)]),
       ])
     ));

@@ -74,8 +74,8 @@
     function renderPresence(p) {
       presenceRow.innerHTML = '';
       presenceRow.appendChild(kpi(p.total, 'إجمالي الموظفين'));
-      presenceRow.appendChild(kpi(p.online, 'نشط الآن', 'var(--success, #16a34a)'));
-      presenceRow.appendChild(kpi(p.idle, 'غير نشط', '#b45309'));
+      presenceRow.appendChild(kpi(p.online, 'نشط الآن', 'var(--success, #167e6c)'));
+      presenceRow.appendChild(kpi(p.idle, 'غير نشط', '#f2936b'));
       presenceRow.appendChild(kpi(p.offline, 'غير متصل', 'var(--muted)'));
     }
 
@@ -85,7 +85,7 @@
       salesRow.appendChild(kpi(s.branchVisitsToday, 'زيارات الفرع'));
       salesRow.appendChild(kpi(s.grossRevenueToday.toLocaleString(), 'إجمالي الإيراد'));
       salesRow.appendChild(kpi(s.refundsToday.toLocaleString(), 'المرتجعات'));
-      salesRow.appendChild(kpi(s.netRevenueToday.toLocaleString(), 'صافي الإيراد', 'var(--success, #16a34a)'));
+      salesRow.appendChild(kpi(s.netRevenueToday.toLocaleString(), 'صافي الإيراد', 'var(--success, #167e6c)'));
       salesRow.appendChild(kpi(s.averageOrderValueToday.toLocaleString(), 'متوسط قيمة الطلب'));
       salesRow.appendChild(kpi(s.conversionRate + '%', 'تحويل الزيارة ← صفقة'));
     }

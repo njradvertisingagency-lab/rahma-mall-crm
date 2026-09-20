@@ -238,7 +238,7 @@
         p.invoice_number ? ` — فاتورة ${p.invoice_number}` : '',
       ]));
       if (p.refunded_amount > 0) {
-        card.appendChild(el('div', { class: 'faint', style: 'font-size:12px;color:#991b1b' }, [`المسترجع: ${p.refunded_amount.toLocaleString()} — الصافي: ${netAmount.toLocaleString()}`]));
+        card.appendChild(el('div', { class: 'faint', style: 'font-size:12px;color:var(--danger)' }, [`المسترجع: ${p.refunded_amount.toLocaleString()} — الصافي: ${netAmount.toLocaleString()}`]));
       }
       const itemsList = el('ul', { style: 'margin:6px 0 0;padding-inline-start:18px;font-size:12px' }, (p.items || []).map((it) => el('li', {}, [`${it.product_name} × ${it.quantity} @ ${it.unit_price} = ${it.subtotal}`])));
       card.appendChild(itemsList);
