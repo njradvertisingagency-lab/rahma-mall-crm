@@ -4,6 +4,54 @@
 
   const AVAILABILITY_LABELS = { AVAILABLE: 'متاح', BUSY: 'مشغول', ON_BREAK: 'في استراحة', UNAVAILABLE: 'غير متاح' };
 
+  function modal(title, bodyNode, footerNodes) {
+    const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } });
+    const m = el('div', { class: 'modal' }, [
+      el('div', { class: 'modal-header' }, [el('div', { class: 'modal-title' }, [title]), el('button', { class: 'modal-close', onclick: () => close() }, ['✕'])]),
+      el('div', { class: 'modal-body' }, [bodyNode]),
+      el('div', { class: 'modal-footer' }, footerNodes || []),
+    ]);
+    backdrop.appendChild(m);
+    document.body.appendChild(backdrop);
+    function close() { backdrop.remove(); }
+    return { close, el: backdrop };
+  }
+
+  function setDailyGoalModal(e) {
+    const todayInput = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });
+    const targetCustomers = el('input', { type: 'number', min: '0', value: '0' });
+    const targetSeen = el('input', { type: 'number', min: '0', value: '0' });
+    const targetContacted = el('input', { type: 'number', min: '0', value: '0' });
+    const targetFollowups = el('input', { type: 'number', min: '0', value: '0' });
+    const body = el('div', {}, [
+      el('div', { class: 'field' }, [el('label', {}, ['التاريخ']), todayInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['عدد العملاء المستهدف التعامل معهم']), targetCustomers]),
+      el('div', { class: 'field' }, [el('label', {}, ['عدد العملاء المستهدف رؤيتهم']), targetSeen]),
+      el('div', { class: 'field' }, [el('label', {}, ['عدد العملاء المستهدف التواصل معهم']), targetContacted]),
+      el('div', { class: 'field' }, [el('label', {}, ['عدد المتابعات المستهدف إنجازها']), targetFollowups]),
+    ]);
+    const dlg = modal(`تحديد هدف يومي — ${e.name}`, body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn btn-primary', onclick: async () => {
+        try {
+          await api('/employees/' + e.id + '/daily-goal', {
+            method: 'POST',
+            body: {
+              goalDate: todayInput.value,
+              targetCustomers: Number(targetCustomers.value) || 0,
+              targetSeen: Number(targetSeen.value) || 0,
+              targetContacted: Number(targetContacted.value) || 0,
+              targetFollowups: Number(targetFollowups.value) || 0,
+            },
+          });
+          toast('تم تحديد الهدف اليومي', 'success');
+          dlg.close();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['حفظ الهدف'])
+    );
+  }
+
   App.route('/employees', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['الموظفين'])]));
@@ -31,7 +79,8 @@
           el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
             ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'].map((a) => el('option', { value: a, selected: a === e.availability || undefined }, [AVAILABILITY_LABELS[a]]))),
         ]));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => setDailyGoalModal(e) }, ['🎯 تحديد هدف يومي']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
         grid.appendChild(card);
       });
     }

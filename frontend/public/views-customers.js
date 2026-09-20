@@ -49,6 +49,7 @@
     const state = {
       page: Number(q.page) || 1, pageSize: 25, status: q.status || '', priority: q.priority || '', employeeId: q.employeeId || '',
       q: q.q || '', whatsappStatus: q.whatsappStatus || '', segment: q.segment || '', seen: q.seen || '', followup: q.followup || '',
+      archived: q.archived === 'true',
       selected: new Set(),
     };
 
@@ -84,9 +85,12 @@
     filtersBar.appendChild(seenSel);
     filtersBar.appendChild(followupSel);
     let empSel = null;
+    let archivedCheckbox = null;
     if (user.role === 'team_leader') {
       empSel = el('select', {}, [el('option', { value: '' }, ['كل الموظفين']), el('option', { value: 'unassigned', selected: state.employeeId === 'unassigned' || undefined }, ['غير موزّع']), ...employees.map((e) => el('option', { value: e.id, selected: String(e.id) === state.employeeId || undefined }, [e.name]))]);
       filtersBar.appendChild(empSel);
+      archivedCheckbox = el('input', { type: 'checkbox', checked: state.archived || undefined });
+      filtersBar.appendChild(el('label', { class: 'checkbox-row' }, [archivedCheckbox, '🗄 إظهار المؤرشفين فقط']));
     }
     const applyBtn = el('button', { class: 'btn btn-sm btn-outline', onclick: applyFilters }, ['تطبيق']);
     const clearBtn = el('button', { class: 'btn btn-sm', onclick: () => App.navigate('#/customers') }, ['مسح الفلاتر']);
@@ -162,6 +166,7 @@
       if (seenSel.value) params.set('seen', seenSel.value);
       if (followupSel.value) params.set('followup', followupSel.value);
       if (empSel && empSel.value) params.set('employeeId', empSel.value);
+      if (archivedCheckbox && archivedCheckbox.checked) params.set('archived', 'true');
       App.navigate('#/customers' + (params.toString() ? '?' + params.toString() : ''));
     }
     searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyFilters(); });
@@ -178,6 +183,7 @@
       if (state.followup) params.set('followup', state.followup);
       if (state.employeeId) params.set('employeeId', state.employeeId);
       if (state.q) params.set('q', state.q);
+      if (state.archived) params.set('archived', 'true');
       const data = await api('/customers?' + params.toString());
       renderTable(data.customers, data.pagination);
     }
@@ -186,7 +192,7 @@
       tableWrap.innerHTML = '';
       cardsWrap.innerHTML = '';
       if (customers.length === 0) {
-        tableWrap.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['📭']), 'لا يوجد عملاء مطابقون للفلاتر.']));
+        tableWrap.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['📭']), state.archived ? 'لا يوجد عملاء مؤرشفون حاليًا.' : 'لا يوجد عملاء مطابقون للفلاتر.']));
         pagination.innerHTML = '';
         return;
       }
@@ -228,8 +234,21 @@
       cells.push(badges.whatsapp(c.whatsappContactStatus));
       cells.push(c.nextFollowUpAt ? fmt.date(c.nextFollowUpAt) : '—');
       cells.push(fmt.ago(c.updatedAt));
-      cells.push(el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح']));
+      const rowActions = [el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح'])];
+      if (state.archived && user.role === 'team_leader') {
+        rowActions.push(el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة']));
+      }
+      cells.push(el('div', { class: 'flex gap-8' }, rowActions));
       return el('tr', {}, cells.map((c2) => el('td', {}, [c2])));
+    }
+
+    async function restoreCustomer(c) {
+      if (!confirm(`استعادة العميل ${c.id} من الأرشيف؟`)) return;
+      try {
+        await api('/customers/' + c.id + '/restore', { method: 'POST' });
+        toast('تم استعادة العميل', 'success');
+        load();
+      } catch (e) { toast(e.message, 'error'); }
     }
 
     function renderCard(c) {
@@ -240,7 +259,9 @@
         el('div', { class: 'row' }, [el('span', { class: 'muted' }, ['واتساب']), badges.whatsapp(c.whatsappContactStatus)]),
         el('div', { class: 'actions' }, [
           el('a', { class: 'btn btn-sm btn-outline', href: 'tel:' + c.normalizedPhone }, ['📞 اتصال']),
-          el('button', { class: 'btn btn-sm btn-primary', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح']),
+          state.archived && user.role === 'team_leader'
+            ? el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة'])
+            : el('button', { class: 'btn btn-sm btn-primary', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح']),
         ]),
       ]);
     }

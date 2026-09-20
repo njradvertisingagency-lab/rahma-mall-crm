@@ -48,6 +48,58 @@
     } }, ['حفظ']));
     container.appendChild(distCard);
 
+    // --- إعدادات المبيعات (نسبة الضريبة وطرق الدفع المتاحة) ---
+    const PAYMENT_METHOD_LABELS = { CASH: 'نقدًا', CARD: 'بطاقة', INSTALLMENT: 'تقسيط', OTHER: 'أخرى' };
+    const ALL_PAYMENT_METHODS = ['CASH', 'CARD', 'INSTALLMENT', 'OTHER'];
+    const ss = settings.sales_settings || { taxRatePercent: 0, paymentMethods: ['CASH', 'CARD', 'INSTALLMENT', 'OTHER'] };
+    const salesCard = el('div', { class: 'card card-pad mb-16' });
+    salesCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['إعدادات المبيعات']));
+    const taxInput = el('input', { type: 'number', step: '0.01', min: '0', value: ss.taxRatePercent ?? 0 });
+    salesCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['نسبة الضريبة % (تُطبّق تلقائيًا عند تسجيل صفقة)']), taxInput]));
+    const paymentChecks = {};
+    salesCard.appendChild(el('div', { style: 'font-weight:700;margin-bottom:8px' }, ['طرق الدفع المتاحة عند تسجيل صفقة']));
+    const paymentList = el('div', { class: 'flex gap-8 mb-12', style: 'flex-wrap:wrap' },
+      ALL_PAYMENT_METHODS.map((m) => {
+        const cb = el('input', { type: 'checkbox', checked: (ss.paymentMethods || []).includes(m) || undefined });
+        paymentChecks[m] = cb;
+        return el('label', { class: 'checkbox-row' }, [cb, PAYMENT_METHOD_LABELS[m]]);
+      }));
+    salesCard.appendChild(paymentList);
+    salesCard.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
+      const selected = ALL_PAYMENT_METHODS.filter((m) => paymentChecks[m].checked);
+      if (selected.length === 0) { toast('اختر طريقة دفع واحدة على الأقل', 'error'); return; }
+      await api('/settings/sales_settings', { method: 'PATCH', body: { taxRatePercent: Number(taxInput.value) || 0, paymentMethods: selected } });
+      toast('تم حفظ إعدادات المبيعات', 'success');
+    } }, ['حفظ إعدادات المبيعات']));
+    container.appendChild(salesCard);
+
+    // --- إدارة الفروع ---
+    const branchesCard = el('div', { class: 'card card-pad mb-16' });
+    branchesCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['إدارة الفروع']));
+    const branchesList = el('div', { class: 'mb-12' });
+    branchesCard.appendChild(branchesList);
+    async function loadBranches() {
+      const { branches } = await api('/sales/branches');
+      branchesList.innerHTML = '';
+      if (branches.length === 0) { branchesList.appendChild(el('div', { class: 'muted' }, ['لا توجد فروع مضافة بعد.'])); return; }
+      branches.forEach((b) => branchesList.appendChild(el('div', { class: 'flex-between mb-8', style: 'font-size:13.5px' }, [el('span', {}, [b.name])])));
+    }
+    await loadBranches();
+    const newBranchInput = el('input', { placeholder: 'اسم الفرع الجديد', style: 'max-width:220px' });
+    branchesCard.appendChild(el('div', { class: 'flex gap-8' }, [
+      newBranchInput,
+      el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
+        if (!newBranchInput.value.trim()) return;
+        try {
+          await api('/sales/branches', { method: 'POST', body: { name: newBranchInput.value.trim() } });
+          toast('تم إضافة الفرع', 'success');
+          newBranchInput.value = '';
+          await loadBranches();
+        } catch (e) { toast(e.message, 'error'); }
+      } }, ['+ إضافة فرع']),
+    ]));
+    container.appendChild(branchesCard);
+
     // --- WhatsApp template ---
     const wa = settings.whatsapp_template || { template: '', companyName: 'رحمة مول' };
     const waCard = el('div', { class: 'card card-pad', dir: 'rtl', style: 'text-align:right' });
