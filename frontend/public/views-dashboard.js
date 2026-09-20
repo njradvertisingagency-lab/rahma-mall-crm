@@ -81,7 +81,11 @@
       container.appendChild(insightsBox);
       try {
         const { insights } = await api('/ai/insights');
-        insightsBox.appendChild(el('div', {}, insights.map((i) => el('div', { class: 'checklist-item' }, ['💡 ' + i]))));
+        if (insights.length === 0) {
+          insightsBox.textContent = 'لا توجد ملاحظات تشغيلية حاليًا.';
+        } else {
+          insightsBox.appendChild(el('div', {}, insights.map((i) => el('div', { class: 'checklist-item' }, ['💡 ' + (typeof i === 'string' ? i : i.text)]))));
+        }
       } catch {
         insightsBox.textContent = 'تعذّر عرض الملاحظات حاليًا.';
       }
