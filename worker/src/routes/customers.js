@@ -429,7 +429,7 @@ customerRoutes.patch('/:id/status', async (c) => {
     if (body.closedReason === 'Other' && !body.closedReasonText) {
       return jsonError(c, 400, 'النص المخصص مطلوب عند اختيار سبب "أخرى"', 'CLOSED_REASON_TEXT_REQUIRED');
     }
-    closedReason = body.closedReason === 'Other' ? `Other: ${body.closedReasonText}` : body.closedReason;
+    closedReason = body.closedReason === 'Other' ? `أخرى: ${body.closedReasonText}` : body.closedReason;
     closedAt = nowIso();
     closedBy = user.id;
   }
