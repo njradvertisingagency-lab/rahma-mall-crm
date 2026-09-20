@@ -3,6 +3,8 @@
   const { el, api, toast, badges, fmt } = App;
   const STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
   const STATUS_LABELS = App.labels.status;
+  const SLA_LEVEL_LABELS = { OK: 'ضمن الموعد', WARNING: 'اقترب الموعد', BREACHED: 'تم تجاوز الموعد' };
+  const PAYMENT_METHOD_LABELS = { CASH: 'نقدًا', CARD: 'بطاقة', INSTALLMENT: 'تقسيط', OTHER: 'أخرى' };
   const CLOSED_REASONS = [
     ['Purchased', 'تم الشراء'],
     ['Not Interested', 'غير مهتم'],
@@ -106,9 +108,9 @@
       const slaBox = el('div', {}, [el('div', { class: 'faint' }, ['حالة الموعد']), badges.sla(c.sla?.worst)]);
       if (c.sla) {
         const details = [];
-        if (c.sla.seen) details.push(`المشاهدة: ${c.sla.seen.level} (${c.sla.seen.elapsedMinutes}/${c.sla.seen.thresholdMinutes} د)`);
-        if (c.sla.contact) details.push(`التواصل: ${c.sla.contact.level} (${c.sla.contact.elapsedMinutes}/${c.sla.contact.thresholdMinutes} د)`);
-        if (c.sla.interestedFollowup) details.push(`المتابعة: ${c.sla.interestedFollowup.level} (${c.sla.interestedFollowup.elapsedMinutes}/${c.sla.interestedFollowup.thresholdMinutes} د)`);
+        if (c.sla.seen) details.push(`المشاهدة: ${SLA_LEVEL_LABELS[c.sla.seen.level] || c.sla.seen.level} (${c.sla.seen.elapsedMinutes}/${c.sla.seen.thresholdMinutes} د)`);
+        if (c.sla.contact) details.push(`التواصل: ${SLA_LEVEL_LABELS[c.sla.contact.level] || c.sla.contact.level} (${c.sla.contact.elapsedMinutes}/${c.sla.contact.thresholdMinutes} د)`);
+        if (c.sla.interestedFollowup) details.push(`المتابعة: ${SLA_LEVEL_LABELS[c.sla.interestedFollowup.level] || c.sla.interestedFollowup.level} (${c.sla.interestedFollowup.elapsedMinutes}/${c.sla.interestedFollowup.thresholdMinutes} د)`);
         if (details.length) slaBox.appendChild(el('div', { class: 'faint', style: 'font-size:11px;margin-top:4px' }, details.map((d) => el('div', {}, [d]))));
       }
       card.appendChild(slaBox);
@@ -231,7 +233,7 @@
         badges.dealStatus(p.status),
       ]));
       card.appendChild(el('div', { class: 'faint', style: 'font-size:12px' }, [
-        `${fmt.dateTime(p.purchase_at)} — ${p.branch_name} — ${p.payment_method}`,
+        `${fmt.dateTime(p.purchase_at)} — ${p.branch_name} — ${PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method}`,
         p.employee_name ? ` — منسوبة إلى ${p.employee_name}` : ' — غير منسوبة',
         p.invoice_number ? ` — فاتورة ${p.invoice_number}` : '',
       ]));
@@ -292,7 +294,7 @@
       const dateInput = el('input', { type: 'datetime-local', value: new Date().toISOString().slice(0, 16) });
       const invoiceInput = el('input', { placeholder: 'رقم الفاتورة (اختياري)' });
       const orderInput = el('input', { placeholder: 'رقم الطلب (اختياري)' });
-      const paymentSel = el('select', {}, settings.paymentMethods.map((m) => el('option', { value: m }, [m])));
+      const paymentSel = el('select', {}, settings.paymentMethods.map((m) => el('option', { value: m }, [PAYMENT_METHOD_LABELS[m] || m])));
       const attribSel = el('select', {}, [
         el('option', { value: '', selected: !data.customer.assignedEmployeeId || undefined }, ['— غير منسوبة —']),
         ...employees.map((e) => el('option', { value: e.id, selected: e.id === data.customer.assignedEmployeeId || undefined }, [e.name])),
