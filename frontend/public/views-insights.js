@@ -28,11 +28,12 @@
     async function load() {
       const data = await api('/analytics/charts?range=' + rangeSel.value);
       grid.innerHTML = '';
+      const STATUS_LABELS = App.labels.status;
       grid.appendChild(chartCard('العملاء حسب الموظف', data.customersByEmployee));
-      grid.appendChild(chartCard('توزيع الحالات', data.statusDistribution));
+      grid.appendChild(chartCard('توزيع الحالات', data.statusDistribution.map((r) => ({ ...r, label: STATUS_LABELS[r.label] || r.label }))));
       grid.appendChild(chartCard('النشاط اليومي', data.dailyActivity));
-      grid.appendChild(chartCard('حسب المصدر', data.bySource));
-      grid.appendChild(chartCard('حسب الحملة', data.byCampaign));
+      grid.appendChild(chartCard('حسب المصدر', data.bySource.map((r) => ({ ...r, label: r.label === 'Unknown' ? 'غير معروف' : r.label }))));
+      grid.appendChild(chartCard('حسب الحملة', data.byCampaign.map((r) => ({ ...r, label: r.label === 'Unknown' ? 'غير معروف' : r.label }))));
     }
     function chartCard(title, rows) {
       const card = el('div', { class: 'card card-pad', style: 'min-width:0' });
