@@ -36,7 +36,7 @@ function round2(n) {
 
 export async function createBranchVisit(db, env, { customerId, employeeId, branchId, notes, createdBy }) {
   const branch = await db.prepare(`SELECT id, name FROM branches WHERE id = ? AND active = 1`).bind(branchId).first();
-  if (!branch) throw httpError(400, 'Invalid branch', 'INVALID_BRANCH');
+  if (!branch) throw httpError(400, 'الفرع غير صالح', 'INVALID_BRANCH');
   const res = await db
     .prepare(`INSERT INTO customer_branch_visits (customer_id, employee_id, branch_id, notes, created_by) VALUES (?, ?, ?, ?, ?) RETURNING id, visit_at`)
     .bind(customerId, employeeId ?? null, branchId, notes || null, createdBy)
@@ -51,16 +51,16 @@ export async function createManualPurchase(db, env, input) {
   const { customerId, branchId, purchaseAt, invoiceNumber, orderId, items, paymentMethod, notes, attributedEmployeeId, createdBy } = input;
 
   const branch = await db.prepare(`SELECT id, name FROM branches WHERE id = ? AND active = 1`).bind(branchId).first();
-  if (!branch) throw httpError(400, 'Invalid branch', 'INVALID_BRANCH');
-  if (!Array.isArray(items) || items.length === 0) throw httpError(400, 'At least one product line is required', 'NO_ITEMS');
+  if (!branch) throw httpError(400, 'الفرع غير صالح', 'INVALID_BRANCH');
+  if (!Array.isArray(items) || items.length === 0) throw httpError(400, 'مطلوب صنف واحد على الأقل', 'NO_ITEMS');
 
   if (invoiceNumber) {
     const dupe = await db.prepare(`SELECT id FROM purchase_transactions WHERE invoice_number = ?`).bind(invoiceNumber).first();
-    if (dupe) throw httpError(409, 'This transaction already exists (duplicate invoice number).', 'DUPLICATE_INVOICE');
+    if (dupe) throw httpError(409, 'هذه العملية مسجّلة بالفعل (رقم فاتورة مكرر).', 'DUPLICATE_INVOICE');
   }
   if (orderId) {
     const dupe = await db.prepare(`SELECT id FROM purchase_transactions WHERE order_id = ?`).bind(orderId).first();
-    if (dupe) throw httpError(409, 'This transaction already exists (duplicate order ID).', 'DUPLICATE_ORDER_ID');
+    if (dupe) throw httpError(409, 'هذه العملية مسجّلة بالفعل (رقم طلب مكرر).', 'DUPLICATE_ORDER_ID');
   }
 
   const settings = await getSalesSettings(db);
@@ -119,8 +119,8 @@ export async function createManualPurchase(db, env, input) {
     await createNotification(db, {
       userId: tl.id,
       type: 'DEAL_DONE',
-      title: '🎉 Deal Done',
-      message: `A new purchase of ${totalAmount} was recorded at ${branch.name}.`,
+      title: '🎉 تمت الصفقة',
+      message: `تم تسجيل عملية شراء جديدة بقيمة ${totalAmount} في ${branch.name}.`,
       entityType: 'customer',
       entityId: customerId,
     });
@@ -147,7 +147,7 @@ export async function getPurchase(db, purchaseId) {
 /** Audited field edit — never a silent overwrite (section 42). */
 export async function updatePurchase(db, env, purchaseId, changes, { changedBy, reason }) {
   const existing = await db.prepare(`SELECT * FROM purchase_transactions WHERE id = ?`).bind(purchaseId).first();
-  if (!existing) throw httpError(404, 'Purchase not found', 'NOT_FOUND');
+  if (!existing) throw httpError(404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
 
   const fields = [];
   const binds = [];
@@ -183,8 +183,8 @@ export async function updatePurchase(db, env, purchaseId, changes, { changedBy, 
 
 export async function cancelPurchase(db, env, purchaseId, { cancelledBy, reason }) {
   const existing = await db.prepare(`SELECT * FROM purchase_transactions WHERE id = ?`).bind(purchaseId).first();
-  if (!existing) throw httpError(404, 'Purchase not found', 'NOT_FOUND');
-  if (existing.status === 'CANCELLED') throw httpError(400, 'Already cancelled', 'ALREADY_CANCELLED');
+  if (!existing) throw httpError(404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
+  if (existing.status === 'CANCELLED') throw httpError(400, 'تم إبطالها بالفعل', 'ALREADY_CANCELLED');
 
   await db
     .prepare(`UPDATE purchase_transactions SET status = 'CANCELLED', cancelled_at = ?, cancelled_by = ?, cancel_reason = ?, updated_at = ? WHERE id = ?`)
@@ -203,13 +203,13 @@ export async function cancelPurchase(db, env, purchaseId, { cancelledBy, reason 
 /** Full or partial refund. Status is recomputed automatically from the refunded total vs the purchase amount. */
 export async function createRefund(db, env, purchaseId, { refundAmount, refundReason, refundNotes, refundedBy }) {
   const existing = await db.prepare(`SELECT * FROM purchase_transactions WHERE id = ?`).bind(purchaseId).first();
-  if (!existing) throw httpError(404, 'Purchase not found', 'NOT_FOUND');
-  if (existing.status === 'CANCELLED') throw httpError(400, 'Cannot refund a cancelled purchase', 'PURCHASE_CANCELLED');
+  if (!existing) throw httpError(404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
+  if (existing.status === 'CANCELLED') throw httpError(400, 'لا يمكن استرجاع عملية شراء تم إبطالها', 'PURCHASE_CANCELLED');
   const amount = Number(refundAmount);
-  if (!(amount > 0)) throw httpError(400, 'Refund amount must be greater than zero', 'INVALID_AMOUNT');
+  if (!(amount > 0)) throw httpError(400, 'يجب أن يكون مبلغ الاسترجاع أكبر من صفر', 'INVALID_AMOUNT');
   const alreadyRefunded = existing.refunded_amount || 0;
   if (alreadyRefunded + amount > existing.total_amount + 0.01) {
-    throw httpError(400, 'Refund amount exceeds the remaining refundable balance', 'REFUND_EXCEEDS_TOTAL');
+    throw httpError(400, 'مبلغ الاسترجاع يتجاوز الرصيد القابل للاسترجاع', 'REFUND_EXCEEDS_TOTAL');
   }
 
   await db
@@ -271,7 +271,7 @@ export async function computeDealStatus(db, customerId) {
 /** Explicit only — never silently overwritten (sections 26/27/64). */
 export async function changeAttribution(db, env, purchaseId, { newEmployeeId, changedBy, reason }) {
   const existing = await db.prepare(`SELECT * FROM purchase_transactions WHERE id = ?`).bind(purchaseId).first();
-  if (!existing) throw httpError(404, 'Purchase not found', 'NOT_FOUND');
+  if (!existing) throw httpError(404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
   if (existing.attributed_employee_id === newEmployeeId) return existing;
 
   await db.prepare(`UPDATE purchase_transactions SET attributed_employee_id = ?, updated_at = ? WHERE id = ?`).bind(newEmployeeId, nowIso(), purchaseId).run();
@@ -286,10 +286,10 @@ export async function changeAttribution(db, env, purchaseId, { newEmployeeId, ch
 
 // --- Future POS integration stubs (section 61/62) — never pretend to work. ---
 export async function syncPOSPurchase() {
-  throw httpError(501, 'POS integration is not configured for this deployment.', 'INTEGRATION_REQUIRED');
+  throw httpError(501, 'ربط نظام نقاط البيع غير مُفعَّل في هذا النشر.', 'INTEGRATION_REQUIRED');
 }
 export async function syncFromPOS() {
-  throw httpError(501, 'Automatic POS matching is not configured for this deployment.', 'INTEGRATION_REQUIRED');
+  throw httpError(501, 'المطابقة التلقائية مع نظام نقاط البيع غير مُفعَّلة في هذا النشر.', 'INTEGRATION_REQUIRED');
 }
 
 function httpError(status, message, code) {

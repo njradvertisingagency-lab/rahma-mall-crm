@@ -34,11 +34,11 @@ export async function getEmployeeWorkQueue(db, employeeId, limit = 20) {
 
   return rows.results.map((r) => {
     const reasons = [];
-    if (r.urgent_flag) reasons.push('أولوية عاجلة (Urgent priority)');
-    if (r.followup_overdue) reasons.push('متابعة متأخرة (Follow-up overdue)');
-    if (r.interested_flag) reasons.push('عميل مهتم (Interested)');
+    if (r.urgent_flag) reasons.push('أولوية عاجلة');
+    if (r.followup_overdue) reasons.push('متابعة متأخرة');
+    if (r.interested_flag) reasons.push('عميل مهتم');
     if (r.consecutive_unanswered >= 3) reasons.push(`${r.consecutive_unanswered} محاولات اتصال بدون رد`);
-    if (reasons.length === 0) reasons.push('ترتيب حسب آخر تحديث (Least recently updated)');
+    if (reasons.length === 0) reasons.push('مرتّب حسب الأقدم تحديثًا');
     return { ...r, reasons };
   });
 }
@@ -70,7 +70,7 @@ export async function getFollowupSuggestions(db, employeeId = null) {
     customerName: r.name,
     employeeId: r.assigned_employee_id,
     consecutiveUnanswered: r.consecutive_unanswered,
-    suggestion: `${r.consecutive_unanswered} محاولات اتصال بدون رد — يُنصح بجدولة متابعة (Suggest scheduling a follow-up)`,
+    suggestion: `${r.consecutive_unanswered} محاولات اتصال بدون رد — يُنصح بجدولة متابعة`,
   }));
 }
 
@@ -108,17 +108,17 @@ export async function getReassignmentSuggestions(db) {
     if (openCustomers.n === 0) continue;
 
     const reasons = [];
-    if (!p.online) reasons.push('غير متصل (Offline)');
-    else if (e.availability === 'ON_BREAK') reasons.push('في استراحة (On break)');
-    else if (e.availability === 'UNAVAILABLE') reasons.push('غير متاح (Unavailable)');
-    if (hasBreaches) reasons.push(`${breachByEmployee[e.id]} خروقات SLA غير محلولة (Unresolved SLA breaches)`);
+    if (!p.online) reasons.push('غير متصل');
+    else if (e.availability === 'ON_BREAK') reasons.push('في استراحة');
+    else if (e.availability === 'UNAVAILABLE') reasons.push('غير متاح');
+    if (hasBreaches) reasons.push(`${breachByEmployee[e.id]} تجاوز غير محلول لموعد الخدمة`);
 
     suggestions.push({
       employeeId: e.id,
       employeeName: e.name,
       openAssignedCustomers: openCustomers.n,
       reasons,
-      note: 'اقتراح فقط — يتطلب موافقة قائد الفريق يدويًا (Suggestion only — requires manual Team Leader approval)',
+      note: 'اقتراح فقط — يتطلب موافقة قائد الفريق يدويًا.',
     });
   }
   return suggestions;

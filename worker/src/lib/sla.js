@@ -126,9 +126,9 @@ export async function computeCustomerSla(db, customerId, rules) {
 async function notifyForEvent(db, env, { rule, level, customerId, employeeId }) {
   const customer = await db.prepare(`SELECT id, name, normalized_phone FROM customers WHERE id = ?`).bind(customerId).first();
   const label = customer?.name || customer?.normalized_phone || customerId;
-  const ruleLabel = { SEEN_SLA: 'be seen', CONTACT_SLA: 'be contacted', INTERESTED_FOLLOWUP_SLA: 'get a follow-up' }[rule] || rule;
-  const title = level === 'BREACHED' ? `🔴 SLA breached — ${customerId}` : `🟠 SLA warning — ${customerId}`;
-  const message = `${label} needed to ${ruleLabel} within SLA.`;
+  const ruleLabel = { SEEN_SLA: 'أن تتم رؤيته', CONTACT_SLA: 'أن يتم التواصل معه', INTERESTED_FOLLOWUP_SLA: 'أن يحصل على متابعة' }[rule] || rule;
+  const title = level === 'BREACHED' ? `🔴 تجاوز لموعد الخدمة — ${customerId}` : `🟠 تحذير موعد خدمة — ${customerId}`;
+  const message = `${label} كان يحتاج ${ruleLabel} خلال الموعد المحدد.`;
 
   const employeeUser = employeeId ? await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(employeeId).first() : null;
   if (employeeUser) {

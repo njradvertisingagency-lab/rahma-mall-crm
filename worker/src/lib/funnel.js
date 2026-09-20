@@ -51,14 +51,14 @@ export async function computeFunnel(db, { from, to } = {}) {
   ]);
 
   const stages = [
-    { key: 'leads', label: 'Leads', count: leads.n },
-    { key: 'assigned', label: 'Assigned', count: assigned.n },
-    { key: 'seen', label: 'Seen', count: seen.n },
-    { key: 'contacted', label: 'Contacted', count: contacted.n },
-    { key: 'interested', label: 'Interested', count: interested.n },
-    { key: 'followup', label: 'Follow-up', count: followup.n },
-    { key: 'branchVisit', label: 'Branch Visit', count: branchVisit.n },
-    { key: 'dealDone', label: 'Deal Done', count: dealDone.n },
+    { key: 'leads', label: 'العملاء المحتملون', count: leads.n },
+    { key: 'assigned', label: 'موزّع', count: assigned.n },
+    { key: 'seen', label: 'تمت رؤيته', count: seen.n },
+    { key: 'contacted', label: 'تم التواصل', count: contacted.n },
+    { key: 'interested', label: 'مهتم', count: interested.n },
+    { key: 'followup', label: 'متابعة', count: followup.n },
+    { key: 'branchVisit', label: 'زيارة فرع', count: branchVisit.n },
+    { key: 'dealDone', label: 'تمت الصفقة', count: dealDone.n },
   ];
   const base = leads.n || 1;
   return {

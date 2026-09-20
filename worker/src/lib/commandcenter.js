@@ -79,12 +79,12 @@ export async function getNeedsAttentionQueue(db) {
   const idleTooLong = Object.values(idleEmployees).filter((e) => e.activityState === 'IDLE' && e.idleForSeconds > thresholds.idleAfterMinutes * 60 * 2).length;
 
   const items = [
-    { severity: 'CRITICAL', type: 'SLA_BREACHED', count: breachedSla, label: `${breachedSla} SLA breach(es)`, filter: { sla: 'breached' } },
-    { severity: 'CRITICAL', type: 'INTERESTED_NO_FOLLOWUP', count: interestedNoFollowupCount, label: `${interestedNoFollowupCount} Interested customer(s) without a follow-up`, filter: { status: 'INTERESTED', followup: 'none' } },
-    { severity: 'CRITICAL', type: 'OVERDUE_FOLLOWUP', count: overdueFollowups.n, label: `${overdueFollowups.n} overdue follow-up(s)`, filter: { followup: 'overdue' } },
-    { severity: 'WARNING', type: 'NOT_SEEN', count: notSeenCount, label: `${notSeenCount} customer(s) not seen yet`, filter: { seen: 'not_seen' } },
-    { severity: 'WARNING', type: 'EMPLOYEE_IDLE', count: idleTooLong, label: `${idleTooLong} employee(s) idle too long`, filter: null },
-    { severity: 'WARNING', type: 'MULTI_FAIL_CALLS', count: multiFailCustomers.results.length, label: `${multiFailCustomers.results.length} customer(s) with 3+ failed call attempts`, filter: { callAttempts: 'multiFail' } },
+    { severity: 'CRITICAL', type: 'SLA_BREACHED', count: breachedSla, label: `${breachedSla} تجاوز لموعد الخدمة`, filter: { sla: 'breached' } },
+    { severity: 'CRITICAL', type: 'INTERESTED_NO_FOLLOWUP', count: interestedNoFollowupCount, label: `${interestedNoFollowupCount} عميل مهتم بدون متابعة مجدولة`, filter: { status: 'INTERESTED', followup: 'none' } },
+    { severity: 'CRITICAL', type: 'OVERDUE_FOLLOWUP', count: overdueFollowups.n, label: `${overdueFollowups.n} متابعة متأخرة`, filter: { followup: 'overdue' } },
+    { severity: 'WARNING', type: 'NOT_SEEN', count: notSeenCount, label: `${notSeenCount} عميل لم تتم رؤيته بعد`, filter: { seen: 'not_seen' } },
+    { severity: 'WARNING', type: 'EMPLOYEE_IDLE', count: idleTooLong, label: `${idleTooLong} موظف خامل لفترة طويلة`, filter: null },
+    { severity: 'WARNING', type: 'MULTI_FAIL_CALLS', count: multiFailCustomers.results.length, label: `${multiFailCustomers.results.length} عميل بـ ٣ محاولات اتصال فاشلة أو أكثر`, filter: { callAttempts: 'multiFail' } },
   ].filter((i) => i.count > 0);
 
   const severityOrder = { CRITICAL: 0, WARNING: 1 };

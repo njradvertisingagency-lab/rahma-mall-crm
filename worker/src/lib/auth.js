@@ -40,7 +40,7 @@ export function clearSessionCookie(c) {
 /** Attaches c.set('user', {...}) for a valid, unexpired, active session. */
 export async function requireAuth(c, next) {
   const token = getCookie(c, SESSION_COOKIE);
-  if (!token) return jsonError(c, 401, 'Not authenticated', 'NO_SESSION');
+  if (!token) return jsonError(c, 401, 'لم يتم تسجيل الدخول', 'NO_SESSION');
   const db = c.env.DB;
   const session = await db
     .prepare(
@@ -51,14 +51,14 @@ export async function requireAuth(c, next) {
     .first();
   if (!session) {
     clearSessionCookie(c);
-    return jsonError(c, 401, 'Session invalid', 'INVALID_SESSION');
+    return jsonError(c, 401, 'الجلسة غير صالحة', 'INVALID_SESSION');
   }
   if (new Date(session.expires_at).getTime() < Date.now()) {
     c.executionCtx.waitUntil(db.prepare(`DELETE FROM sessions WHERE token = ?`).bind(token).run());
     clearSessionCookie(c);
-    return jsonError(c, 401, 'Session expired', 'SESSION_EXPIRED');
+    return jsonError(c, 401, 'انتهت صلاحية الجلسة', 'SESSION_EXPIRED');
   }
-  if (!session.active) return jsonError(c, 403, 'Account disabled', 'ACCOUNT_DISABLED');
+  if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
   c.executionCtx.waitUntil(
     db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE token = ?`).bind(nowIso(), token).run()
@@ -83,7 +83,7 @@ export async function requireAuth(c, next) {
 export function requireRole(...roles) {
   return async (c, next) => {
     const user = c.get('user');
-    if (!user || !roles.includes(user.role)) return jsonError(c, 403, 'Forbidden for this role', 'FORBIDDEN_ROLE');
+    if (!user || !roles.includes(user.role)) return jsonError(c, 403, 'غير مصرح لهذا الدور', 'FORBIDDEN_ROLE');
     await next();
   };
 }
@@ -91,7 +91,7 @@ export function requireRole(...roles) {
 /** Lightweight CSRF defense-in-depth for a same-origin JSON API behind SameSite=Lax cookies. */
 export async function requireAppHeader(c, next) {
   if (c.req.header('x-rahma-client') !== 'web') {
-    return jsonError(c, 403, 'Missing client header', 'MISSING_CLIENT_HEADER');
+    return jsonError(c, 403, 'ترويسة العميل مفقودة', 'MISSING_CLIENT_HEADER');
   }
   await next();
 }

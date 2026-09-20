@@ -47,26 +47,26 @@ export async function computeLeadScore(db, customerId, opts = {}) {
     reasons.push({ label, points });
   };
 
-  if (customer.status === 'INTERESTED') add('Interested', weights.interested);
-  if (customer.status === 'CLOSED' && customer.closed_reason === 'Purchased') add('Closed — purchased', weights.closedWon);
+  if (customer.status === 'INTERESTED') add('مهتم', weights.interested);
+  if (customer.status === 'CLOSED' && customer.closed_reason === 'Purchased') add('مغلق — تم الشراء', weights.closedWon);
 
   const contacted = attempts.length > 0 || whatsappRow.n > 0;
-  if (contacted) add('Contacted', weights.contacted);
-  if (whatsappRow.n > 0) add('WhatsApp interaction', weights.whatsappInteraction);
-  if (openFollowup) add('Follow-up scheduled', weights.followupScheduled);
+  if (contacted) add('تم التواصل', weights.contacted);
+  if (whatsappRow.n > 0) add('تفاعل عبر واتساب', weights.whatsappInteraction);
+  if (openFollowup) add('متابعة مجدولة', weights.followupScheduled);
 
   if (customer.updated_at && Date.now() - new Date(customer.updated_at).getTime() < 24 * 3600 * 1000) {
-    add('Recent activity (last 24h)', weights.recentActivityBonus);
+    add('نشاط حديث (آخر ٢٤ ساعة)', weights.recentActivityBonus);
   }
 
   if (attempts.length >= 3 && attempts.slice(0, 3).every((a) => a.outcome === 'NO_ANSWER')) {
-    add('3+ consecutive no-answer', weights.noAnswerStreakPenalty);
+    add('٣ محاولات اتصال متتالية بدون رد أو أكثر', weights.noAnswerStreakPenalty);
   } else {
     const failedCount = attempts.filter((a) => a.outcome !== 'ANSWERED').length;
-    if (failedCount > 0) add(`${failedCount} unanswered call attempt(s)`, weights.callAttemptPenalty * failedCount);
+    if (failedCount > 0) add(`${failedCount} محاولة اتصال بدون رد`, weights.callAttemptPenalty * failedCount);
   }
 
-  if (slaState && slaState.worst === 'BREACHED') add('SLA breached', weights.slaBreachPenalty);
+  if (slaState && slaState.worst === 'BREACHED') add('تجاوز موعد الخدمة', weights.slaBreachPenalty);
 
   score = Math.max(0, Math.min(100, Math.round(score)));
   return { score, reasons };

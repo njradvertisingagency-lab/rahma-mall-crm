@@ -18,7 +18,7 @@ export async function nextDistributionLabel(db) {
   const row = await db
     .prepare(`UPDATE counters SET value = value + 1 WHERE name = 'distribution_seq' RETURNING value`)
     .first();
-  return { seq: row.value, label: 'Distribution #' + String(row.value).padStart(3, '0') };
+  return { seq: row.value, label: 'توزيع رقم ' + String(row.value).padStart(3, '0') };
 }
 
 /** Append an immutable activity-log row. metadata is any JSON-serializable object. */
