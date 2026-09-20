@@ -393,7 +393,7 @@ function renderShell() {
   const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
     el('div', { class: 'sidebar-brand' }, [
       el('div', { class: 'brand-row' }, [
-        el('div', { class: 'brand-mark' }, ['🏬']),
+        el('div', { class: 'brand-mark' }, ['ر']),
         el('div', {}, [
           el('div', { class: 'logo' }, ['رحمة مول']),
           el('div', { class: 'sub' }, ['نظام إدارة فريق المكالمات']),
