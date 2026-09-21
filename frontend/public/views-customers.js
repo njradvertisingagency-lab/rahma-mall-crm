@@ -277,7 +277,13 @@
       bulkBar.appendChild(el('button', { class: 'btn btn-sm', onclick: () => bulkStatus() }, ['تغيير الحالة']));
       bulkBar.appendChild(el('button', { class: 'btn btn-sm', onclick: () => bulkPriority() }, ['تغيير الأولوية']));
       bulkBar.appendChild(el('button', { class: 'btn btn-sm btn-danger', onclick: () => bulkArchive() }, ['أرشفة']));
-      bulkBar.appendChild(el('a', { class: 'btn btn-sm btn-outline', href: App.apiBase + '/api/reports/customers', target: '_blank' }, ['تصدير CSV']));
+      bulkBar.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
+        try {
+          await App.downloadFile('/reports/customers', 'customers.csv');
+        } catch (err) {
+          App.toast(err.message || 'فشل تصدير التقرير', 'error');
+        }
+      } }, ['تصدير CSV']));
     }
 
     async function bulkStatus() {

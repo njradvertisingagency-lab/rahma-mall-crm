@@ -113,7 +113,20 @@
       el('div', { class: 'card card-pad' }, [
         el('div', { style: 'font-weight:800' }, [title]),
         el('div', { class: 'muted mt-8', style: 'font-size:12.5px' }, [desc]),
-        el('a', { class: 'btn btn-primary btn-sm mt-12', href: App.apiBase + '/api/reports/' + key, target: '_blank' }, ['⬇ تصدير CSV']),
+        el('button', { class: 'btn btn-primary btn-sm mt-12', onclick: async (e) => {
+          const btn = e.target;
+          const original = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = 'جارِ التصدير…';
+          try {
+            await App.downloadFile('/reports/' + key, key + '.csv');
+          } catch (err) {
+            App.toast(err.message || 'فشل تصدير التقرير', 'error');
+          } finally {
+            btn.disabled = false;
+            btn.textContent = original;
+          }
+        } }, ['⬇ تصدير CSV']),
       ])
     )));
     return container;

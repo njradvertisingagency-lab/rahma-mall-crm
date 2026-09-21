@@ -203,6 +203,33 @@ async function api(path, opts) {
 App.api = api;
 App.apiBase = API_BASE; // مُستخدم لبناء روابط مباشرة (مثل تصدير CSV) تعمل حتى لو اختلف النطاق
 
+// تنزيل ملف (مثل تصدير CSV) عبر fetch حتى تُرسَل ترويسة x-rahma-client المطلوبة؛
+// روابط <a href> العادية لا يمكنها إرفاق ترويسات مخصّصة فتُرفض من الخادم.
+App.downloadFile = async function (path, fallbackFilename) {
+  const headers = { 'x-rahma-client': 'web' };
+  const res = await fetch(API_BASE + '/api' + path, { headers, credentials: 'include' });
+  if (!res.ok) {
+    let message = 'فشل تنزيل الملف';
+    try {
+      const data = await res.json();
+      message = (data && data.error && data.error.message) || message;
+    } catch {}
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = (match && match[1]) || fallbackFilename || 'export.csv';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+
 // ---------------------------------------------------------------------------
 // الإشعارات المنبثقة (Toasts)
 // ---------------------------------------------------------------------------
