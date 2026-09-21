@@ -52,9 +52,70 @@
     );
   }
 
+  function addEmployeeModal(onDone) {
+    const name = el('input', { placeholder: 'مثال: Sara' });
+    const nameAr = el('input', { placeholder: 'مثال: سارة (اختياري)' });
+    const username = el('input', { placeholder: 'بالإنجليزية والأرقام، ٣ أحرف على الأقل' });
+    const password = el('input', { type: 'password', placeholder: '٨ أحرف على الأقل' });
+    const body = el('div', {}, [
+      el('div', { class: 'field' }, [el('label', {}, ['الاسم']), name]),
+      el('div', { class: 'field' }, [el('label', {}, ['الاسم بالعربي (اختياري)']), nameAr]),
+      el('div', { class: 'field' }, [el('label', {}, ['اسم المستخدم']), username]),
+      el('div', { class: 'field' }, [el('label', {}, ['كلمة المرور']), password]),
+    ]);
+    const dlg = modal('إضافة موظف جديد', body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn btn-primary', onclick: async () => {
+        try {
+          await api('/employees', { method: 'POST', body: { name: name.value.trim(), nameAr: nameAr.value.trim(), username: username.value.trim(), password: password.value } });
+          toast('تم إضافة الموظف بنجاح', 'success');
+          dlg.close();
+          onDone();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['إضافة'])
+    );
+  }
+
+  function editUsernameModal(e, onDone) {
+    const username = el('input', { value: e.username || '' });
+    const body = el('div', {}, [el('div', { class: 'field' }, [el('label', {}, [`اسم المستخدم — ${e.name}`]), username])]);
+    const dlg = modal('تعديل اسم المستخدم', body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn btn-primary', onclick: async () => {
+        try {
+          await api('/employees/' + e.id + '/username', { method: 'PATCH', body: { username: username.value.trim() } });
+          toast('تم تعديل اسم المستخدم', 'success');
+          dlg.close();
+          onDone();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['حفظ'])
+    );
+  }
+
+  function resetPasswordModal(e) {
+    const password = el('input', { type: 'password', placeholder: '٨ أحرف على الأقل' });
+    const body = el('div', {}, [el('div', { class: 'field' }, [el('label', {}, [`كلمة مرور جديدة — ${e.name}`]), password])]);
+    const dlg = modal('إعادة تعيين كلمة المرور', body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn btn-primary', onclick: async () => {
+        try {
+          await api('/employees/' + e.id + '/reset-password', { method: 'POST', body: { newPassword: password.value } });
+          toast('تم تغيير كلمة المرور', 'success');
+          dlg.close();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['حفظ'])
+    );
+  }
+
   App.route('/employees', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['الموظفين'])]));
+    container.appendChild(el('div', { class: 'page-header' }, [
+      el('div', { class: 'page-title' }, ['الموظفين']),
+      el('button', { class: 'btn btn-primary btn-sm', onclick: () => addEmployeeModal(load) }, ['➕ إضافة موظف جديد']),
+    ]));
     const grid = el('div', { class: 'kpi-grid' });
     container.appendChild(grid);
 
@@ -64,7 +125,7 @@
       employees.forEach((e) => {
         const card = el('div', { class: 'card card-pad' });
         card.appendChild(el('div', { class: 'flex-between' }, [
-          el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name }), el('div', {}, [el('div', { style: 'font-weight:800' }, [e.name]), e.nameAr ? el('div', { class: 'faint' }, [e.nameAr]) : null])]),
+          el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name }), el('div', {}, [el('div', { style: 'font-weight:800' }, [e.name]), e.nameAr ? el('div', { class: 'faint' }, [e.nameAr]) : null, e.username ? el('div', { class: 'faint mono' }, ['@' + e.username]) : null])]),
         ]));
         card.appendChild(el('div', { class: 'mt-12' }, [badges.availability(e.availability)]));
         card.appendChild(el('div', { class: 'mt-12', style: 'font-size:12.5px' }, [
@@ -89,6 +150,8 @@
             load();
           } catch (err) { toast(err.message, 'error'); }
         } }, ['📷 تغيير الصورة الشخصية']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editUsernameModal(e, load) }, ['✏️ تعديل اسم المستخدم']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => resetPasswordModal(e) }, ['🔑 إعادة تعيين كلمة المرور']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
         grid.appendChild(card);
       });
@@ -177,6 +240,7 @@
     FOLLOWUP_UPDATED: 'تعديل متابعة', FOLLOWUP_COMPLETED: 'إنجاز متابعة', FOLLOWUP_CANCELLED: 'إلغاء متابعة',
     DISTRIBUTION_CREATED: 'توزيع عملاء', EMPLOYEE_STATUS_CHANGED: 'تغيير حالة موظف', DAILY_GOAL_SET: 'تحديد هدف يومي',
     EMPLOYEE_AVATAR_UPDATED: 'تحديث الصورة الشخصية', EMPLOYEE_AVATAR_REMOVED: 'حذف الصورة الشخصية',
+    EMPLOYEE_CREATED: 'إضافة موظف جديد', EMPLOYEE_USERNAME_CHANGED: 'تغيير اسم المستخدم', EMPLOYEE_PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
     BRANCH_CREATED: 'إنشاء فرع', BRANCH_VISIT_CREATED: 'تسجيل زيارة فرع', DEAL_DONE_CREATED: 'تسجيل صفقة',
     PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
     SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',
