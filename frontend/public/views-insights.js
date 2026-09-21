@@ -125,17 +125,22 @@
     container.appendChild(card);
 
     // مقارنة أداء عبر الوقت — الاتجاه بدلًا من لقطة اليوم فقط.
+    // ملاحظة: نحتفظ بمرجع مباشر لعنصر <select> (trendRangeSel) بدلاً من
+    // البحث عنه بـ document.getElementById، لأن loadTrend() يُستدعى أول
+    // مرة أثناء بناء الصفحة — قبل أن يُلحق الراوتر العنصر بالـ DOM الفعلي —
+    // فيرجع getElementById قيمة null وقتها ويكسر الصفحة بالكامل.
+    const trendRangeSel = el('select', { onchange: loadTrend }, [['7', 'آخر ٧ أيام'], ['30', 'آخر ٣٠ يوم'], ['90', 'آخر ٩٠ يوم']].map(([v, l]) => el('option', { value: v, selected: v === '30' || undefined }, [l])));
     const trendCard = el('div', { class: 'card card-pad mt-16' });
     trendCard.appendChild(el('div', { class: 'flex-between mb-8' }, [
       el('div', { style: 'font-weight:800' }, ['📈 اتجاه الأداء']),
-      el('select', { id: 'trend-range', onchange: loadTrend }, [['7', 'آخر ٧ أيام'], ['30', 'آخر ٣٠ يوم'], ['90', 'آخر ٩٠ يوم']].map(([v, l]) => el('option', { value: v, selected: v === '30' || undefined }, [l]))),
+      trendRangeSel,
     ]));
     const trendBox = el('div');
     trendCard.appendChild(trendBox);
     container.appendChild(trendCard);
     async function loadTrend() {
-      const days = document.getElementById('trend-range').value;
       try {
+        const days = trendRangeSel.value;
         const { history } = await api('/employees/' + me.id + '/performance-history?days=' + days);
         trendBox.innerHTML = '';
         trendBox.appendChild(lineChart(history.map((h) => ({ label: h.date.slice(5), value: h.score })), { color: 'var(--brand-2)' }));
