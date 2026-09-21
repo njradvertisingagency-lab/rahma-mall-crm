@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { recordHeartbeat, getEmployeePresence, getEmployeePresenceMap } from '../lib/presence.js';
+import { recordHeartbeat, getEmployeePresence, getEmployeePresenceMap, getEmployeeOnlineTimeSummary } from '../lib/presence.js';
 import { jsonError } from '../lib/db.js';
 
 export const presenceRoutes = new Hono();
@@ -20,9 +20,12 @@ presenceRoutes.post('/heartbeat', async (c) => {
 
 presenceRoutes.get('/me', async (c) => {
   const user = c.get('user');
-  if (!user.employeeId) return c.json({ presence: null });
-  const presence = await getEmployeePresence(c.env.DB, user.employeeId);
-  return c.json({ presence });
+  if (!user.employeeId) return c.json({ presence: null, onlineTime: null });
+  const [presence, onlineTime] = await Promise.all([
+    getEmployeePresence(c.env.DB, user.employeeId),
+    getEmployeeOnlineTimeSummary(c.env.DB, user.employeeId),
+  ]);
+  return c.json({ presence, onlineTime });
 });
 
 presenceRoutes.get('/team', requireRole('team_leader'), async (c) => {
