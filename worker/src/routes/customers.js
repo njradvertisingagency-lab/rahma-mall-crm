@@ -29,6 +29,7 @@ function customerRowToJson(row) {
     campaign: row.campaign,
     product: row.product,
     archived: !!row.archived,
+    isVip: !!row.is_vip,
     createdAt: row.created_at,
     assignedAt: row.assigned_at,
     updatedAt: row.updated_at,
@@ -111,6 +112,9 @@ customerRoutes.get('/', async (c) => {
     conds.push(`EXISTS (SELECT 1 FROM customer_products cp WHERE cp.customer_id = c.id AND cp.product = ?)`);
     binds.push(q.product);
   }
+  if (q.vip === 'true') {
+    conds.push('c.is_vip = 1');
+  }
   // Dynamic segments — every condition is derived from real, live data (never a stored tag).
   const SEGMENT_CONDS = {
     NEW: `c.status = 'NEW'`,
@@ -122,6 +126,7 @@ customerRoutes.get('/', async (c) => {
     WHATSAPP_CONTACTED: `c.whatsapp_contact_status = 'CONTACT_INITIATED'`,
     NOT_SEEN: `c.assigned_employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)`,
     HOT: `c.status = 'INTERESTED' AND c.updated_at >= datetime('now', '-24 hours')`,
+    VIP: `c.is_vip = 1`,
   };
   if (q.segment && SEGMENT_CONDS[q.segment]) {
     conds.push(SEGMENT_CONDS[q.segment]);
@@ -594,6 +599,24 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
   await broadcast(c.env, 'LEAD_SCORE_UPDATED', { id, score: leadScore.score }, { scope: 'role', role: 'team_leader' });
 
   return c.json({ callAttempt: { id: res.id, outcome: body.outcome, notes: body.notes || null, createdAt: res.created_at }, leadScore: leadScore.score }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// VIP FLAG (Team Leader only — routes VIP customers to the best employees or
+// gets them personally followed up on by the Team Leader)
+// ---------------------------------------------------------------------------
+customerRoutes.post('/:id/vip', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const isVip = !!body.isVip;
+  const existing = await db.prepare(`SELECT is_vip FROM customers WHERE id = ?`).bind(id).first();
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
+  await db.prepare(`UPDATE customers SET is_vip = ?, updated_at = ? WHERE id = ?`).bind(isVip ? 1 : 0, nowIso(), id).run();
+  await logActivity(db, { actor: user, action: isVip ? 'CUSTOMER_MARKED_VIP' : 'CUSTOMER_UNMARKED_VIP', entityType: 'customer', entityId: id });
+  await broadcast(c.env, 'CUSTOMER_VIP_CHANGED', { id, isVip }, { scope: 'role', role: 'team_leader' });
+  return c.json({ ok: true, isVip });
 });
 
 // ---------------------------------------------------------------------------

@@ -77,6 +77,7 @@ authRoutes.post('/login', async (c) => {
       employeeId,
       availability,
       avatarUrl,
+      isOwner: !!user.is_owner,
       mustChangePassword: !!user.must_change_password,
     },
   });

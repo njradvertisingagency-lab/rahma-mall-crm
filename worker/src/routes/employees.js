@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
-import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore } from '../lib/performance.js';
+import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore, getPerformanceHistory, computeBadges } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
 import { hashPassword, randomSaltHex } from '../lib/passwords.js';
@@ -113,9 +113,11 @@ employeeRoutes.get('/', async (c) => {
   if (user.role === 'employee') {
     const emp = await db.prepare(`SELECT * FROM employees WHERE id = ?`).bind(user.employeeId).first();
     const counters = await computeEmployeeCounters(db, user.employeeId);
-    return c.json({ employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, active: !!emp.active, avatarUrl: emp.avatar_data_url, ...counters }] });
+    return c.json({ employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, dndUntil: emp.dnd_until, active: !!emp.active, avatarUrl: emp.avatar_data_url, ...counters }] });
   }
   const { weights, stats } = await computeAllEmployeeStats(db);
+  const dndRows = await db.prepare(`SELECT id, dnd_until FROM employees WHERE active = 1`).all();
+  const dndById = Object.fromEntries(dndRows.results.map((r) => [r.id, r.dnd_until]));
   return c.json({
     weights,
     employees: stats.map((s) => ({
@@ -124,6 +126,7 @@ employeeRoutes.get('/', async (c) => {
       nameAr: s.employee.nameAr,
       username: s.employee.username,
       availability: s.employee.availability,
+      dndUntil: dndById[s.employee.id] ?? null,
       avatarUrl: s.employee.avatarUrl,
       assigned: s.assigned,
       byStatus: s.byStatus,
@@ -136,6 +139,95 @@ employeeRoutes.get('/', async (c) => {
       scoreBreakdown: s.scoreBreakdown,
     })),
   });
+});
+
+// Performance-over-time — a trend chart's data, not just today's snapshot.
+employeeRoutes.get('/:id/performance-history', async (c) => {
+  const user = c.get('user');
+  const id = Number(c.req.param('id'));
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط عرض أدائك الخاص', 'FORBIDDEN_OWNERSHIP');
+  const days = Math.min(90, Math.max(7, Number(c.req.query('days')) || 30));
+  const history = await getPerformanceHistory(c.env.DB, id, days);
+  return c.json({ history });
+});
+
+// Achievements/badges — computed live from real data, never stored.
+employeeRoutes.get('/badges', async (c) => {
+  const badges = await computeBadges(c.env.DB);
+  return c.json(badges);
+});
+
+// Team Leader activity/performance — owner-only oversight view. Unlike
+// employee performance (which is scored against assigned customers), a
+// Team Leader isn't "assigned" customers the same way, so this is a
+// transparent activity rollup pulled straight from the existing audit
+// trail (activity_logs) rather than an invented score.
+employeeRoutes.get('/team-leader-performance', async (c) => {
+  const user = c.get('user');
+  if (!user.isOwner) return jsonError(c, 403, 'هذه الصفحة مخصّصة لحساب المالك فقط', 'FORBIDDEN_OWNER_ONLY');
+  const db = c.env.DB;
+  const leaders = await db.prepare(`SELECT id, username, display_name, is_owner FROM users WHERE role = 'team_leader'`).all();
+
+  const rows = [];
+  for (const tl of leaders.results) {
+    const [customersCreated, customersImported, distributions, deals, employeesManaged, complaintsLogged, chatMessages, lastLogin, loginCount] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'CUSTOMER_CREATED'`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'CUSTOMERS_IMPORTED'`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'DISTRIBUTION_CREATED'`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'DEAL_DONE_CREATED'`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action IN ('EMPLOYEE_CREATED','EMPLOYEE_USERNAME_CHANGED','EMPLOYEE_PASSWORD_RESET')`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE created_by = ?`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE sender_user_id = ?`).bind(tl.id).first(),
+      db.prepare(`SELECT created_at FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN' ORDER BY created_at DESC LIMIT 1`).bind(tl.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN'`).bind(tl.id).first(),
+    ]);
+    rows.push({
+      userId: tl.id,
+      username: tl.username,
+      displayName: tl.display_name,
+      isOwner: !!tl.is_owner,
+      customersCreated: customersCreated.n,
+      customersImported: customersImported.n,
+      distributionsCreated: distributions.n,
+      dealsRecorded: deals.n,
+      employeesManaged: employeesManaged.n,
+      complaintsLogged: complaintsLogged.n,
+      chatMessagesSent: chatMessages.n,
+      loginCount: loginCount.n,
+      lastLoginAt: lastLogin?.created_at ?? null,
+    });
+  }
+  return c.json({ teamLeaders: rows });
+});
+
+// Temporary "Do Not Disturb" — self-service only; the cron sweep (lib/dnd.js)
+// auto-reverts to AVAILABLE once `minutes` elapses.
+employeeRoutes.post('/:id/dnd', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط تفعيل عدم الإزعاج لنفسك', 'FORBIDDEN_OWNERSHIP');
+  const body = await c.req.json().catch(() => ({}));
+  const minutes = Number(body.minutes);
+  if (!minutes || minutes <= 0 || minutes > 480) return jsonError(c, 400, 'عدد الدقائق غير صالح (الحد الأقصى ٨ ساعات)', 'INVALID_MINUTES');
+
+  const until = new Date(Date.now() + minutes * 60000).toISOString();
+  await db.prepare(`UPDATE employees SET availability = 'UNAVAILABLE', dnd_until = ?, updated_at = ? WHERE id = ?`).bind(until, nowIso(), id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_DND_STARTED', entityType: 'employee', entityId: String(id), metadata: { minutes, until } });
+  await broadcast(c.env, 'EMPLOYEE_AVAILABILITY_CHANGED', { employeeId: id, availability: 'UNAVAILABLE', dndUntil: until }, { scope: 'role', role: 'team_leader' });
+  return c.json({ ok: true, dndUntil: until });
+});
+
+// Cancel an active DND early — back to AVAILABLE right away.
+employeeRoutes.post('/:id/dnd/cancel', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط إلغاء عدم الإزعاج لنفسك', 'FORBIDDEN_OWNERSHIP');
+  await db.prepare(`UPDATE employees SET availability = 'AVAILABLE', dnd_until = NULL, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_DND_CANCELLED', entityType: 'employee', entityId: String(id) });
+  await broadcast(c.env, 'EMPLOYEE_AVAILABILITY_CHANGED', { employeeId: id, availability: 'AVAILABLE' }, { scope: 'role', role: 'team_leader' });
+  return c.json({ ok: true });
 });
 
 employeeRoutes.patch('/:id', async (c) => {
@@ -157,6 +249,9 @@ employeeRoutes.patch('/:id', async (c) => {
     if (!AVAILABILITY.includes(body.availability)) return jsonError(c, 400, 'قيمة الإتاحة غير صالحة', 'INVALID_AVAILABILITY');
     fields.push('availability = ?');
     binds.push(body.availability);
+    // Any manual availability change cancels a pending temporary DND — it
+    // should never silently override a decision the employee/TL just made.
+    fields.push('dnd_until = NULL');
   }
   if ('active' in body && user.role === 'team_leader') {
     fields.push('active = ?');
