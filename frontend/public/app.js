@@ -8,6 +8,7 @@ const App = (window.App = {
     wsStatus: 'OFFLINE', // LIVE | RECONNECTING | OFFLINE
     notifications: [],
     unreadCount: 0,
+    chatUnread: 0,
     employees: [],
     settings: {},
   },
@@ -316,8 +317,19 @@ App.on('rt:NOTIFICATION_CREATED', () => { toast('🔔 لديك إشعار جدي
 App.on('rt:CUSTOMER_ASSIGNED', () => refreshNotifications());
 App.on('rt:FOLLOWUP_OVERDUE', () => refreshNotifications());
 App.on('rt:CUSTOMER_REASSIGNED', () => refreshNotifications());
-App.on('rt:SLA_BREACHED', () => refreshNotifications());
-App.on('rt:SLA_WARNING', () => refreshNotifications());
+// تنبيهات فورية (Push) لتجاوز مواعيد الخدمة — بدل الاكتفاء بتحديث الجرس بصمت،
+// تظهر رسالة منبثقة فورية في المتصفح لحظة تجاوز العميل للموعد المسموح.
+App.on('rt:SLA_BREACHED', (p) => { toast(`🔴 تجاوز موعد خدمة — العميل ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
+App.on('rt:SLA_WARNING', (p) => { toast(`🟠 اقترب موعد خدمة — العميل ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
+// "عميل بينتظرك" — تنبيه للموظف نفسه (وليس فقط قائد الفريق) عند مرور وقت طويل بدون أي تحديث على عميله.
+App.on('rt:CUSTOMER_WAITING', (p) => { toast(`⏳ عميل بينتظرك — ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
+App.on('rt:CUSTOMER_WAITING_WARNING', (p) => { toast(`🟡 عميل يحتاج متابعة قريبًا — ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
+// الدردشة الداخلية — رسالة جديدة تُحدّث شارة العداد فورًا وتُظهر تنبيهًا.
+App.on('rt:CHAT_MESSAGE', (p) => {
+  refreshChatUnread();
+  const onChatPage = (location.hash || '').startsWith('#/chat');
+  if (!onChatPage) toast(`💬 رسالة جديدة من ${p?.senderName || ''}`, 'info');
+});
 
 // إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
 App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
@@ -335,6 +347,16 @@ async function refreshNotifications() {
   } catch {}
 }
 App.refreshNotifications = refreshNotifications;
+
+async function refreshChatUnread() {
+  if (!App.state.user) return;
+  try {
+    const data = await api('/chat/unread-count');
+    App.state.chatUnread = data.unread;
+    App.emit('chat-unread-updated');
+  } catch {}
+}
+App.refreshChatUnread = refreshChatUnread;
 
 // ---------------------------------------------------------------------------
 // الموجّه (Router)
@@ -437,10 +459,14 @@ const NAV_TL = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
+  ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['employees', '🧑‍💼', 'الموظفين'],
   ['followups', '⏰', 'المتابعات'],
+  ['calendar', '🗓️', 'تقويم المتابعات'],
+  ['complaints', '🚩', 'الشكاوى'],
+  ['chat', '💬', 'الدردشة'],
   ['analytics', '📈', 'التحليلات'],
   ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['reports', '🧾', 'التقارير'],
@@ -449,11 +475,15 @@ const NAV_TL = [
   ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
+const NAV_TL_OWNER_EXTRA = ['team-leader-performance', '👑', 'أداء قائد الفريق'];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
   ['my-customers', '👥', 'عملائي'],
+  ['favorites', '⭐', 'المفضلة'],
   ['followups', '⏰', 'المتابعات'],
+  ['calendar', '🗓️', 'تقويم المتابعات'],
+  ['chat', '💬', 'الدردشة'],
   ['notifications', '🔔', 'الإشعارات'],
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
@@ -461,7 +491,8 @@ const NAV_EMPLOYEE = [
 
 function renderShell() {
   const user = App.state.user;
-  const nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
+  let nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
+  if (user.role === 'team_leader' && user.isOwner) nav = [...nav, NAV_TL_OWNER_EXTRA];
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
 
   const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
@@ -478,7 +509,10 @@ function renderShell() {
       el('div', {
         class: 'nav-item' + (currentPath === path ? ' active' : ''),
         onclick: () => { App.navigate('#/' + path); document.getElementById('sidebar').classList.remove('open'); },
-      }, [el('span', { class: 'nav-icon' }, [icon]), label])
+      }, [
+        el('span', { class: 'nav-icon', style: 'position:relative' }, [icon, path === 'chat' ? chatNavBadge : null]),
+        label,
+      ])
     )),
     el('div', { class: 'sidebar-footer' }, [
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
@@ -488,6 +522,7 @@ function renderShell() {
 
   const connBadge = renderConnBadge();
   const notifBell = renderNotifBell();
+  const chatNavBadge = renderChatNavBadge();
   const topbar = el('div', { class: 'topbar' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
@@ -511,7 +546,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, notifBell.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -528,6 +563,21 @@ function renderConnBadge() {
     wrap.appendChild(document.createTextNode(CONN_LABELS[App.state.wsStatus] || App.state.wsStatus));
   });
   return wrap;
+}
+
+function renderChatNavBadge() {
+  const badge = el('span', {
+    style: 'position:absolute;top:-4px;inset-inline-end:-8px;background:var(--danger);color:#fff;border-radius:10px;font-size:9px;padding:1px 4px;display:none;line-height:1.4',
+  });
+  function update() {
+    if (App.state.chatUnread > 0) {
+      badge.style.display = 'inline';
+      badge.textContent = App.state.chatUnread > 9 ? '9+' : App.state.chatUnread;
+    } else badge.style.display = 'none';
+  }
+  badge.offEvt = App.on('chat-unread-updated', update);
+  update();
+  return badge;
 }
 
 function renderNotifBell() {
@@ -567,6 +617,7 @@ async function boot() {
   if (App.state.user) {
     RT.connect();
     refreshNotifications();
+    refreshChatUnread();
   }
   renderRoute();
 }

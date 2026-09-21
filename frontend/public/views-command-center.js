@@ -130,12 +130,16 @@
       const seenByEmp = Object.fromEntries((seenSummary || []).map((s) => [s.employeeId, s]));
       employeeTableCard.appendChild(el('div', { class: 'table-wrap' }, [
         el('table', { class: 'data-table' }, [
-          el('thead', {}, [el('tr', {}, ['الموظف', 'الحضور', 'الإتاحة', 'موزّع', 'تمت رؤيته', 'مغلق', 'المتابعات', 'متأخر', 'الإنجاز', 'النقاط'].map((h) => el('th', {}, [h])))]),
+          el('thead', {}, [el('tr', {}, ['الموظف', 'الحضور', 'آخر ظهور', 'الإتاحة', 'موزّع', 'تمت رؤيته', 'مغلق', 'المتابعات', 'متأخر', 'الإنجاز', 'النقاط'].map((h) => el('th', {}, [h])))]),
           el('tbody', {}, rows.map((e) => {
             const seen = seenByEmp[e.id];
+            const lastSeenAt = e.presence?.lastActivityAt || e.presence?.lastLoginAt || null;
             return el('tr', {}, [
               el('td', { style: 'font-weight:700' }, [e.nameAr ? `${e.name} (${e.nameAr})` : e.name]),
               el('td', {}, [badges.presence(e.presence)]),
+              el('td', { class: e.presence?.online ? '' : 'muted', title: lastSeenAt ? fmt.dateTime(lastSeenAt) : '' }, [
+                e.presence?.online ? 'الآن' : (lastSeenAt ? fmt.ago(lastSeenAt) : 'لم يسجّل دخول بعد'),
+              ]),
               el('td', {}, [badges.availability(e.availability)]),
               el('td', {}, [String(e.assigned)]),
               el('td', {}, [seen ? `${seen.seen}/${seen.assigned}${seen.notSeen > 0 ? ` (${seen.notSeen} لم تتم رؤيته)` : ''}` : '—']),

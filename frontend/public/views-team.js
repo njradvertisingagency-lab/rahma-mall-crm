@@ -119,7 +119,16 @@
     const grid = el('div', { class: 'kpi-grid' });
     container.appendChild(grid);
 
+    let badgesByEmployee = {};
+    async function loadBadges() {
+      try {
+        const { weekly, monthly } = await api('/employees/badges');
+        badgesByEmployee = {};
+        [...weekly, ...monthly].forEach((b) => { (badgesByEmployee[b.employeeId] = badgesByEmployee[b.employeeId] || []).push(b); });
+      } catch {}
+    }
     async function load() {
+      await loadBadges();
       const { employees, weights } = await api('/employees');
       grid.innerHTML = '';
       employees.forEach((e) => {
@@ -127,7 +136,13 @@
         card.appendChild(el('div', { class: 'flex-between' }, [
           el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name }), el('div', {}, [el('div', { style: 'font-weight:800' }, [e.name]), e.nameAr ? el('div', { class: 'faint' }, [e.nameAr]) : null, e.username ? el('div', { class: 'faint mono' }, ['@' + e.username]) : null])]),
         ]));
-        card.appendChild(el('div', { class: 'mt-12' }, [badges.availability(e.availability)]));
+        card.appendChild(el('div', { class: 'mt-12' }, [
+          badges.availability(e.availability),
+          e.dndUntil && new Date(e.dndUntil) > new Date() ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning);margin-inline-start:6px' }, ['🔕 حتى ' + new Date(e.dndUntil).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })]) : null,
+        ]));
+        if (badgesByEmployee[e.id] && badgesByEmployee[e.id].length) {
+          card.appendChild(el('div', { class: 'flex gap-8 wrap mt-8' }, badgesByEmployee[e.id].map((b) => el('span', { class: 'badge', style: 'background:var(--brand-soft)', title: b.detail || '' }, [b.icon + ' ' + b.label]))));
+        }
         card.appendChild(el('div', { class: 'mt-12', style: 'font-size:12.5px' }, [
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['موزّع']), String(e.assigned)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['مغلق']), String(e.closed)]),
@@ -245,6 +260,9 @@
     PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
     SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',
     BULK_STATUS: 'تعديل جماعي للحالة', BULK_PRIORITY: 'تعديل جماعي للأولوية', BULK_ARCHIVE: 'أرشفة جماعية',
+    COMPLAINT_LOGGED: 'تسجيل شكوى', COMPLAINT_DELETED: 'حذف شكوى', CHAT_MESSAGE_SENT: 'إرسال رسالة دردشة',
+    EMPLOYEE_DND_STARTED: 'تفعيل عدم الإزعاج المؤقت', EMPLOYEE_DND_CANCELLED: 'إلغاء عدم الإزعاج',
+    CUSTOMER_MARKED_VIP: 'تمييز عميل كـ VIP', CUSTOMER_UNMARKED_VIP: 'إلغاء تمييز VIP',
   };
   const ROLE_LABELS = { team_leader: 'قائد الفريق', employee: 'موظف' };
   App.route('/activity', async () => {
@@ -298,6 +316,40 @@
       }
       avatarCard.appendChild(btnRow);
       container.appendChild(avatarCard);
+
+      // --- وضع "عدم الإزعاج" المؤقت — بدل "غير متاح" الدائمة، يرجع تلقائيًا لـ"متاح" بعد المدة المحددة ---
+      const dndCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:420px' });
+      dndCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['🔕 عدم الإزعاج المؤقت']));
+      const dndStatus = el('div', { class: 'mb-12' });
+      const dndBtns = el('div', { class: 'flex gap-8 wrap' });
+      async function refreshDnd() {
+        const { employees } = await api('/employees');
+        const me = employees[0];
+        dndStatus.innerHTML = '';
+        dndBtns.innerHTML = '';
+        const active = me.dndUntil && new Date(me.dndUntil) > new Date();
+        if (active) {
+          dndStatus.appendChild(el('div', {}, [
+            el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, ['🔕 مفعّل حتى ' + new Date(me.dndUntil).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })]),
+          ]));
+          dndBtns.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: async () => { await api('/employees/' + me.id + '/dnd/cancel', { method: 'POST' }); toast('تم إلغاء عدم الإزعاج — أنت متاح الآن', 'success'); refreshDnd(); } }, ['إلغاء وإعادة "متاح"']));
+        } else {
+          dndStatus.appendChild(el('div', { class: 'muted' }, [`الحالة الحالية: ${AVAILABILITY_LABELS[me.availability] || me.availability}`]));
+          [[15, '١٥ دقيقة'], [30, '٣٠ دقيقة'], [60, 'ساعة (استراحة غداء)'], [120, 'ساعتان']].forEach(([mins, label]) => {
+            dndBtns.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
+              try {
+                await api('/employees/' + me.id + '/dnd', { method: 'POST', body: { minutes: mins } });
+                toast('تم تفعيل عدم الإزعاج لمدة ' + label, 'success');
+                refreshDnd();
+              } catch (e) { toast(e.message, 'error'); }
+            } }, [label]));
+          });
+        }
+      }
+      dndCard.appendChild(dndStatus);
+      dndCard.appendChild(dndBtns);
+      container.appendChild(dndCard);
+      refreshDnd();
     }
 
     const card = el('div', { class: 'card card-pad', style: 'max-width:420px' });
