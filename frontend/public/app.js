@@ -6,6 +6,7 @@ const App = (window.App = {
     user: null,
     theme: localStorage.getItem('rm_theme') || 'light',
     wsStatus: 'OFFLINE', // LIVE | RECONNECTING | OFFLINE
+    soundEnabled: localStorage.getItem('rm_sound_enabled') !== 'false',
     notifications: [],
     unreadCount: 0,
     chatUnread: 0,
@@ -247,6 +248,46 @@ function toast(message, type) {
 App.toast = toast;
 
 // ---------------------------------------------------------------------------
+// صوت التنبيهات — نغمة قصيرة تُولَّد برمجيًا (بدون ملف صوتي خارجي) لتنبيه
+// الموظف حتى لو كانت التبويبة في الخلفية. تُشغَّل فقط مع تنبيهات فورية حقيقية
+// (وليس مع كل رسالة تأكيد عادية)، ويمكن كتمها من الجرس بجوار الإشعارات.
+// ---------------------------------------------------------------------------
+let audioCtx = null;
+function playNotificationSound() {
+  if (!App.state.soundEnabled) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.setValueAtTime(1175, now + 0.11);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  } catch (e) { /* الصوت غير أساسي — تجاهل أي فشل (مثل منع المتصفح للتشغيل التلقائي) */ }
+}
+App.playNotificationSound = playNotificationSound;
+App.toggleSound = () => {
+  App.state.soundEnabled = !App.state.soundEnabled;
+  localStorage.setItem('rm_sound_enabled', String(App.state.soundEnabled));
+  App.emit('sound-toggled');
+  if (App.state.soundEnabled) playNotificationSound();
+};
+
+/** إشعار فوري حقيقي: رسالة منبثقة + نغمة تنبيه معًا. */
+function pushAlert(message, type) {
+  toast(message, type);
+  playNotificationSound();
+}
+
+// ---------------------------------------------------------------------------
 // المظهر (فاتح / داكن)
 // ---------------------------------------------------------------------------
 function applyTheme() {
@@ -313,29 +354,29 @@ const RT = {
 App.rt = RT;
 
 // الإشعارات المباشرة: أي حدث تعيين/حالة جديد يُحدّث الجرس فورًا.
-App.on('rt:NOTIFICATION_CREATED', () => { toast('🔔 لديك إشعار جديد', 'info'); refreshNotifications(); });
+App.on('rt:NOTIFICATION_CREATED', () => { pushAlert('🔔 لديك إشعار جديد', 'info'); refreshNotifications(); });
 App.on('rt:CUSTOMER_ASSIGNED', () => refreshNotifications());
 App.on('rt:FOLLOWUP_OVERDUE', () => refreshNotifications());
 App.on('rt:CUSTOMER_REASSIGNED', () => refreshNotifications());
 // تنبيهات فورية (Push) لتجاوز مواعيد الخدمة — بدل الاكتفاء بتحديث الجرس بصمت،
-// تظهر رسالة منبثقة فورية في المتصفح لحظة تجاوز العميل للموعد المسموح.
-App.on('rt:SLA_BREACHED', (p) => { toast(`🔴 تجاوز موعد خدمة — العميل ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
-App.on('rt:SLA_WARNING', (p) => { toast(`🟠 اقترب موعد خدمة — العميل ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
+// تظهر رسالة منبثقة فورية مع نغمة تنبيه لحظة تجاوز العميل للموعد المسموح.
+App.on('rt:SLA_BREACHED', (p) => { pushAlert(`🔴 تجاوز موعد خدمة — العميل ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
+App.on('rt:SLA_WARNING', (p) => { pushAlert(`🟠 اقترب موعد خدمة — العميل ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
 // "عميل بينتظرك" — تنبيه للموظف نفسه (وليس فقط قائد الفريق) عند مرور وقت طويل بدون أي تحديث على عميله.
-App.on('rt:CUSTOMER_WAITING', (p) => { toast(`⏳ عميل بينتظرك — ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
-App.on('rt:CUSTOMER_WAITING_WARNING', (p) => { toast(`🟡 عميل يحتاج متابعة قريبًا — ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
-// الدردشة الداخلية — رسالة جديدة تُحدّث شارة العداد فورًا وتُظهر تنبيهًا.
+App.on('rt:CUSTOMER_WAITING', (p) => { pushAlert(`⏳ عميل بينتظرك — ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
+App.on('rt:CUSTOMER_WAITING_WARNING', (p) => { pushAlert(`🟡 عميل يحتاج متابعة قريبًا — ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
+// الدردشة الداخلية — رسالة جديدة تُحدّث شارة العداد فورًا وتُظهر تنبيهًا صوتيًا.
 App.on('rt:CHAT_MESSAGE', (p) => {
   refreshChatUnread();
   const onChatPage = (location.hash || '').startsWith('#/chat');
-  if (!onChatPage) toast(`💬 رسالة جديدة من ${p?.senderName || ''}`, 'info');
+  if (!onChatPage) pushAlert(`💬 رسالة جديدة من ${p?.senderName || ''}`, 'info');
 });
 
 // إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
-App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
-App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') toast(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
-App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
-App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') toast(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
+App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
+App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
+App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
+App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
 
 async function refreshNotifications() {
   if (!App.state.user) return;
@@ -523,6 +564,7 @@ function renderShell() {
 
   const connBadge = renderConnBadge();
   const notifBell = renderNotifBell();
+  const soundToggle = renderSoundToggle();
   const topbar = el('div', { class: 'topbar' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
@@ -534,6 +576,7 @@ function renderShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
+      soundToggle,
       notifBell,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
@@ -546,7 +589,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt, soundToggle.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -563,6 +606,19 @@ function renderConnBadge() {
     wrap.appendChild(document.createTextNode(CONN_LABELS[App.state.wsStatus] || App.state.wsStatus));
   });
   return wrap;
+}
+
+function renderSoundToggle() {
+  const btn = el('button', {
+    class: 'btn btn-icon',
+    title: App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات',
+    onclick: App.toggleSound,
+  }, [App.state.soundEnabled ? '🔊' : '🔇']);
+  btn.offEvt = App.on('sound-toggled', () => {
+    btn.textContent = App.state.soundEnabled ? '🔊' : '🔇';
+    btn.title = App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات';
+  });
+  return btn;
 }
 
 function renderChatNavBadge() {
