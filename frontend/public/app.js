@@ -126,6 +126,50 @@ App.badges = { status: statusBadge, priority: priorityBadge, whatsapp: waBadge, 
 App.labels = { status: STATUS_LABELS, priority: PRIORITY_LABELS };
 
 // ---------------------------------------------------------------------------
+// صورة العضو الشخصية — تعرض الصورة إن وُجدت، وإلا ترجع لحرف الاسم كما كان سابقًا.
+// ---------------------------------------------------------------------------
+function avatarNode({ url, name, sizeClass }) {
+  const cls = 'avatar' + (sizeClass ? ' ' + sizeClass : '');
+  if (url) return el('img', { src: url, class: cls, style: 'object-fit:cover', alt: name || '' });
+  return el('div', { class: cls }, [(name || '?')[0].toUpperCase()]);
+}
+App.avatar = avatarNode;
+
+// يفتح منتقي ملفات، يقتصّ الصورة مربعة من المنتصف، ويصغّرها إلى JPEG صغير الحجم
+// قبل الرفع — بدون أي تخزين خارجي، فقط نص data: URL يُحفظ في قاعدة البيانات.
+App.pickAvatarImage = function (maxSize = 256, quality = 0.82) {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const size = Math.min(img.width, img.height);
+          const sx = (img.width - size) / 2;
+          const sy = (img.height - size) / 2;
+          const canvas = document.createElement('canvas');
+          canvas.width = maxSize;
+          canvas.height = maxSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, sx, sy, size, size, 0, 0, maxSize, maxSize);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(null);
+        img.src = reader.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  });
+};
+
+// ---------------------------------------------------------------------------
 // الاتصال بالـ API
 // ---------------------------------------------------------------------------
 // الموقع منشور على ووركر واحد يقدّم الواجهة والـ API معًا من نفس النطاق، لكن
@@ -355,6 +399,9 @@ async function renderRoute() {
 }
 window.addEventListener('hashchange', renderRoute);
 App.navigate = (hash) => { location.hash = hash; };
+// يعيد رسم الصفحة الحالية (الهيكل والمحتوى) دون تغيير الرابط — مفيد بعد تعديل
+// بيانات المستخدم نفسه (مثل الصورة الشخصية) حيث لا يُطلق hashchange لنفس الرابط.
+App.rerender = renderRoute;
 
 // ---------------------------------------------------------------------------
 // القالب العام للموقع (الشريط الجانبي والشريط العلوي)
@@ -427,7 +474,7 @@ function renderShell() {
       connBadge,
       notifBell,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
-        el('div', { class: 'avatar avatar-sm' }, [(user.displayName || '?')[0].toUpperCase()]),
+        App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
         el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
         el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
       ]),

@@ -39,7 +39,7 @@
         container.appendChild(
           el('div', { class: 'employee-pick-grid' }, employees.map((e) =>
             el('div', { class: 'employee-pick', onclick: () => { selectedEmployee = e; screen = 'employee-form'; render(); } }, [
-              el('div', { class: 'avatar' }, [e.avatar_initial]),
+              App.avatar({ url: e.avatar_data_url, name: e.name }),
               el('div', { style: 'font-weight:700;font-size:13px' }, [e.name]),
             ])
           ))

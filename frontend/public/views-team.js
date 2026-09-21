@@ -64,7 +64,7 @@
       employees.forEach((e) => {
         const card = el('div', { class: 'card card-pad' });
         card.appendChild(el('div', { class: 'flex-between' }, [
-          el('div', { class: 'flex gap-8', style: 'align-items:center' }, [el('div', { class: 'avatar' }, [e.name[0]]), el('div', {}, [el('div', { style: 'font-weight:800' }, [e.name]), e.nameAr ? el('div', { class: 'faint' }, [e.nameAr]) : null])]),
+          el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name }), el('div', {}, [el('div', { style: 'font-weight:800' }, [e.name]), e.nameAr ? el('div', { class: 'faint' }, [e.nameAr]) : null])]),
         ]));
         card.appendChild(el('div', { class: 'mt-12' }, [badges.availability(e.availability)]));
         card.appendChild(el('div', { class: 'mt-12', style: 'font-size:12.5px' }, [
@@ -80,6 +80,15 @@
             ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'].map((a) => el('option', { value: a, selected: a === e.availability || undefined }, [AVAILABILITY_LABELS[a]]))),
         ]));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => setDailyGoalModal(e) }, ['🎯 تحديد هدف يومي']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
+          const dataUrl = await App.pickAvatarImage();
+          if (!dataUrl) return;
+          try {
+            await api('/employees/' + e.id + '/avatar', { method: 'POST', body: { dataUrl } });
+            toast('تم تحديث الصورة الشخصية', 'success');
+            load();
+          } catch (err) { toast(err.message, 'error'); }
+        } }, ['📷 تغيير الصورة الشخصية']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
         grid.appendChild(card);
       });
@@ -167,6 +176,7 @@
     CALL_INITIATED: 'بدء اتصال', WHATSAPP_CONTACT_INITIATED: 'تواصل عبر واتساب', FOLLOWUP_CREATED: 'إنشاء متابعة',
     FOLLOWUP_UPDATED: 'تعديل متابعة', FOLLOWUP_COMPLETED: 'إنجاز متابعة', FOLLOWUP_CANCELLED: 'إلغاء متابعة',
     DISTRIBUTION_CREATED: 'توزيع عملاء', EMPLOYEE_STATUS_CHANGED: 'تغيير حالة موظف', DAILY_GOAL_SET: 'تحديد هدف يومي',
+    EMPLOYEE_AVATAR_UPDATED: 'تحديث الصورة الشخصية', EMPLOYEE_AVATAR_REMOVED: 'حذف الصورة الشخصية',
     BRANCH_CREATED: 'إنشاء فرع', BRANCH_VISIT_CREATED: 'تسجيل زيارة فرع', DEAL_DONE_CREATED: 'تسجيل صفقة',
     PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
     SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',
@@ -191,6 +201,41 @@
     const user = App.state.user;
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['الملف الشخصي'])]));
+
+    if (user.role === 'employee' && user.employeeId) {
+      const avatarCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:420px;text-align:center' });
+      avatarCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['الصورة الشخصية']));
+      const avatarPreviewWrap = el('div', { style: 'margin-bottom:12px' }, [App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: '', })]);
+      avatarPreviewWrap.querySelector('.avatar').style.width = '84px';
+      avatarPreviewWrap.querySelector('.avatar').style.height = '84px';
+      avatarPreviewWrap.querySelector('.avatar').style.fontSize = '28px';
+      avatarPreviewWrap.querySelector('.avatar').style.margin = '0 auto';
+      avatarCard.appendChild(avatarPreviewWrap);
+      const btnRow = el('div', { class: 'flex gap-8 wrap', style: 'justify-content:center' });
+      btnRow.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: async () => {
+        const dataUrl = await App.pickAvatarImage();
+        if (!dataUrl) return;
+        try {
+          await api('/employees/' + user.employeeId + '/avatar', { method: 'POST', body: { dataUrl } });
+          App.state.user = { ...App.state.user, avatarUrl: dataUrl };
+          toast('تم تحديث الصورة الشخصية', 'success');
+          App.rerender();
+        } catch (e) { toast(e.message, 'error'); }
+      } }, ['📷 تغيير الصورة']));
+      if (user.avatarUrl) {
+        btnRow.appendChild(el('button', { class: 'btn btn-sm btn-danger', onclick: async () => {
+          try {
+            await api('/employees/' + user.employeeId + '/avatar', { method: 'DELETE' });
+            App.state.user = { ...App.state.user, avatarUrl: null };
+            toast('تم حذف الصورة الشخصية', 'success');
+            App.rerender();
+          } catch (e) { toast(e.message, 'error'); }
+        } }, ['🗑 إزالة الصورة']));
+      }
+      avatarCard.appendChild(btnRow);
+      container.appendChild(avatarCard);
+    }
+
     const card = el('div', { class: 'card card-pad', style: 'max-width:420px' });
     card.appendChild(el('div', { class: 'flex-between mb-8' }, [el('span', { class: 'muted' }, ['الاسم']), user.displayName]));
     card.appendChild(el('div', { class: 'flex-between mb-8' }, [el('span', { class: 'muted' }, ['اسم المستخدم']), user.username]));

@@ -61,7 +61,7 @@
           teamWrap.appendChild(
             el('div', { class: 'card card-pad', onclick: () => App.navigate('#/customers?employeeId=' + e.id) }, [
               el('div', { class: 'flex-between' }, [
-                el('div', { class: 'flex gap-8', style: 'align-items:center' }, [el('div', { class: 'avatar avatar-sm' }, [e.name[0]]), el('div', { style: 'font-weight:700' }, [e.name])]),
+                el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name, sizeClass: 'avatar-sm' }), el('div', { style: 'font-weight:700' }, [e.name])]),
                 badges.availability(e.availability),
               ]),
               el('div', { class: 'mt-12 muted', style: 'font-size:12.5px' }, [`موزّع: ${e.assigned} · مغلق: ${e.closed} · متأخر: ${e.followupsOverdue}`]),
