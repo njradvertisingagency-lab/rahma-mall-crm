@@ -44,7 +44,7 @@ export async function requireAuth(c, next) {
   const db = c.env.DB;
   const session = await db
     .prepare(
-      `SELECT s.token, s.user_id, s.expires_at, u.username, u.role AS user_role, u.display_name, u.active
+      `SELECT s.token, s.user_id, s.expires_at, u.username, u.role AS user_role, u.display_name, u.active, u.is_owner
        FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
     )
     .bind(token)
@@ -75,6 +75,7 @@ export async function requireAuth(c, next) {
     role: session.user_role,
     displayName: session.display_name,
     employeeId,
+    isOwner: !!session.is_owner,
     token,
   });
   await next();

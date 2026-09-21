@@ -95,6 +95,136 @@ function round1(n) {
   return Math.round(n * 10) / 10;
 }
 
+// ---------------------------------------------------------------------------
+// PERFORMANCE-OVER-TIME — one row per employee per calendar day. The cron
+// (every minute — see index.js) upserts *today's* row every tick so it
+// always reflects live numbers; once the day rolls over, that row is never
+// touched again and becomes frozen history. This never replaces the live
+// /employees endpoint (still the source of truth for "right now") — it only
+// adds a historical trail so a trend chart is possible at all.
+// ---------------------------------------------------------------------------
+export async function recordDailySnapshots(db) {
+  const weights = await getPerformanceWeights(db);
+  const today = new Date().toISOString().slice(0, 10);
+  const employees = (await db.prepare(`SELECT id FROM employees WHERE active = 1`).all()).results;
+  for (const emp of employees) {
+    const counters = await computeEmployeeCounters(db, emp.id);
+    const { score } = computeScore(counters, weights);
+    await db
+      .prepare(
+        `INSERT INTO performance_snapshots (employee_id, snapshot_date, score, completion_rate, closed, assigned, followups_completed, followups_overdue, avg_response_minutes, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+         ON CONFLICT(employee_id, snapshot_date) DO UPDATE SET
+           score = excluded.score, completion_rate = excluded.completion_rate, closed = excluded.closed,
+           assigned = excluded.assigned, followups_completed = excluded.followups_completed,
+           followups_overdue = excluded.followups_overdue, avg_response_minutes = excluded.avg_response_minutes,
+           updated_at = excluded.updated_at`
+      )
+      .bind(emp.id, today, score, counters.completionRate, counters.closed, counters.assigned, counters.followupsCompleted, counters.followupsOverdue, counters.avgResponseMinutes)
+      .run();
+  }
+  return { snapshotted: employees.length, date: today };
+}
+
+/** History for the trend chart — oldest first, capped to `days` calendar days including today. */
+export async function getPerformanceHistory(db, employeeId, days) {
+  const rows = await db
+    .prepare(
+      `SELECT snapshot_date, score, completion_rate, closed, assigned, followups_completed, followups_overdue, avg_response_minutes
+       FROM performance_snapshots WHERE employee_id = ? ORDER BY snapshot_date DESC LIMIT ?`
+    )
+    .bind(employeeId, days)
+    .all();
+  return rows.results.reverse().map((r) => ({
+    date: r.snapshot_date,
+    score: r.score,
+    completionRate: r.completion_rate,
+    closed: r.closed,
+    assigned: r.assigned,
+    followupsCompleted: r.followups_completed,
+    followupsOverdue: r.followups_overdue,
+    avgResponseMinutes: r.avg_response_minutes,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// ACHIEVEMENTS / BADGES — computed live, never stored (same "transparent,
+// DB-derived" principle as the score itself). Weekly badges look at the
+// last 7 days; monthly badges look at the current calendar month so far.
+// ---------------------------------------------------------------------------
+const BADGE_DEFS = [
+  { key: 'FASTEST_RESPONSE_WEEK', icon: '⚡', label: 'أسرع استجابة الأسبوع', period: 'week' },
+  { key: 'TOP_CLOSER_MONTH', icon: '🥇', label: 'أعلى إغلاق الشهر', period: 'month' },
+  { key: 'FOLLOWUP_CHAMPION_WEEK', icon: '🎯', label: 'الأكثر التزامًا بالمتابعات هذا الأسبوع', period: 'week' },
+  { key: 'ZERO_COMPLAINTS_MONTH', icon: '🌟', label: 'صفر شكاوى هذا الشهر', period: 'month' },
+];
+
+export async function computeBadges(db) {
+  const employees = (await db.prepare(`SELECT id, name, name_ar FROM employees WHERE active = 1`).all()).results;
+  if (employees.length === 0) return { weekly: [], monthly: [] };
+
+  const weekStart = new Date(Date.now() - 7 * 86400000).toISOString();
+  const monthStart = new Date().toISOString().slice(0, 7) + '-01T00:00:00.000Z';
+
+  // أسرع استجابة الأسبوع — أقل متوسط زمن استجابة (من NEW إلى أول تغيير حالة) خلال آخر ٧ أيام.
+  let fastestResponse = null;
+  for (const emp of employees) {
+    const row = await db
+      .prepare(
+        `SELECT AVG((julianday(h.changed_at) - julianday(c.assigned_at)) * 24 * 60) AS avg_minutes, COUNT(*) AS n
+         FROM customer_status_history h JOIN customers c ON c.id = h.customer_id
+         WHERE c.assigned_employee_id = ? AND h.from_status = 'NEW' AND c.assigned_at IS NOT NULL AND h.changed_at >= ?`
+      )
+      .bind(emp.id, weekStart)
+      .first();
+    if (row.n > 0 && row.avg_minutes != null) {
+      if (!fastestResponse || row.avg_minutes < fastestResponse.avgMinutes) fastestResponse = { emp, avgMinutes: row.avg_minutes };
+    }
+  }
+
+  // أعلى إغلاق الشهر — أكثر عدد عملاء تم إغلاقهم (حالة CLOSED) هذا الشهر.
+  let topCloser = null;
+  for (const emp of employees) {
+    const row = await db
+      .prepare(`SELECT COUNT(*) AS n FROM customer_status_history h JOIN customers c ON c.id = h.customer_id WHERE c.assigned_employee_id = ? AND h.to_status = 'CLOSED' AND h.changed_at >= ?`)
+      .bind(emp.id, monthStart)
+      .first();
+    if (row.n > 0 && (!topCloser || row.n > topCloser.count)) topCloser = { emp, count: row.n };
+  }
+
+  // الأكثر التزامًا بالمتابعات — أعلى نسبة إنجاز متابعات مجدولة هذا الأسبوع (بحد أدنى ٣ متابعات).
+  let followupChampion = null;
+  for (const emp of employees) {
+    const row = await db
+      .prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS done FROM followups WHERE employee_id = ? AND created_at >= ?`)
+      .bind(emp.id, weekStart)
+      .first();
+    if (row.total >= 3) {
+      const rate = row.done / row.total;
+      if (!followupChampion || rate > followupChampion.rate) followupChampion = { emp, rate, total: row.total, done: row.done };
+    }
+  }
+
+  // صفر شكاوى الشهر — موظف لديه عملاء موزّعون هذا الشهر لكن بدون أي شكوى مسجّلة.
+  const zeroComplaints = [];
+  for (const emp of employees) {
+    const [assignedRow, complaintsRow] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE assigned_employee_id = ? AND archived = 0`).bind(emp.id).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE employee_id = ? AND created_at >= ?`).bind(emp.id, monthStart).first(),
+    ]);
+    if (assignedRow.n > 0 && complaintsRow.n === 0) zeroComplaints.push(emp);
+  }
+
+  const weekly = [];
+  const monthly = [];
+  if (fastestResponse) weekly.push({ key: 'FASTEST_RESPONSE_WEEK', icon: '⚡', label: 'أسرع استجابة الأسبوع', employeeId: fastestResponse.emp.id, employeeName: fastestResponse.emp.name, detail: `${Math.round(fastestResponse.avgMinutes)} دقيقة في المتوسط` });
+  if (followupChampion) weekly.push({ key: 'FOLLOWUP_CHAMPION_WEEK', icon: '🎯', label: 'الأكثر التزامًا بالمتابعات', employeeId: followupChampion.emp.id, employeeName: followupChampion.emp.name, detail: `${followupChampion.done}/${followupChampion.total} هذا الأسبوع` });
+  if (topCloser) monthly.push({ key: 'TOP_CLOSER_MONTH', icon: '🥇', label: 'أعلى إغلاق الشهر', employeeId: topCloser.emp.id, employeeName: topCloser.emp.name, detail: `${topCloser.count} عميل مغلق` });
+  zeroComplaints.forEach((emp) => monthly.push({ key: 'ZERO_COMPLAINTS_MONTH', icon: '🌟', label: 'صفر شكاوى هذا الشهر', employeeId: emp.id, employeeName: emp.name, detail: 'سجل نظيف هذا الشهر' }));
+
+  return { weekly, monthly };
+}
+
 export async function computeAllEmployeeStats(db) {
   const weights = await getPerformanceWeights(db);
   const employees = (
