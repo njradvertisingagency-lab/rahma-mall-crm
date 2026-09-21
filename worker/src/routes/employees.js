@@ -79,6 +79,32 @@ employeeRoutes.patch('/:id/username', requireRole('team_leader'), async (c) => {
   return c.json({ ok: true, username });
 });
 
+// Change an employee's display name (English + optional Arabic). Team Leader
+// only. Keeps three places in sync so the rename shows up everywhere at
+// once: employees.name/name_ar (used across customer lists, distributions,
+// reports), employees.avatar_initial (derived from the new name, unless a
+// real photo is already set), and users.display_name (topbar, activity log
+// actor names, chat).
+employeeRoutes.patch('/:id/name', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const name = String(body.name || '').trim();
+  const nameAr = body.nameAr != null ? String(body.nameAr).trim() : null;
+
+  if (!name) return jsonError(c, 400, 'اسم الموظف مطلوب', 'MISSING_NAME');
+
+  const emp = await db.prepare(`SELECT user_id, name AS oldName, name_ar AS oldNameAr, avatar_data_url FROM employees WHERE id = ?`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+
+  const avatarInitial = name[0].toUpperCase();
+  await db.prepare(`UPDATE employees SET name = ?, name_ar = ?, avatar_initial = ?, updated_at = ? WHERE id = ?`).bind(name, nameAr, avatarInitial, nowIso(), id).run();
+  await db.prepare(`UPDATE users SET display_name = ?, updated_at = ? WHERE id = ?`).bind(name, nowIso(), emp.user_id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_NAME_CHANGED', entityType: 'employee', entityId: String(id), metadata: { from: { name: emp.oldName, nameAr: emp.oldNameAr }, to: { name, nameAr } } });
+  return c.json({ ok: true, name, nameAr });
+});
+
 // Reset a forgotten password on the employee's behalf. Team Leader only —
 // no need to know the old password, this is exactly the "employee forgot
 // their password" recovery path.
