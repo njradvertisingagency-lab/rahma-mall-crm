@@ -97,12 +97,14 @@ function round1(n) {
 
 export async function computeAllEmployeeStats(db) {
   const weights = await getPerformanceWeights(db);
-  const employees = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results;
+  const employees = (
+    await db.prepare(`SELECT e.*, u.username FROM employees e JOIN users u ON u.id = e.user_id WHERE e.active = 1`).all()
+  ).results;
   const stats = [];
   for (const emp of employees) {
     const counters = await computeEmployeeCounters(db, emp.id);
     const { score, breakdown } = computeScore(counters, weights);
-    stats.push({ employee: { id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, avatarUrl: emp.avatar_data_url }, ...counters, performanceScore: score, scoreBreakdown: breakdown });
+    stats.push({ employee: { id: emp.id, name: emp.name, nameAr: emp.name_ar, username: emp.username, availability: emp.availability, avatarUrl: emp.avatar_data_url }, ...counters, performanceScore: score, scoreBreakdown: breakdown });
   }
   return { weights, stats };
 }
