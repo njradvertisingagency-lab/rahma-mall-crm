@@ -17,9 +17,14 @@ import { presenceRoutes } from './routes/presence.js';
 import { salesRoutes } from './routes/sales.js';
 import { commandCenterRoutes } from './routes/command-center.js';
 import { savedFilterRoutes } from './routes/saved-filters.js';
+import { complaintRoutes } from './routes/complaints.js';
+import { favoriteRoutes } from './routes/favorites.js';
+import { chatRoutes } from './routes/chat.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
-import { sweepSlaBreaches } from './lib/sla.js';
+import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
+import { recordDailySnapshots } from './lib/performance.js';
+import { sweepDnd } from './lib/dnd.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
 
@@ -81,6 +86,9 @@ api.route('/presence', presenceRoutes);
 api.route('/sales', salesRoutes);
 api.route('/command-center', commandCenterRoutes);
 api.route('/saved-filters', savedFilterRoutes);
+api.route('/complaints', complaintRoutes);
+api.route('/favorites', favoriteRoutes);
+api.route('/chat', chatRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
@@ -100,13 +108,18 @@ export default {
     return app.fetch(request, env, ctx);
   },
 
-  // Cron trigger (every minute — see wrangler.toml). Three independent sweeps:
-  // overdue follow-ups, employee idle/offline presence detection, and SLA
-  // warning/breach detection. Each is isolated so one failing never blocks
-  // the others.
+  // Cron trigger (every minute — see wrangler.toml). Independent sweeps —
+  // each isolated so one failing never blocks the others: overdue
+  // follow-ups, employee idle/offline presence, SLA warning/breach
+  // detection, "customer waiting for you" staleness alerts, today's
+  // performance snapshot (upserted every tick), and temporary
+  // Do-Not-Disturb auto-revert.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(sweepOverdueFollowups(env));
     ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
     ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
+    ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
+    ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
+    ctx.waitUntil(sweepDnd(env.DB, env).catch((e) => console.error('sweepDnd failed', e)));
   },
 };
