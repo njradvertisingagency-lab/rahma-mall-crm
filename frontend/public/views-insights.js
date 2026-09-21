@@ -147,6 +147,82 @@
       } catch (e) { toast(e.message, 'error'); }
     }
     await loadTrend();
+
+    // وقت أونلاين على الموقع — من نظام الحضور الفعلي (تسجيل دخول/خروج + نبضات
+    // نشاط)، وليس رقمًا مُقدَّرًا. "اليوم" و"هذا الأسبوع" من سجل الجلسات
+    // الفعلي، و"الإجمالي" من عداد العمر الكلي لحالة employee_presence.
+    const onlineCard = el('div', { class: 'card card-pad mt-16' });
+    onlineCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['⏱ الوقت أونلاين على الموقع']));
+    const onlineBox = el('div', { class: 'muted' }, ['جارِ التحميل…']);
+    onlineCard.appendChild(onlineBox);
+    container.appendChild(onlineCard);
+    async function loadOnlineTime() {
+      try {
+        const { onlineTime } = await api('/presence/me');
+        onlineBox.innerHTML = '';
+        if (!onlineTime) { onlineBox.appendChild(el('div', { class: 'muted' }, ['غير متاح لهذا الحساب.'])); return; }
+        onlineBox.appendChild(el('div', { class: 'kpi-grid' }, [
+          ['اليوم', App.fmt.duration(onlineTime.todaySeconds)],
+          ['هذا الأسبوع', App.fmt.duration(onlineTime.weekSeconds)],
+          ['الإجمالي منذ البداية', App.fmt.duration(onlineTime.allTimeSeconds)],
+        ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value', style: 'font-size:18px' }, [v]), el('div', { class: 'kpi-label' }, [l])]))));
+        const statusRow = el('div', { class: 'flex-between mt-12' }, [
+          el('span', { class: 'muted' }, ['الحالة الآن']),
+          badges.presence({ online: onlineTime.online, activityState: onlineTime.activityState }),
+        ]);
+        onlineBox.appendChild(statusRow);
+        if (onlineTime.online && onlineTime.currentSessionDurationSeconds) {
+          onlineBox.appendChild(el('div', { class: 'faint mt-4' }, [`الجلسة الحالية مستمرة منذ ${App.fmt.duration(onlineTime.currentSessionDurationSeconds)}`]));
+        } else if (onlineTime.lastLogoutAt) {
+          onlineBox.appendChild(el('div', { class: 'faint mt-4' }, [`آخر تسجيل خروج: ${fmt.ago(onlineTime.lastLogoutAt)}`]));
+        }
+      } catch (e) {
+        onlineBox.innerHTML = '';
+        onlineBox.appendChild(el('div', { class: 'muted' }, ['تعذّر تحميل بيانات الوقت أونلاين.']));
+      }
+    }
+    await loadOnlineTime();
+
+    // سجل كامل لكل حدث قام به هذا الموظف أو تعلّق بأحد عملائه — نفس البيانات
+    // المستخدمة في صفحة "سجل الأنشطة" الخاصة بقائد الفريق (GET /activity)،
+    // والتي تُقيَّد تلقائيًا في الـ backend لحساب الموظف على نشاطه هو فقط.
+    const activityCard = el('div', { class: 'card card-pad mt-16' });
+    activityCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['📋 كل نشاطاتي']));
+    const activityBox = el('div', { class: 'muted' }, ['جارِ التحميل…']);
+    activityCard.appendChild(activityBox);
+    const moreBtnWrap = el('div', { class: 'mt-12', style: 'text-align:center' });
+    activityCard.appendChild(moreBtnWrap);
+    container.appendChild(activityCard);
+
+    const ACTIVITY_PAGE_SIZE = 20;
+    let activityPage = 1;
+    let loadedActivity = [];
+    function renderActivity() {
+      activityBox.innerHTML = '';
+      if (loadedActivity.length === 0) { activityBox.appendChild(el('div', { class: 'empty-state' }, ['لا يوجد نشاط مسجّل بعد.'])); return; }
+      activityBox.appendChild(el('div', { class: 'timeline' }, loadedActivity.map((a) => el('div', { class: 'timeline-item' }, [
+        el('div', { class: 'timeline-time' }, [fmt.dateTime(a.created_at)]),
+        el('div', { class: 'timeline-text' }, [
+          (App.labels.activity[a.action] || a.action.replace(/_/g, ' ').toLowerCase()) + (a.entity_id ? ' · ' + a.entity_id : ''),
+        ]),
+      ]))));
+    }
+    async function loadActivity(append) {
+      try {
+        const { activity } = await api(`/activity?page=${activityPage}&pageSize=${ACTIVITY_PAGE_SIZE}`);
+        loadedActivity = append ? loadedActivity.concat(activity) : activity;
+        renderActivity();
+        moreBtnWrap.innerHTML = '';
+        if (activity.length === ACTIVITY_PAGE_SIZE) {
+          moreBtnWrap.appendChild(el('button', { class: 'btn btn-sm btn-outline', onclick: () => { activityPage++; loadActivity(true); } }, ['تحميل المزيد']));
+        }
+      } catch (e) {
+        activityBox.innerHTML = '';
+        activityBox.appendChild(el('div', { class: 'muted' }, ['تعذّر تحميل سجل الأنشطة.']));
+      }
+    }
+    await loadActivity(false);
+
     return container;
   });
 

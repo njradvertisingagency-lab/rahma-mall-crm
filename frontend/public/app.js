@@ -76,7 +76,18 @@ function timeAgo(iso) {
   if (s < 86400) return 'منذ ' + Math.floor(s / 3600) + ' س';
   return 'منذ ' + Math.floor(s / 86400) + ' يوم';
 }
-App.fmt = { dateTime: fmtDateTime, date: fmtDate, ago: timeAgo };
+/** ٤٥ د / ٣س ١٢د / ٢ يوم ٥س — لعرض مدد زمنية (وقت أونلاين، مدة جلسة) بشكل مقروء. */
+function fmtDuration(totalSeconds) {
+  const s = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  if (s < 60) return 'أقل من دقيقة';
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const mins = Math.floor((s % 3600) / 60);
+  if (days > 0) return `${days} يوم${hours ? ' ' + hours + 'س' : ''}`;
+  if (hours > 0) return `${hours}س${mins ? ' ' + mins + 'د' : ''}`;
+  return `${mins}د`;
+}
+App.fmt = { dateTime: fmtDateTime, date: fmtDate, ago: timeAgo, duration: fmtDuration };
 
 const STATUS_LABELS = {
   NEW: 'جديد', CALLING: 'جاري الاتصال', NO_ANSWER: 'لا يوجد رد', BUSY: 'مشغول',
@@ -125,7 +136,31 @@ function dealStatusBadge(status) {
   return el('span', { class: 'badge', style }, [label]);
 }
 App.badges = { status: statusBadge, priority: priorityBadge, whatsapp: waBadge, availability: availabilityBadge, presence: presenceBadge, sla: slaBadge, dealStatus: dealStatusBadge };
-App.labels = { status: STATUS_LABELS, priority: PRIORITY_LABELS };
+
+// تسميات عربية لكل أنواع أحداث سجل الأنشطة (activity_logs.action) — مشتركة بين
+// صفحة "سجل الأنشطة" الخاصة بقائد الفريق وصفحة "أدائي" الخاصة بكل موظف، حتى
+// لا يظهر نفس الحدث بصياغتين مختلفتين في مكانين.
+const ACTIVITY_ACTION_LABELS = {
+  LOGIN: 'تسجيل دخول', LOGIN_FAILED: 'محاولة دخول فاشلة', LOGOUT: 'تسجيل خروج', PASSWORD_CHANGED: 'تغيير كلمة المرور',
+  CUSTOMER_CREATED: 'إنشاء عميل', CUSTOMER_REASSIGNED: 'إعادة تعيين عميل', CUSTOMER_REOPENED: 'إعادة فتح عميل',
+  CUSTOMER_ARCHIVED: 'أرشفة عميل', CUSTOMER_RESTORED: 'استعادة عميل', CUSTOMERS_IMPORTED: 'استيراد عملاء',
+  STATUS_CHANGED: 'تغيير الحالة', PRIORITY_CHANGED: 'تغيير الأولوية', ATTRIBUTION_CHANGED: 'تغيير مصدر العميل',
+  NOTE_ADDED: 'إضافة ملاحظة', PRODUCT_INTEREST_ADDED: 'إضافة منتج مهتم به', CALL_ATTEMPT_CREATED: 'تسجيل محاولة اتصال',
+  CALL_INITIATED: 'بدء اتصال', WHATSAPP_CONTACT_INITIATED: 'تواصل عبر واتساب', FOLLOWUP_CREATED: 'إنشاء متابعة',
+  FOLLOWUP_UPDATED: 'تعديل متابعة', FOLLOWUP_COMPLETED: 'إنجاز متابعة', FOLLOWUP_CANCELLED: 'إلغاء متابعة',
+  DISTRIBUTION_CREATED: 'توزيع عملاء', EMPLOYEE_STATUS_CHANGED: 'تغيير حالة موظف', DAILY_GOAL_SET: 'تحديد هدف يومي',
+  EMPLOYEE_AVATAR_UPDATED: 'تحديث الصورة الشخصية', EMPLOYEE_AVATAR_REMOVED: 'حذف الصورة الشخصية',
+  EMPLOYEE_CREATED: 'إضافة موظف جديد', EMPLOYEE_USERNAME_CHANGED: 'تغيير اسم المستخدم', EMPLOYEE_PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
+  BRANCH_CREATED: 'إنشاء فرع', BRANCH_VISIT_CREATED: 'تسجيل زيارة فرع', DEAL_DONE_CREATED: 'تسجيل صفقة',
+  PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
+  SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',
+  BULK_STATUS: 'تعديل جماعي للحالة', BULK_PRIORITY: 'تعديل جماعي للأولوية', BULK_ARCHIVE: 'أرشفة جماعية',
+  COMPLAINT_LOGGED: 'تسجيل شكوى', COMPLAINT_DELETED: 'حذف شكوى', CHAT_MESSAGE_SENT: 'إرسال رسالة دردشة',
+  EMPLOYEE_DND_STARTED: 'تفعيل عدم الإزعاج المؤقت', EMPLOYEE_DND_CANCELLED: 'إلغاء عدم الإزعاج',
+  CUSTOMER_MARKED_VIP: 'تمييز عميل كـ VIP', CUSTOMER_UNMARKED_VIP: 'إلغاء تمييز VIP',
+};
+const ACTIVITY_ROLE_LABELS = { team_leader: 'قائد الفريق', employee: 'موظف' };
+App.labels = { status: STATUS_LABELS, priority: PRIORITY_LABELS, activity: ACTIVITY_ACTION_LABELS, role: ACTIVITY_ROLE_LABELS };
 
 // ---------------------------------------------------------------------------
 // صورة العضو الشخصية — تعرض الصورة إن وُجدت، وإلا ترجع لحرف الاسم كما كان سابقًا.

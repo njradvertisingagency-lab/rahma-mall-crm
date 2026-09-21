@@ -245,26 +245,9 @@
     return container;
   });
 
-  const ACTION_LABELS = {
-    LOGIN: 'تسجيل دخول', LOGIN_FAILED: 'محاولة دخول فاشلة', LOGOUT: 'تسجيل خروج', PASSWORD_CHANGED: 'تغيير كلمة المرور',
-    CUSTOMER_CREATED: 'إنشاء عميل', CUSTOMER_REASSIGNED: 'إعادة تعيين عميل', CUSTOMER_REOPENED: 'إعادة فتح عميل',
-    CUSTOMER_ARCHIVED: 'أرشفة عميل', CUSTOMER_RESTORED: 'استعادة عميل', CUSTOMERS_IMPORTED: 'استيراد عملاء',
-    STATUS_CHANGED: 'تغيير الحالة', PRIORITY_CHANGED: 'تغيير الأولوية', ATTRIBUTION_CHANGED: 'تغيير مصدر العميل',
-    NOTE_ADDED: 'إضافة ملاحظة', PRODUCT_INTEREST_ADDED: 'إضافة منتج مهتم به', CALL_ATTEMPT_CREATED: 'تسجيل محاولة اتصال',
-    CALL_INITIATED: 'بدء اتصال', WHATSAPP_CONTACT_INITIATED: 'تواصل عبر واتساب', FOLLOWUP_CREATED: 'إنشاء متابعة',
-    FOLLOWUP_UPDATED: 'تعديل متابعة', FOLLOWUP_COMPLETED: 'إنجاز متابعة', FOLLOWUP_CANCELLED: 'إلغاء متابعة',
-    DISTRIBUTION_CREATED: 'توزيع عملاء', EMPLOYEE_STATUS_CHANGED: 'تغيير حالة موظف', DAILY_GOAL_SET: 'تحديد هدف يومي',
-    EMPLOYEE_AVATAR_UPDATED: 'تحديث الصورة الشخصية', EMPLOYEE_AVATAR_REMOVED: 'حذف الصورة الشخصية',
-    EMPLOYEE_CREATED: 'إضافة موظف جديد', EMPLOYEE_USERNAME_CHANGED: 'تغيير اسم المستخدم', EMPLOYEE_PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
-    BRANCH_CREATED: 'إنشاء فرع', BRANCH_VISIT_CREATED: 'تسجيل زيارة فرع', DEAL_DONE_CREATED: 'تسجيل صفقة',
-    PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
-    SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',
-    BULK_STATUS: 'تعديل جماعي للحالة', BULK_PRIORITY: 'تعديل جماعي للأولوية', BULK_ARCHIVE: 'أرشفة جماعية',
-    COMPLAINT_LOGGED: 'تسجيل شكوى', COMPLAINT_DELETED: 'حذف شكوى', CHAT_MESSAGE_SENT: 'إرسال رسالة دردشة',
-    EMPLOYEE_DND_STARTED: 'تفعيل عدم الإزعاج المؤقت', EMPLOYEE_DND_CANCELLED: 'إلغاء عدم الإزعاج',
-    CUSTOMER_MARKED_VIP: 'تمييز عميل كـ VIP', CUSTOMER_UNMARKED_VIP: 'إلغاء تمييز VIP',
-  };
-  const ROLE_LABELS = { team_leader: 'قائد الفريق', employee: 'موظف' };
+  // مشتركة مع صفحة "أدائي" — انظر App.labels.activity / App.labels.role في app.js.
+  const ACTION_LABELS = App.labels.activity;
+  const ROLE_LABELS = App.labels.role;
   App.route('/activity', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['سجل الأنشطة'])]));
