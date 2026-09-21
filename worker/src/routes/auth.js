@@ -12,7 +12,7 @@ authRoutes.get('/employees-public', async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
-      `SELECT u.username, e.name, e.name_ar, e.avatar_initial
+      `SELECT u.username, e.name, e.name_ar, e.avatar_initial, e.avatar_data_url
        FROM employees e JOIN users u ON u.id = e.user_id
        WHERE e.active = 1 AND u.active = 1
        ORDER BY e.name COLLATE NOCASE`
@@ -51,10 +51,12 @@ authRoutes.post('/login', async (c) => {
 
   let employeeId = null;
   let availability = null;
+  let avatarUrl = null;
   if (user.role === 'employee') {
-    const emp = await db.prepare(`SELECT id, availability FROM employees WHERE user_id = ?`).bind(user.id).first();
+    const emp = await db.prepare(`SELECT id, availability, avatar_data_url FROM employees WHERE user_id = ?`).bind(user.id).first();
     employeeId = emp?.id ?? null;
     availability = emp?.availability ?? null;
+    avatarUrl = emp?.avatar_data_url ?? null;
   }
 
   await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent });
@@ -74,6 +76,7 @@ authRoutes.post('/login', async (c) => {
       displayName: user.display_name,
       employeeId,
       availability,
+      avatarUrl,
       mustChangePassword: !!user.must_change_password,
     },
   });
@@ -93,11 +96,13 @@ authRoutes.get('/me', requireAuth, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   let availability = null;
+  let avatarUrl = null;
   if (user.role === 'employee') {
-    const emp = await db.prepare(`SELECT availability FROM employees WHERE id = ?`).bind(user.employeeId).first();
+    const emp = await db.prepare(`SELECT availability, avatar_data_url FROM employees WHERE id = ?`).bind(user.employeeId).first();
     availability = emp?.availability ?? null;
+    avatarUrl = emp?.avatar_data_url ?? null;
   }
-  return c.json({ user: { ...user, token: undefined, availability } });
+  return c.json({ user: { ...user, token: undefined, availability, avatarUrl } });
 });
 
 authRoutes.post('/change-password', requireAuth, async (c) => {

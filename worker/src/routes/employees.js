@@ -16,7 +16,7 @@ employeeRoutes.get('/', async (c) => {
   if (user.role === 'employee') {
     const emp = await db.prepare(`SELECT * FROM employees WHERE id = ?`).bind(user.employeeId).first();
     const counters = await computeEmployeeCounters(db, user.employeeId);
-    return c.json({ employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, active: !!emp.active, ...counters }] });
+    return c.json({ employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, active: !!emp.active, avatarUrl: emp.avatar_data_url, ...counters }] });
   }
   const { weights, stats } = await computeAllEmployeeStats(db);
   return c.json({
@@ -26,6 +26,7 @@ employeeRoutes.get('/', async (c) => {
       name: s.employee.name,
       nameAr: s.employee.nameAr,
       availability: s.employee.availability,
+      avatarUrl: s.employee.avatarUrl,
       assigned: s.assigned,
       byStatus: s.byStatus,
       closed: s.closed,
@@ -129,4 +130,41 @@ employeeRoutes.post('/:id/daily-goal', requireRole('team_leader'), async (c) => 
     await broadcast(c.env, 'DAILY_GOAL_SET', { employeeId: id, goalDate }, { scope: 'user', userId: targetEmployee.user_id });
   }
   return c.json({ progress });
+});
+
+// Profile photo — stored as a small compressed data: URL (the frontend
+// resizes/crops to a square JPEG before upload), so no object-storage
+// bucket is needed. Employees may only set/remove their own; the Team
+// Leader may set/remove any employee's.
+const MAX_AVATAR_DATA_URL_LENGTH = 400000; // ~300KB raw image after base64 overhead — generous for a compressed square thumbnail
+employeeRoutes.post('/:id/avatar', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  if (user.role === 'employee' && user.employeeId !== id) {
+    return jsonError(c, 403, 'يمكنك فقط تحديث صورتك الخاصة', 'FORBIDDEN_OWNERSHIP');
+  }
+  const body = await c.req.json().catch(() => ({}));
+  const dataUrl = String(body.dataUrl || '');
+  if (!/^data:image\/(png|jpe?g|webp);base64,/.test(dataUrl)) {
+    return jsonError(c, 400, 'صيغة الصورة غير صالحة', 'INVALID_IMAGE');
+  }
+  if (dataUrl.length > MAX_AVATAR_DATA_URL_LENGTH) {
+    return jsonError(c, 400, 'حجم الصورة كبير جدًا', 'IMAGE_TOO_LARGE');
+  }
+  await db.prepare(`UPDATE employees SET avatar_data_url = ?, updated_at = ? WHERE id = ?`).bind(dataUrl, nowIso(), id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_AVATAR_UPDATED', entityType: 'employee', entityId: String(id) });
+  return c.json({ ok: true, avatarUrl: dataUrl });
+});
+
+employeeRoutes.delete('/:id/avatar', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  if (user.role === 'employee' && user.employeeId !== id) {
+    return jsonError(c, 403, 'يمكنك فقط حذف صورتك الخاصة', 'FORBIDDEN_OWNERSHIP');
+  }
+  await db.prepare(`UPDATE employees SET avatar_data_url = NULL, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_AVATAR_REMOVED', entityType: 'employee', entityId: String(id) });
+  return c.json({ ok: true });
 });
