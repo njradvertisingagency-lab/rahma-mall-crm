@@ -150,7 +150,7 @@ const ACTIVITY_ACTION_LABELS = {
   FOLLOWUP_UPDATED: 'تعديل متابعة', FOLLOWUP_COMPLETED: 'إنجاز متابعة', FOLLOWUP_CANCELLED: 'إلغاء متابعة',
   DISTRIBUTION_CREATED: 'توزيع عملاء', EMPLOYEE_STATUS_CHANGED: 'تغيير حالة موظف', DAILY_GOAL_SET: 'تحديد هدف يومي',
   EMPLOYEE_AVATAR_UPDATED: 'تحديث الصورة الشخصية', EMPLOYEE_AVATAR_REMOVED: 'حذف الصورة الشخصية',
-  EMPLOYEE_CREATED: 'إضافة موظف جديد', EMPLOYEE_USERNAME_CHANGED: 'تغيير اسم المستخدم', EMPLOYEE_PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
+  EMPLOYEE_CREATED: 'إضافة موظف جديد', EMPLOYEE_USERNAME_CHANGED: 'تغيير اسم المستخدم', EMPLOYEE_NAME_CHANGED: 'تغيير اسم الموظف', EMPLOYEE_PASSWORD_RESET: 'إعادة تعيين كلمة المرور',
   BRANCH_CREATED: 'إنشاء فرع', BRANCH_VISIT_CREATED: 'تسجيل زيارة فرع', DEAL_DONE_CREATED: 'تسجيل صفقة',
   PURCHASE_UPDATED: 'تعديل عملية شراء', PURCHASE_CANCELLED: 'إلغاء عملية شراء', REFUND_CREATED: 'تسجيل استرجاع',
   SETTINGS_UPDATED: 'تحديث الإعدادات', AI_QUESTION_ASKED: 'سؤال للمساعد الذكي',

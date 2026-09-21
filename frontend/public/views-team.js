@@ -94,6 +94,28 @@
     );
   }
 
+  function editNameModal(e, onDone) {
+    const name = el('input', { value: e.name || '' });
+    const nameAr = el('input', { value: e.nameAr || '' });
+    const body = el('div', {}, [
+      el('div', { class: 'field' }, [el('label', {}, ['الاسم']), name]),
+      el('div', { class: 'field' }, [el('label', {}, ['الاسم بالعربي (اختياري)']), nameAr]),
+    ]);
+    const dlg = modal(`تعديل اسم الموظف — ${e.name}`, body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn btn-primary', onclick: async () => {
+        if (!name.value.trim()) { toast('اسم الموظف مطلوب', 'error'); return; }
+        try {
+          await api('/employees/' + e.id + '/name', { method: 'PATCH', body: { name: name.value.trim(), nameAr: nameAr.value.trim() } });
+          toast('تم تعديل اسم الموظف', 'success');
+          dlg.close();
+          onDone();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['حفظ'])
+    );
+  }
+
   function resetPasswordModal(e) {
     const password = el('input', { type: 'password', placeholder: '٨ أحرف على الأقل' });
     const body = el('div', {}, [el('div', { class: 'field' }, [el('label', {}, [`كلمة مرور جديدة — ${e.name}`]), password])]);
@@ -165,6 +187,7 @@
             load();
           } catch (err) { toast(err.message, 'error'); }
         } }, ['📷 تغيير الصورة الشخصية']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editNameModal(e, load) }, ['✏️ تعديل اسم الموظف']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editUsernameModal(e, load) }, ['✏️ تعديل اسم المستخدم']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => resetPasswordModal(e) }, ['🔑 إعادة تعيين كلمة المرور']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
