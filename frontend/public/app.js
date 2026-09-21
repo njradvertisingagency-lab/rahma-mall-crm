@@ -494,6 +494,7 @@ function renderShell() {
   let nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
   if (user.role === 'team_leader' && user.isOwner) nav = [...nav, NAV_TL_OWNER_EXTRA];
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
+  const chatNavBadge = renderChatNavBadge();
 
   const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
     el('div', { class: 'sidebar-brand' }, [
@@ -522,7 +523,6 @@ function renderShell() {
 
   const connBadge = renderConnBadge();
   const notifBell = renderNotifBell();
-  const chatNavBadge = renderChatNavBadge();
   const topbar = el('div', { class: 'topbar' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
