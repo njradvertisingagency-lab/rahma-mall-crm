@@ -4,11 +4,108 @@ import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
+import { hashPassword, randomSaltHex } from '../lib/passwords.js';
 
 export const employeeRoutes = new Hono();
 employeeRoutes.use('*', requireAuth);
 
 const AVAILABILITY = ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'];
+
+// Create a new employee account (user + employee profile in one step). Team
+// Leader only — this is how new team members get onboarded without needing
+// direct database access.
+employeeRoutes.post('/', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const name = String(body.name || '').trim();
+  const nameAr = body.nameAr ? String(body.nameAr).trim() : null;
+  const username = String(body.username || '').trim();
+  const password = String(body.password || '');
+
+  if (!name) return jsonError(c, 400, 'اسم الموظف مطلوب', 'MISSING_NAME');
+  if (!username) return jsonError(c, 400, 'اسم المستخدم مطلوب', 'MISSING_USERNAME');
+  if (!/^[A-Za-z0-9_.-]{3,40}$/.test(username)) {
+    return jsonError(c, 400, 'اسم المستخدم يجب أن يكون بالإنجليزية والأرقام فقط (٣ أحرف على الأقل)', 'INVALID_USERNAME');
+  }
+  if (password.length < 8) return jsonError(c, 400, 'يجب أن تتكون كلمة المرور من ٨ أحرف على الأقل', 'WEAK_PASSWORD');
+
+  const existing = await db.prepare(`SELECT id FROM users WHERE username = ?`).bind(username).first();
+  if (existing) return jsonError(c, 409, 'اسم المستخدم مستخدم بالفعل', 'USERNAME_TAKEN');
+
+  const salt = randomSaltHex();
+  const hash = await hashPassword(password, salt);
+  const avatarInitial = name[0].toUpperCase();
+
+  const newUser = await db
+    .prepare(
+      `INSERT INTO users (username, password_hash, password_salt, role, display_name, active, must_change_password)
+       VALUES (?, ?, ?, 'employee', ?, 1, 0) RETURNING id`
+    )
+    .bind(username, hash, salt, name)
+    .first();
+
+  const newEmployee = await db
+    .prepare(
+      `INSERT INTO employees (user_id, name, name_ar, avatar_initial, availability, active)
+       VALUES (?, ?, ?, ?, 'AVAILABLE', 1) RETURNING id`
+    )
+    .bind(newUser.id, name, nameAr, avatarInitial)
+    .first();
+
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_CREATED', entityType: 'employee', entityId: String(newEmployee.id), metadata: { username, name } });
+  return c.json({ ok: true, employeeId: newEmployee.id });
+});
+
+// Change an employee's username. Team Leader only.
+employeeRoutes.patch('/:id/username', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const username = String(body.username || '').trim();
+
+  if (!/^[A-Za-z0-9_.-]{3,40}$/.test(username)) {
+    return jsonError(c, 400, 'اسم المستخدم يجب أن يكون بالإنجليزية والأرقام فقط (٣ أحرف على الأقل)', 'INVALID_USERNAME');
+  }
+  const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+
+  const existing = await db.prepare(`SELECT id FROM users WHERE username = ? AND id != ?`).bind(username, emp.user_id).first();
+  if (existing) return jsonError(c, 409, 'اسم المستخدم مستخدم بالفعل', 'USERNAME_TAKEN');
+
+  await db.prepare(`UPDATE users SET username = ?, updated_at = ? WHERE id = ?`).bind(username, nowIso(), emp.user_id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_USERNAME_CHANGED', entityType: 'employee', entityId: String(id), metadata: { username } });
+  return c.json({ ok: true, username });
+});
+
+// Reset a forgotten password on the employee's behalf. Team Leader only —
+// no need to know the old password, this is exactly the "employee forgot
+// their password" recovery path.
+employeeRoutes.post('/:id/reset-password', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+  const newPassword = String(body.newPassword || '');
+
+  if (newPassword.length < 8) return jsonError(c, 400, 'يجب أن تتكون كلمة المرور من ٨ أحرف على الأقل', 'WEAK_PASSWORD');
+
+  const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+
+  const salt = randomSaltHex();
+  const hash = await hashPassword(newPassword, salt);
+  await db
+    .prepare(`UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?`)
+    .bind(hash, salt, nowIso(), emp.user_id)
+    .run();
+  // Sign the employee out everywhere so a lost/leaked password can't keep an old session alive.
+  await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(emp.user_id).run();
+
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_PASSWORD_RESET', entityType: 'employee', entityId: String(id) });
+  return c.json({ ok: true });
+});
 
 employeeRoutes.get('/', async (c) => {
   const user = c.get('user');
@@ -25,6 +122,7 @@ employeeRoutes.get('/', async (c) => {
       id: s.employee.id,
       name: s.employee.name,
       nameAr: s.employee.nameAr,
+      username: s.employee.username,
       availability: s.employee.availability,
       avatarUrl: s.employee.avatarUrl,
       assigned: s.assigned,
