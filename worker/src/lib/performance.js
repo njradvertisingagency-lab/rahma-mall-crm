@@ -102,7 +102,7 @@ export async function computeAllEmployeeStats(db) {
   for (const emp of employees) {
     const counters = await computeEmployeeCounters(db, emp.id);
     const { score, breakdown } = computeScore(counters, weights);
-    stats.push({ employee: { id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability }, ...counters, performanceScore: score, scoreBreakdown: breakdown });
+    stats.push({ employee: { id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, avatarUrl: emp.avatar_data_url }, ...counters, performanceScore: score, scoreBreakdown: breakdown });
   }
   return { weights, stats };
 }
