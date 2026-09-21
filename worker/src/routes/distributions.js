@@ -1,19 +1,17 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { nextDistributionLabel, logActivity, createNotification, broadcast, jsonError, nowIso } from '../lib/db.js';
+import { nextDistributionLabel, logActivity, createNotification, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
 
 export const distributionRoutes = new Hono();
 distributionRoutes.use('*', requireAuth, requireRole('team_leader'));
 
 async function getEligibleEmployees(db, requestedIds, onlyAvailable) {
-  let rows;
+  let list;
   if (requestedIds && requestedIds.length) {
-    const placeholders = requestedIds.map(() => '?').join(',');
-    rows = await db.prepare(`SELECT * FROM employees WHERE active = 1 AND id IN (${placeholders})`).bind(...requestedIds).all();
+    list = await selectByIds(db, { table: 'employees', ids: requestedIds, extraWhereSql: 'active = 1' });
   } else {
-    rows = await db.prepare(`SELECT * FROM employees WHERE active = 1`).all();
+    list = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results;
   }
-  let list = rows.results;
   if (onlyAvailable) list = list.filter((e) => e.availability === 'AVAILABLE');
   return list;
 }
@@ -80,10 +78,12 @@ distributionRoutes.post('/', async (c) => {
   }
   if (customerIds.length === 0) return jsonError(c, 400, 'لم يتم اختيار عملاء للتوزيع', 'NO_CUSTOMERS');
 
-  // Validate all customer ids exist and are not archived.
-  const placeholders = customerIds.map(() => '?').join(',');
-  const validRows = await db.prepare(`SELECT id FROM customers WHERE archived = 0 AND id IN (${placeholders})`).bind(...customerIds).all();
-  const validSet = new Set(validRows.results.map((r) => r.id));
+  // Validate all customer ids exist and are not archived. Uses json_each (via
+  // selectByIds) rather than one bound '?' per id, since D1 rejects a single
+  // statement with more than 100 bound parameters — a limit a large
+  // distribution batch easily exceeds.
+  const validRows = await selectByIds(db, { table: 'customers', selectSql: 'id', ids: customerIds, extraWhereSql: 'archived = 0' });
+  const validSet = new Set(validRows.map((r) => r.id));
   customerIds = customerIds.filter((id) => validSet.has(id));
   if (customerIds.length === 0) return jsonError(c, 400, 'لا يوجد عميل صالح من ضمن المحددين', 'NO_VALID_CUSTOMERS');
 

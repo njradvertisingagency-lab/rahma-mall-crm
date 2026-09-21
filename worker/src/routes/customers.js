@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso } from '../lib/db.js';
+import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson } from '../lib/db.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
 import { parsePastedNumbers, parseCsvToRecords, parseXlsxToRecords, buildImportPreview } from '../lib/import.js';
 import { recordSeenIfNeeded, getCustomerSeenHistory } from '../lib/seen.js';
@@ -143,8 +143,10 @@ customerRoutes.get('/', async (c) => {
     if (ids.length === 0) {
       conds.push('1=0');
     } else {
-      conds.push(`c.id IN (${ids.map(() => '?').join(',')})`);
-      binds.push(...ids);
+      // json_each (not one bound '?' per id) — D1 rejects a statement with
+      // more than 100 bound parameters, which this list can exceed.
+      conds.push(`c.id IN (${idsInClause()})`);
+      binds.push(idsInJson(ids));
     }
   }
   if (q.q) {
@@ -231,7 +233,7 @@ customerRoutes.get('/:id', async (c) => {
   const purchaseIds = purchases.results.map((p) => p.id);
   let itemsByPurchase = {};
   if (purchaseIds.length) {
-    const items = await db.prepare(`SELECT * FROM purchase_items WHERE purchase_id IN (${purchaseIds.map(() => '?').join(',')})`).bind(...purchaseIds).all();
+    const items = await db.prepare(`SELECT * FROM purchase_items WHERE purchase_id IN (${idsInClause()})`).bind(idsInJson(purchaseIds)).all();
     itemsByPurchase = items.results.reduce((acc, it) => { (acc[it.purchase_id] = acc[it.purchase_id] || []).push(it); return acc; }, {});
   }
 
