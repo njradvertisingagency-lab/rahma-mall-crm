@@ -183,3 +183,55 @@ export async function getEmployeePresence(db, employeeId) {
   const map = await getEmployeePresenceMap(db);
   return map[employeeId] || { online: false, activityState: 'OFFLINE', totalActiveSeconds: 0, totalIdleSeconds: 0 };
 }
+
+/**
+ * "How much time has this employee actually spent online" — for the
+ * employee's own "أدائي" page, not a team-leader oversight view.
+ *
+ * todaySeconds/weekSeconds are built from employee_sessions (real login→logout
+ * spans, or login→now for a still-open session), keyed off each session's
+ * login_at. A session that happens to straddle midnight is counted entirely
+ * under the day it started — sessions are auto-closed after
+ * offlineAfterMinutesNoHeartbeat (see sweepPresence) whenever a tab is left
+ * open overnight, so in practice this never spans more than a few minutes
+ * past midnight and is never worth the extra complexity of splitting it.
+ *
+ * allTimeSeconds instead comes straight from employee_presence's running
+ * total_active_seconds + total_idle_seconds (with "still accruing" time
+ * added live) — a lifetime counter that never resets and can't drift from
+ * the session log, so it stays the source of truth for "all time".
+ */
+export async function getEmployeeOnlineTimeSummary(db, employeeId) {
+  const now = Date.now();
+  const todayStartIso = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z').toISOString();
+  const weekStartIso = new Date(now - 7 * 86400000).toISOString();
+
+  const [sessionsThisWeek, totalSessionsRow, presence] = await Promise.all([
+    db.prepare(`SELECT login_at, logout_at, duration_seconds FROM employee_sessions WHERE employee_id = ? AND login_at >= ? ORDER BY login_at ASC`).bind(employeeId, weekStartIso).all(),
+    db.prepare(`SELECT COUNT(*) AS n FROM employee_sessions WHERE employee_id = ?`).bind(employeeId).first(),
+    getEmployeePresence(db, employeeId),
+  ]);
+
+  let todaySeconds = 0;
+  let weekSeconds = 0;
+  for (const s of sessionsThisWeek.results) {
+    const loginMs = new Date(s.login_at).getTime();
+    const dur = s.logout_at != null && s.duration_seconds != null
+      ? s.duration_seconds
+      : Math.max(0, Math.round((now - loginMs) / 1000)); // still-open session — count up to right now
+    weekSeconds += dur;
+    if (loginMs >= new Date(todayStartIso).getTime()) todaySeconds += dur;
+  }
+
+  return {
+    todaySeconds,
+    weekSeconds,
+    allTimeSeconds: presence.totalActiveSeconds + presence.totalIdleSeconds,
+    totalSessions: totalSessionsRow?.n ?? 0,
+    online: presence.online,
+    activityState: presence.activityState,
+    currentSessionDurationSeconds: presence.currentSessionDurationSeconds,
+    lastLoginAt: presence.lastLoginAt,
+    lastLogoutAt: presence.lastLogoutAt,
+  };
+}
