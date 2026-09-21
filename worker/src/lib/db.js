@@ -5,6 +5,31 @@ export function nowIso() {
   return new Date().toISOString();
 }
 
+// D1 (Cloudflare's hosted SQLite) rejects a prepared statement with more than
+// 100 bound parameters — a `WHERE id IN (...)` built by binding one `?` per
+// array entry throws an uncaught error once the array passes 100 (e.g.
+// distributing 100+ customers at once), which surfaces as a raw 500. Any
+// `IN (...)` filter built from a caller-supplied array of unbounded size
+// should use idsInClause/idsInJson below instead of one `?` per id.
+
+/** `c.id IN (${idsInClause(...)})`-style placeholder — pass alongside idsInJson(ids) as the single bind value. */
+export const idsInClause = () => 'SELECT value FROM json_each(?)';
+
+/** The single bind value to pair with idsInClause(): a JSON array, safe for any number of ids. */
+export const idsInJson = (ids) => JSON.stringify(ids ?? []);
+
+/**
+ * Runs `SELECT <selectSql> FROM <table> WHERE <idColumn> IN (SELECT value FROM json_each(?))`
+ * (plus any extra fixed condition the caller appends via extraWhereSql/extraBinds), and returns
+ * the rows. Safe for any number of ids — avoids D1's 100-bound-parameter limit entirely.
+ */
+export async function selectByIds(db, { table, idColumn = 'id', selectSql = '*', ids, extraWhereSql = '', extraBinds = [] }) {
+  if (!ids || ids.length === 0) return [];
+  const sql = `SELECT ${selectSql} FROM ${table} WHERE ${idColumn} IN (${idsInClause()})${extraWhereSql ? ' AND ' + extraWhereSql : ''}`;
+  const res = await db.prepare(sql).bind(idsInJson(ids), ...extraBinds).all();
+  return res.results;
+}
+
 /** Atomically reserve the next customer ID, e.g. RM-000042. */
 export async function nextCustomerId(db) {
   const row = await db
