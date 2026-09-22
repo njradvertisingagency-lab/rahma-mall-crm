@@ -23,6 +23,13 @@ migrations_dir = "worker/migrations"
 #                      for why (D1's free-tier daily row-read quota was
 #                      blocking new tables outright and unpredictably; a DO
 #                      is a completely separate resource, unaffected by it).
+#   SESSION_STORE    — every login session (one global instance). Moved off
+#                      D1 for the same reason, but for a much bigger stake:
+#                      the old `sessions` D1 table was read on EVERY single
+#                      authenticated request app-wide, so whenever D1's
+#                      quota ran out, the ENTIRE app 500'd for EVERYONE, not
+#                      just one feature. See durable-objects/session-store.js
+#                      and lib/auth.js.
 # ---------------------------------------------------------------------------
 [[durable_objects.bindings]]
 name = "TEAM_ROOM"
@@ -32,6 +39,10 @@ class_name = "TeamRoom"
 name = "ATTENDANCE_STORE"
 class_name = "AttendanceStore"
 
+[[durable_objects.bindings]]
+name = "SESSION_STORE"
+class_name = "SessionStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TeamRoom"]
@@ -39,6 +50,10 @@ new_sqlite_classes = ["TeamRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["AttendanceStore"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["SessionStore"]
 
 # ---------------------------------------------------------------------------
 # Static assets (frontend) — served directly by this Worker via assets binding.
