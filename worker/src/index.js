@@ -33,6 +33,7 @@ import { sweepAutoReclaim } from './lib/reclaim.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
 export { AttendanceStore } from './durable-objects/attendance-store.js';
+export { SessionStore } from './durable-objects/session-store.js';
 
 const app = new Hono();
 
