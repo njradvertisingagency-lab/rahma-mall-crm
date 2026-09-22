@@ -89,6 +89,7 @@
           const data = await api('/auth/login', { method: 'POST', body: { username, password, remember } });
           App.state.user = data.user;
           App.rt.connect();
+          App.startPresenceHeartbeat();
           App.refreshNotifications();
           App.navigate('#/dashboard');
         } catch (e) {

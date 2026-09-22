@@ -696,6 +696,36 @@ async function doLogout() {
 }
 
 // ---------------------------------------------------------------------------
+// نبضة الحضور (Presence heartbeat)
+// ---------------------------------------------------------------------------
+// الخادم يملك بالفعل نظام حضور كامل (تسجيل دخول/خروج + عداد وقت أونلاين +
+// اعتبار الموظف "خامل" بعد 5 دقائق و"غير متصل" بعد 15 دقيقة بدون نبضة نشاط —
+// انظر worker/src/lib/presence.js) لكن الواجهة لم تكن ترسل أي نبضة نشاط على
+// الإطلاق، فكان أي موظف يظهر "غير متصل" لقائد الفريق بعد ١٥ دقيقة من الدخول
+// حتى لو كان يستخدم الموقع فعليًا في نفس اللحظة. هذا يرسل نبضة كل دقيقة طالما
+// الصفحة ظاهرة (التاب مفتوح) وطالما كان هناك تفاعل حقيقي (مؤشر/لوحة مفاتيح/
+// تمرير/لمس) خلال آخر دقيقتين — لا نُرسل نبضة لموظف ترك التاب مفتوحًا وابتعد.
+let lastUserActivityAt = Date.now();
+let presenceHeartbeatStarted = false;
+['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach((evt) => {
+  document.addEventListener(evt, () => { lastUserActivityAt = Date.now(); }, { passive: true });
+});
+async function sendPresenceHeartbeatIfActive() {
+  if (!App.state.user || !App.state.user.employeeId) return; // فقط الموظفون لديهم صف حضور — قائد الفريق ليس له
+  if (document.visibilityState !== 'visible') return;
+  if (Date.now() - lastUserActivityAt > 2 * 60 * 1000) return; // خامل فعليًا — نترك الخادم يتكفّل بذلك تلقائيًا
+  try { await api('/presence/heartbeat', { method: 'POST' }); } catch {}
+}
+App.startPresenceHeartbeat = function () {
+  if (presenceHeartbeatStarted) return;
+  presenceHeartbeatStarted = true;
+  lastUserActivityAt = Date.now(); // أول نبضة فورية عند تسجيل الدخول/فتح الصفحة، دون انتظار دقيقة كاملة
+  sendPresenceHeartbeatIfActive();
+  setInterval(sendPresenceHeartbeatIfActive, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sendPresenceHeartbeatIfActive(); });
+};
+
+// ---------------------------------------------------------------------------
 // الإقلاع
 // ---------------------------------------------------------------------------
 async function boot() {
@@ -707,6 +737,7 @@ async function boot() {
   }
   if (App.state.user) {
     RT.connect();
+    App.startPresenceHeartbeat();
     refreshNotifications();
     refreshChatUnread();
   }
