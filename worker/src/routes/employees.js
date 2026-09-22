@@ -5,6 +5,7 @@ import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
 import { hashPassword, randomSaltHex } from '../lib/passwords.js';
+import { sessListAll, sessDelete } from '../lib/sessionStore.js';
 
 export const employeeRoutes = new Hono();
 employeeRoutes.use('*', requireAuth);
@@ -126,8 +127,19 @@ employeeRoutes.post('/:id/reset-password', requireRole('team_leader'), async (c)
     .prepare(`UPDATE users SET password_hash = ?, password_salt = ?, must_change_password = 0, updated_at = ? WHERE id = ?`)
     .bind(hash, salt, nowIso(), emp.user_id)
     .run();
-  // Sign the employee out everywhere so a lost/leaked password can't keep an old session alive.
-  await db.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(emp.user_id).run();
+  // Sign the employee out everywhere so a lost/leaked password can't keep an
+  // old session alive — sessions live in the SessionStore Durable Object now
+  // (see lib/sessionStore.js), not a D1 table, so this is a list+filter
+  // rather than a single DELETE WHERE. Best-effort: a failure here must
+  // never block the password reset itself from succeeding.
+  try {
+    const allSessions = await sessListAll(c.env);
+    await Promise.all(
+      allSessions.filter((s) => s.value?.userId === emp.user_id).map((s) => sessDelete(c.env, s.key))
+    );
+  } catch (err) {
+    console.error('reset-password: could not revoke old sessions (non-fatal)', err);
+  }
 
   await logActivity(db, { actor: user, action: 'EMPLOYEE_PASSWORD_RESET', entityType: 'employee', entityId: String(id) });
   return c.json({ ok: true });

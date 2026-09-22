@@ -3,6 +3,7 @@ import { verifyPassword, hashPassword, randomSaltHex } from '../lib/passwords.js
 import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso } from '../lib/db.js';
 import { recordLogin, recordLogout } from '../lib/presence.js';
+import { sessDelete } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
 
@@ -63,8 +64,6 @@ authRoutes.post('/login', async (c) => {
   }
 
   const userAgent = uaHeader;
-  const { token } = await createSession(db, user, { remember, userAgent });
-  setSessionCookie(c, token, remember);
 
   let employeeId = null;
   let availability = null;
@@ -75,6 +74,9 @@ authRoutes.post('/login', async (c) => {
     availability = emp?.availability ?? null;
     avatarUrl = emp?.avatar_data_url ?? null;
   }
+
+  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId });
+  setSessionCookie(c, token, remember);
 
   await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent });
 
@@ -104,7 +106,7 @@ authRoutes.post('/logout', requireAuth, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   await recordLogout(db, c.env, { employeeId: user.employeeId, token: user.token });
-  await db.prepare(`DELETE FROM sessions WHERE token = ?`).bind(user.token).run();
+  await sessDelete(c.env, user.token).catch((err) => console.error('logout: could not delete session record (non-fatal)', err));
   clearSessionCookie(c);
   await logActivity(db, { actor: user, action: 'LOGOUT', entityType: 'user', entityId: String(user.id) });
   return c.json({ ok: true });
@@ -116,9 +118,16 @@ authRoutes.get('/me', requireAuth, async (c) => {
   let availability = null;
   let avatarUrl = null;
   if (user.role === 'employee') {
-    const emp = await db.prepare(`SELECT availability, avatar_data_url FROM employees WHERE id = ?`).bind(user.employeeId).first();
-    availability = emp?.availability ?? null;
-    avatarUrl = emp?.avatar_data_url ?? null;
+    // Best-effort: this is now the ONLY D1 read on the app's most-called
+    // endpoint (fired on every page load) — never let it turn a valid,
+    // already-verified session into a failed page load if D1 hiccups.
+    try {
+      const emp = await db.prepare(`SELECT availability, avatar_data_url FROM employees WHERE id = ?`).bind(user.employeeId).first();
+      availability = emp?.availability ?? null;
+      avatarUrl = emp?.avatar_data_url ?? null;
+    } catch (err) {
+      console.error('/auth/me: could not load availability/avatar (non-fatal)', err);
+    }
   }
   return c.json({ user: { ...user, token: undefined, availability, avatarUrl } });
 });

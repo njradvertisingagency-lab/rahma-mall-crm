@@ -1,4 +1,5 @@
 import { SESSION_COOKIE } from '../lib/auth.js';
+import { sessGet } from '../lib/sessionStore.js';
 
 function parseCookies(header) {
   const out = {};
@@ -11,38 +12,33 @@ function parseCookies(header) {
 }
 
 /**
- * Authenticates the WebSocket upgrade request against D1 BEFORE handing it
- * to the Durable Object — the DO itself never sees raw credentials, only the
- * verified identity the Worker attaches. This is the "never trust a role
- * supplied by the browser" rule applied to real-time connections too.
+ * Authenticates the WebSocket upgrade request against the SessionStore
+ * Durable Object (see lib/sessionStore.js) BEFORE handing it to the
+ * TeamRoom Durable Object — the DO itself never sees raw credentials, only
+ * the verified identity the Worker attaches. This is the "never trust a
+ * role supplied by the browser" rule applied to real-time connections too.
+ * No D1 read at all — same reasoning as requireAuth in lib/auth.js.
  */
 export async function handleWebSocketUpgrade(request, env) {
   const cookies = parseCookies(request.headers.get('Cookie'));
   const token = cookies[SESSION_COOKIE];
   if (!token) return new Response('Not authenticated', { status: 401 });
 
-  const db = env.DB;
-  const session = await db
-    .prepare(
-      `SELECT s.user_id, s.expires_at, u.username, u.role, u.display_name, u.active
-       FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
-    )
-    .bind(token)
-    .first();
-  if (!session || !session.active) return new Response('Invalid session', { status: 401 });
-  if (new Date(session.expires_at).getTime() < Date.now()) return new Response('Session expired', { status: 401 });
-
-  let employeeId = null;
-  if (session.role === 'employee') {
-    const emp = await db.prepare(`SELECT id FROM employees WHERE user_id = ?`).bind(session.user_id).first();
-    employeeId = emp?.id ?? null;
+  let session;
+  try {
+    session = await sessGet(env, token);
+  } catch (err) {
+    console.error('handleWebSocketUpgrade: session store unreachable', err);
+    return new Response('Service unavailable', { status: 503 });
   }
+  if (!session || !session.active) return new Response('Invalid session', { status: 401 });
+  if (new Date(session.expiresAt).getTime() < Date.now()) return new Response('Session expired', { status: 401 });
 
   const identity = {
-    userId: session.user_id,
+    userId: session.userId,
     role: session.role,
-    employeeId,
-    displayName: session.display_name,
+    employeeId: session.employeeId ?? null,
+    displayName: session.displayName,
   };
 
   const id = env.TEAM_ROOM.idFromName('global');
