@@ -360,6 +360,23 @@ customerRoutes.post('/import/preview', requireRole('team_leader'), async (c) => 
     .bind('import_preview_' + token, JSON.stringify({ rows: preview.rows, createdAt: nowIso() }))
     .run();
 
+  // A preview that is never committed used to sit in `settings` forever. Each
+  // one holds the whole parsed file, so a handful of abandoned previews had
+  // grown to dwarf every real setting in the table. Drop the expired ones
+  // (older than a day) whenever a new preview is made — best-effort, since
+  // failing to tidy up must never fail the import the user is doing.
+  backgroundWrite(
+    c,
+    () =>
+      c.env.DB.prepare(
+        // Same timestamp shape the column is written with (ISO, T and Z) —
+        // datetime() renders a space instead of the T, which compares wrong
+        // against these values whenever the dates are equal.
+        `DELETE FROM settings WHERE key LIKE 'import_preview_%' AND updated_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`
+      ).run(),
+    'import preview cleanup'
+  );
+
   return c.json({ token, summary: preview.summary, rows: preview.rows.slice(0, 500) });
 });
 
@@ -373,19 +390,52 @@ customerRoutes.post('/import/commit', requireRole('team_leader'), async (c) => {
   const newRows = rows.filter((r) => r.status === 'NEW');
   if (newRows.length === 0) return jsonError(c, 400, 'لا يوجد جديد للاستيراد', 'NOTHING_TO_IMPORT');
 
+  // Importing used to cost FOUR sequential round-trips per row (reserve an
+  // id, then three inserts). At a few dozen rows that is merely slow; at a
+  // few thousand it runs past the Worker's time limit and dies halfway,
+  // leaving a partial import behind. So: reserve the whole id range in one
+  // statement, then send the inserts in batches.
+  const count = newRows.length;
+  const lastSeq = await db
+    .prepare(`UPDATE counters SET value = value + ? WHERE name = 'customer_seq' RETURNING value`)
+    .bind(count)
+    .first();
+  if (!lastSeq) return jsonError(c, 500, 'تعذر حجز أرقام العملاء الجديدة', 'COUNTER_UNAVAILABLE');
+  const firstSeq = lastSeq.value - count + 1;
+  const customerIdFor = (i) => 'RM-' + String(firstSeq + i).padStart(6, '0');
+
+  const insertCustomer = db.prepare(
+    `INSERT INTO customers (id, phone, normalized_phone, name, source, campaign, product, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertAssignment = db.prepare(
+    `INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'IMPORT_UNASSIGNED')`
+  );
+  const insertHistory = db.prepare(
+    `INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by) VALUES (?, NULL, 'NEW', ?)`
+  );
+
   const createdIds = [];
-  for (const r of newRows) {
-    const id = await nextCustomerId(db);
-    await db
-      .prepare(
-        `INSERT INTO customers (id, phone, normalized_phone, name, source, campaign, product, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-      .bind(id, r.rawPhone, r.normalizedPhone, r.name || null, r.source || null, r.campaign || null, r.product || null, user.id)
-      .run();
-    await db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'IMPORT_UNASSIGNED')`).bind(id, user.id).run();
-    await db.prepare(`INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by) VALUES (?, NULL, 'NEW', ?)`).bind(id, user.id).run();
+  const statements = [];
+  newRows.forEach((r, i) => {
+    const id = customerIdFor(i);
     createdIds.push(id);
+    statements.push(
+      insertCustomer.bind(id, r.rawPhone, r.normalizedPhone, r.name || null, r.source || null, r.campaign || null, r.product || null, user.id),
+      insertAssignment.bind(id, user.id),
+      insertHistory.bind(id, user.id)
+    );
+  });
+
+  // Chunked so one batch never grows unbounded on a very large file.
+  // Each batch commits atomically, and every row contributes exactly 3
+  // statements — so keep this a MULTIPLE OF 3. Otherwise a chunk boundary
+  // could split one customer's three inserts across two batches and a failed
+  // batch would leave that customer without its assignment/history rows.
+  const BATCH_SIZE = 90;
+  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    await db.batch(statements.slice(i, i + BATCH_SIZE));
   }
+
   await db.prepare(`DELETE FROM settings WHERE key = ?`).bind('import_preview_' + body.token).run();
   await logActivity(db, { actor: user, action: 'CUSTOMERS_IMPORTED', entityType: 'import', entityId: null, metadata: { count: createdIds.length } });
   await broadcast(c.env, 'CUSTOMERS_IMPORTED', { count: createdIds.length }, { scope: 'role', role: 'team_leader' });
