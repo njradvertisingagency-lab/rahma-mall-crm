@@ -21,6 +21,7 @@ import { complaintRoutes } from './routes/complaints.js';
 import { favoriteRoutes } from './routes/favorites.js';
 import { chatRoutes } from './routes/chat.js';
 import { opsReportRoutes } from './routes/opsreports.js';
+import { attendanceRoutes } from './routes/attendance.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
 import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
@@ -31,6 +32,7 @@ import { sweepOpsReports } from './lib/opsreports.js';
 import { sweepAutoReclaim } from './lib/reclaim.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
+export { AttendanceStore } from './durable-objects/attendance-store.js';
 
 const app = new Hono();
 
@@ -94,13 +96,7 @@ api.route('/complaints', complaintRoutes);
 api.route('/favorites', favoriteRoutes);
 api.route('/chat', chatRoutes);
 api.route('/ops-reports', opsReportRoutes);
-// NOTE: '/attendance' route (routes/attendance.js) is written and ready but
-// deliberately NOT wired in yet — it depends on the attendance_records /
-// attendance_penalties tables (migration 0008), which can't be created
-// until the D1 daily quota unblocks. Wire it back in alongside that
-// migration, together with the matching frontend pieces (app.js topbar
-// button, views-attendance.js) — see the standing note in that migration
-// file for the full checklist.
+api.route('/attendance', attendanceRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
