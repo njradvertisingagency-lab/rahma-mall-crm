@@ -600,6 +600,7 @@ function renderShell() {
   const connBadge = renderConnBadge();
   const notifBell = renderNotifBell();
   const soundToggle = renderSoundToggle();
+  const adminReportsBtn = renderAdminReportsButton();
   const topbar = el('div', { class: 'topbar' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
@@ -613,6 +614,7 @@ function renderShell() {
       connBadge,
       soundToggle,
       notifBell,
+      adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
         el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
@@ -724,6 +726,97 @@ App.startPresenceHeartbeat = function () {
   setInterval(sendPresenceHeartbeatIfActive, 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sendPresenceHeartbeatIfActive(); });
 };
+
+// ---------------------------------------------------------------------------
+// تقارير الإدارة (بداية اليوم / نهاية الشيفت) — زر في الشريط العلوي يظهر فقط
+// لحساب المالك (is_owner — حساب أستاذ هاني) ولا يظهر أبدًا لحساب قائد الفريق
+// العادي. البيانات تُحسب حيًّا من الخادم في كل ضغطة، بالإضافة لإشعار تلقائي
+// يومي مرة عند بداية الدوام ومرة عند نهايته (انظر worker/src/lib/opsreports.js).
+// ---------------------------------------------------------------------------
+function modal(title, bodyNode, footerNodes) {
+  const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } });
+  const m = el('div', { class: 'modal' }, [
+    el('div', { class: 'modal-header' }, [el('div', { class: 'modal-title' }, [title]), el('button', { class: 'modal-close', onclick: () => close() }, ['✕'])]),
+    el('div', { class: 'modal-body' }, [bodyNode]),
+    el('div', { class: 'modal-footer' }, footerNodes || []),
+  ]);
+  backdrop.appendChild(m);
+  document.body.appendChild(backdrop);
+  function close() { backdrop.remove(); }
+  return { close, el: backdrop };
+}
+
+function renderAdminReportsButton() {
+  if (!App.state.user || !App.state.user.isOwner) return null;
+  return el('button', { class: 'btn btn-icon', title: 'تقارير الإدارة — بداية اليوم / نهاية الشيفت', onclick: openAdminReportsModal }, ['📊']);
+}
+
+async function openAdminReportsModal() {
+  let tab = 'start'; // 'start' | 'end'
+  const startBtn = el('button', { class: 'btn btn-sm', onclick: () => { tab = 'start'; render(); } }, ['🌅 بداية اليوم']);
+  const endBtn = el('button', { class: 'btn btn-sm', onclick: () => { tab = 'end'; render(); } }, ['🌙 نهاية الشيفت']);
+  const content = el('div', {});
+  const body = el('div', {}, [el('div', { class: 'flex gap-8 mb-12' }, [startBtn, endBtn]), content]);
+
+  function setActiveStyles() {
+    startBtn.className = 'btn btn-sm ' + (tab === 'start' ? 'btn-primary' : 'btn-outline');
+    endBtn.className = 'btn btn-sm ' + (tab === 'end' ? 'btn-primary' : 'btn-outline');
+  }
+
+  async function render() {
+    setActiveStyles();
+    content.innerHTML = '';
+    content.appendChild(el('div', { class: 'muted' }, ['جارِ التحميل…']));
+    try {
+      if (tab === 'start') {
+        const { report } = await api('/ops-reports/start-of-day');
+        content.innerHTML = '';
+        content.appendChild(el('div', { class: 'mb-12' }, [
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['🟢 أونلاين الآن']), el('span', { style: 'font-weight:700' }, [`${report.onlineNow}/${report.totalEmployees}`])]),
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['⏰ متابعات متأخرة']), el('span', { style: 'font-weight:700' }, [String(report.overdueFollowupsCount)])]),
+        ]));
+        if (report.attentionItems.length === 0) {
+          content.appendChild(el('div', { class: 'muted' }, ['✅ لا يوجد ما يحتاج انتباه فوري.']));
+        } else {
+          report.attentionItems.forEach((item) => {
+            const sev = item.severity === 'CRITICAL' ? 'critical' : 'warning';
+            content.appendChild(el('div', { class: 'alert-row alert-row-' + sev, style: 'margin-bottom:8px' }, [
+              el('div', { class: 'alert-row-main' }, [el('span', { class: 'alert-row-dot' }), el('span', { class: 'alert-row-label' }, [item.label])]),
+            ]));
+          });
+        }
+        content.appendChild(el('div', { class: 'faint mt-8' }, ['آخر تحديث: ' + fmtDateTime(report.generatedAt)]));
+      } else {
+        const { report } = await api('/ops-reports/end-of-shift');
+        content.innerHTML = '';
+        content.appendChild(el('div', { class: 'mb-12' }, [
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['📞 مكالمات اليوم']), el('span', { style: 'font-weight:700' }, [String(report.totalCallsToday)])]),
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['✅ عملاء مغلقين اليوم']), el('span', { style: 'font-weight:700' }, [String(report.totalClosedToday)])]),
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['💰 صافي إيراد اليوم']), el('span', { style: 'font-weight:700' }, [report.netRevenueToday.toLocaleString() + ' ج.م'])]),
+          el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['🧾 صفقات اليوم']), el('span', { style: 'font-weight:700' }, [String(report.dealsToday)])]),
+        ]));
+        if (report.topPerformer) {
+          content.appendChild(el('div', { class: 'badge', style: 'background:var(--success-soft);color:var(--success);margin-bottom:12px' }, [`🏆 الأفضل اليوم: ${report.topPerformer.name} (${report.topPerformer.closedToday} مغلق)`]));
+        }
+        content.appendChild(el('div', { class: 'table-wrap' }, [
+          el('table', { class: 'data-table' }, [
+            el('thead', {}, [el('tr', {}, ['الموظف', 'مكالمات', 'مغلق'].map((h) => el('th', {}, [h])))]),
+            el('tbody', {}, report.perEmployee.map((e) => el('tr', {}, [
+              el('td', {}, [e.name]), el('td', {}, [String(e.callsToday)]), el('td', {}, [String(e.closedToday)]),
+            ]))),
+          ]),
+        ]));
+        content.appendChild(el('div', { class: 'faint mt-8' }, ['آخر تحديث: ' + fmtDateTime(report.generatedAt)]));
+      }
+    } catch (e) {
+      content.innerHTML = '';
+      content.appendChild(el('div', { class: 'error-text' }, [e.message || 'تعذّر تحميل التقرير']));
+    }
+  }
+
+  const dlg = modal('📊 تقارير الإدارة', body, [el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق'])]);
+  await render();
+}
 
 // ---------------------------------------------------------------------------
 // الإقلاع
