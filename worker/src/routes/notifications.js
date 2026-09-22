@@ -12,12 +12,19 @@ notificationRoutes.get('/', async (c) => {
   const conds = ['user_id = ?'];
   const binds = [user.id];
   if (q.unread === 'true') conds.push('read = 0');
-  const rows = await db
-    .prepare(`SELECT * FROM notifications WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT 100`)
-    .bind(...binds)
-    .all();
-  const unreadCount = await db.prepare(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0`).bind(user.id).first();
-  return c.json({ notifications: rows.results, unreadCount: unreadCount.n });
+  // Fired on every dashboard load (topbar bell) — if D1 is over quota, fail
+  // honestly instead of a raw 500 taking the bell/dashboard down.
+  try {
+    const rows = await db
+      .prepare(`SELECT * FROM notifications WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT 100`)
+      .bind(...binds)
+      .all();
+    const unreadCount = await db.prepare(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0`).bind(user.id).first();
+    return c.json({ notifications: rows.results, unreadCount: unreadCount.n });
+  } catch (err) {
+    console.error('notifications: D1 unavailable', err);
+    return jsonError(c, 503, 'تعذر تحميل الإشعارات مؤقتًا — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 notificationRoutes.patch('/:id/read', async (c) => {

@@ -37,66 +37,78 @@ analyticsRoutes.get('/dashboard', async (c) => {
   const scope = user.role === 'employee' ? 'AND assigned_employee_id = ?' : '';
   const binds = user.role === 'employee' ? [user.employeeId] : [];
 
-  const statusRows = await db.prepare(`SELECT status, COUNT(*) AS n FROM customers WHERE archived = 0 ${scope} GROUP BY status`).bind(...binds).all();
-  const byStatus = Object.fromEntries(statusRows.results.map((r) => [r.status, r.n]));
+  // This is the main dashboard KPI widget — a dozen+ D1 queries fired on
+  // every visit to the control room, so it is the single heaviest, most
+  // frequently-hit read in the whole app. When D1's quota is exhausted, this
+  // was throwing a raw 500 mid-way through and taking down the whole
+  // dashboard with an opaque "فشل الطلب" toast — wrapped the same way as
+  // auth.js's login/employees-public handlers so the failure is at least
+  // honest and doesn't look like the app itself is broken.
+  try {
+    const statusRows = await db.prepare(`SELECT status, COUNT(*) AS n FROM customers WHERE archived = 0 ${scope} GROUP BY status`).bind(...binds).all();
+    const byStatus = Object.fromEntries(statusRows.results.map((r) => [r.status, r.n]));
 
-  const totalRow = await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 ${scope}`).bind(...binds).first();
-  const unassignedRow = user.role === 'team_leader' ? await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND assigned_employee_id IS NULL`).first() : { n: 0 };
-  const assignedRow = await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND assigned_employee_id IS NOT NULL ${scope}`).bind(...binds).first();
+    const totalRow = await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 ${scope}`).bind(...binds).first();
+    const unassignedRow = user.role === 'team_leader' ? await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND assigned_employee_id IS NULL`).first() : { n: 0 };
+    const assignedRow = await db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND assigned_employee_id IS NOT NULL ${scope}`).bind(...binds).first();
 
-  const today = todayStartIso();
-  const todayBinds = user.role === 'employee' ? [today, user.employeeId] : [today];
-  const todayScope = user.role === 'employee' ? 'AND assigned_employee_id = ?' : '';
-  const [todayCustomers, todayClosed] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND created_at >= ? ${todayScope}`).bind(...todayBinds).first(),
-    db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND closed_at >= ? ${todayScope}`).bind(...todayBinds).first(),
-  ]);
+    const today = todayStartIso();
+    const todayBinds = user.role === 'employee' ? [today, user.employeeId] : [today];
+    const todayScope = user.role === 'employee' ? 'AND assigned_employee_id = ?' : '';
+    const [todayCustomers, todayClosed] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND created_at >= ? ${todayScope}`).bind(...todayBinds).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE archived = 0 AND closed_at >= ? ${todayScope}`).bind(...todayBinds).first(),
+    ]);
 
-  const followupScope = user.role === 'employee' ? 'AND employee_id = ?' : '';
-  const followupBinds = user.role === 'employee' ? [user.employeeId] : [];
-  const [todayFollowups, overdueFollowups] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS n FROM followups WHERE date(scheduled_for) = date('now') AND status IN ('UPCOMING','OVERDUE') ${followupScope}`).bind(...followupBinds).first(),
-    db.prepare(`SELECT COUNT(*) AS n FROM followups WHERE (status = 'OVERDUE' OR (status = 'UPCOMING' AND scheduled_for < datetime('now'))) ${followupScope}`).bind(...followupBinds).first(),
-  ]);
+    const followupScope = user.role === 'employee' ? 'AND employee_id = ?' : '';
+    const followupBinds = user.role === 'employee' ? [user.employeeId] : [];
+    const [todayFollowups, overdueFollowups] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS n FROM followups WHERE date(scheduled_for) = date('now') AND status IN ('UPCOMING','OVERDUE') ${followupScope}`).bind(...followupBinds).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM followups WHERE (status = 'OVERDUE' OR (status = 'UPCOMING' AND scheduled_for < datetime('now'))) ${followupScope}`).bind(...followupBinds).first(),
+    ]);
 
-  const total = totalRow.n || 0;
-  const closed = byStatus.CLOSED || 0;
-  const completionRate = total > 0 ? closed / total : 0;
+    const total = totalRow.n || 0;
+    const closed = byStatus.CLOSED || 0;
+    const completionRate = total > 0 ? closed / total : 0;
 
-  const waScope = user.role === 'employee' ? 'AND employee_id = ?' : '';
-  const waBinds = user.role === 'employee' ? [user.employeeId] : [];
-  const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-  const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-  const [waToday, waWeek, waMonth] = await Promise.all([
-    db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(today, ...waBinds).first(),
-    db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(weekAgo, ...waBinds).first(),
-    db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(monthAgo, ...waBinds).first(),
-  ]);
+    const waScope = user.role === 'employee' ? 'AND employee_id = ?' : '';
+    const waBinds = user.role === 'employee' ? [user.employeeId] : [];
+    const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const [waToday, waWeek, waMonth] = await Promise.all([
+      db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(today, ...waBinds).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(weekAgo, ...waBinds).first(),
+      db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(monthAgo, ...waBinds).first(),
+    ]);
 
-  return c.json({
-    kpis: {
-      whatsappToday: waToday.n,
-      whatsappWeek: waWeek.n,
-      whatsappMonth: waMonth.n,
-      total,
-      unassigned: unassignedRow.n,
-      assigned: assignedRow.n,
-      new: byStatus.NEW || 0,
-      calling: byStatus.CALLING || 0,
-      noAnswer: byStatus.NO_ANSWER || 0,
-      busy: byStatus.BUSY || 0,
-      followUp: byStatus.FOLLOW_UP || 0,
-      interested: byStatus.INTERESTED || 0,
-      notInterested: byStatus.NOT_INTERESTED || 0,
-      closed,
-      overdue: overdueFollowups.n,
-      todayCustomers: todayCustomers.n,
-      todayClosed: todayClosed.n,
-      todayFollowups: todayFollowups.n,
-      todayOverdue: overdueFollowups.n,
-      completionRate,
-    },
-  });
+    return c.json({
+      kpis: {
+        whatsappToday: waToday.n,
+        whatsappWeek: waWeek.n,
+        whatsappMonth: waMonth.n,
+        total,
+        unassigned: unassignedRow.n,
+        assigned: assignedRow.n,
+        new: byStatus.NEW || 0,
+        calling: byStatus.CALLING || 0,
+        noAnswer: byStatus.NO_ANSWER || 0,
+        busy: byStatus.BUSY || 0,
+        followUp: byStatus.FOLLOW_UP || 0,
+        interested: byStatus.INTERESTED || 0,
+        notInterested: byStatus.NOT_INTERESTED || 0,
+        closed,
+        overdue: overdueFollowups.n,
+        todayCustomers: todayCustomers.n,
+        todayClosed: todayClosed.n,
+        todayFollowups: todayFollowups.n,
+        todayOverdue: overdueFollowups.n,
+        completionRate,
+      },
+    });
+  } catch (err) {
+    console.error('analytics/dashboard: D1 unavailable', err);
+    return jsonError(c, 503, 'تعذر تحميل لوحة التحكم مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 analyticsRoutes.get('/charts', async (c) => {

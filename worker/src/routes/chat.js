@@ -38,29 +38,37 @@ chatRoutes.get('/threads', requireRole('team_leader'), async (c) => {
   return c.json({ threads });
 });
 
-// Unread total — for the employee's own thread (their nav badge), or across all threads for the Team Leader.
+// Unread total — for the employee's own thread (their nav badge), or across
+// all threads for the Team Leader. Fired on every dashboard load, same as
+// notifications — wrapped so a D1 hiccup gives an honest failure instead of
+// a raw 500 that drags the whole dashboard down with it.
 chatRoutes.get('/unread-count', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  if (user.role === 'employee') {
-    const read = await db.prepare(`SELECT last_read_at FROM chat_reads WHERE user_id = ? AND employee_id = ?`).bind(user.id, user.employeeId).first();
-    const unread = await db
-      .prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE employee_id = ? AND sender_role = 'team_leader' AND created_at > ?`)
-      .bind(user.employeeId, read?.last_read_at || '1970-01-01T00:00:00.000Z')
-      .first();
-    return c.json({ unread: unread.n });
+  try {
+    if (user.role === 'employee') {
+      const read = await db.prepare(`SELECT last_read_at FROM chat_reads WHERE user_id = ? AND employee_id = ?`).bind(user.id, user.employeeId).first();
+      const unread = await db
+        .prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE employee_id = ? AND sender_role = 'team_leader' AND created_at > ?`)
+        .bind(user.employeeId, read?.last_read_at || '1970-01-01T00:00:00.000Z')
+        .first();
+      return c.json({ unread: unread.n });
+    }
+    const employees = await db.prepare(`SELECT id FROM employees WHERE active = 1`).all();
+    let total = 0;
+    for (const emp of employees.results) {
+      const read = await db.prepare(`SELECT last_read_at FROM chat_reads WHERE user_id = ? AND employee_id = ?`).bind(user.id, emp.id).first();
+      const unread = await db
+        .prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE employee_id = ? AND sender_role = 'employee' AND created_at > ?`)
+        .bind(emp.id, read?.last_read_at || '1970-01-01T00:00:00.000Z')
+        .first();
+      total += unread.n;
+    }
+    return c.json({ unread: total });
+  } catch (err) {
+    console.error('chat/unread-count: D1 unavailable', err);
+    return jsonError(c, 503, 'تعذر تحميل عداد الرسائل مؤقتًا — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
   }
-  const employees = await db.prepare(`SELECT id FROM employees WHERE active = 1`).all();
-  let total = 0;
-  for (const emp of employees.results) {
-    const read = await db.prepare(`SELECT last_read_at FROM chat_reads WHERE user_id = ? AND employee_id = ?`).bind(user.id, emp.id).first();
-    const unread = await db
-      .prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE employee_id = ? AND sender_role = 'employee' AND created_at > ?`)
-      .bind(emp.id, read?.last_read_at || '1970-01-01T00:00:00.000Z')
-      .first();
-    total += unread.n;
-  }
-  return c.json({ unread: total });
 });
 
 chatRoutes.get('/:employeeId/messages', async (c) => {
