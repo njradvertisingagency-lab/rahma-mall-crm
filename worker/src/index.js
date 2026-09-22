@@ -27,7 +27,7 @@ import { sweepPresence } from './lib/presence.js';
 import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
-import { sweepLateAttendance, sweepOffHoursAvailability } from './lib/workhours.js';
+import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday } from './lib/workhours.js';
 import { sweepOpsReports } from './lib/opsreports.js';
 import { sweepAutoReclaim } from './lib/reclaim.js';
 
@@ -186,6 +186,34 @@ app.onError((err, c) => {
   );
 });
 
+// The shift is 10:00–18:00 Cairo, Thursday and Friday off. The sweep window
+// is deliberately wider than the shift at both ends, because a few sweeps
+// must fire just OUTSIDE it: the pre-shift availability restore runs before
+// 10:00, and the end-of-shift ops report plus the idle-customer auto-reclaim
+// both only run at or after 18:00. The margins below give each of those
+// plenty of ticks to land.
+//
+// These bounds are intentionally hardcoded and D1-free: reading the
+// configurable work_hours row on every tick would cost the very reads this
+// gate exists to save. If the shift ever moves far outside 09:30–19:30,
+// widen this window to match — the settings row alone will not move it.
+const SWEEP_WINDOW_START_MIN = 9 * 60 + 30;
+const SWEEP_WINDOW_END_MIN = 19 * 60 + 30;
+const SWEEP_SKIP_WEEKDAYS = ['Thursday', 'Friday'];
+
+function sweepsShouldRunNow() {
+  try {
+    if (SWEEP_SKIP_WEEKDAYS.includes(getCairoWeekday())) return false;
+    const { minutesSinceMidnight } = getCairoNow();
+    return minutesSinceMidnight >= SWEEP_WINDOW_START_MIN && minutesSinceMidnight <= SWEEP_WINDOW_END_MIN;
+  } catch (err) {
+    // If the clock lookup ever fails, run the sweeps rather than silently
+    // stopping all automation — a wasted tick is cheaper than a missed alert.
+    console.error('sweep window check failed, running sweeps anyway', err);
+    return true;
+  }
+}
+
 export default {
   fetch(request, env, ctx) {
     return app.fetch(request, env, ctx);
@@ -196,6 +224,18 @@ export default {
   // and "*/5 * * * *" every 5 minutes for everything else. Each sweep stays
   // isolated so one failing never blocks the others.
   async scheduled(event, env, ctx) {
+    // Every sweep below exists to watch employees while they work. Outside
+    // the shift there is nobody to watch, yet the crons still fired around
+    // the clock — 1,440 + 288 runs a day, every day, each one reading D1.
+    // That is the bulk of the daily read quota spent on empty office hours,
+    // which is why the quota kept running out mid-morning.
+    //
+    // Skipping the idle hours is safe because no sweep needs to fire at an
+    // exact minute: each one already carries its own same-day dedup guard,
+    // and the states they set (off-hours DND, availability) simply persist
+    // overnight untouched, which is the correct resting state anyway.
+    if (!sweepsShouldRunNow()) return;
+
     if (event.cron === '* * * * *') {
       ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
       return;
