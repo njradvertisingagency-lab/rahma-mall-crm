@@ -112,6 +112,73 @@ app.notFound((c) => {
   return c.env.ASSETS ? c.env.ASSETS.fetch(c.req.raw) : c.text('Not found', 404);
 });
 
+// A database outage is the one failure this app hits in normal operation:
+// D1's free tier caps daily row reads, and once that cap is reached EVERY
+// query throws until it resets at midnight UTC. Individual hot endpoints
+// cache their last good payload and degrade on their own, but there are far
+// too many queries app-wide to guard each one by hand — and an unguarded
+// throw surfaces as a raw 500, which reads to the team as "the whole system
+// is broken" rather than "the database is busy, try again shortly".
+// Recognising the outage here, once, gives every remaining endpoint an
+// honest answer without touching hundreds of call sites.
+const DB_OUTAGE_SIGNATURES = [
+  'exceeded',
+  'row read limit',
+  'd1_error',
+  'daily limit',
+  'quota',
+  'network connection lost',
+  'storage operation exceeded timeout',
+  'too many api requests',
+];
+
+function isDatabaseOutage(err) {
+  const text = [err?.message, err?.cause?.message, err?.name]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (!text) return false;
+  return DB_OUTAGE_SIGNATURES.some((sig) => text.includes(sig));
+}
+
+app.onError((err, c) => {
+  const outage = isDatabaseOutage(err);
+  console.error(
+    outage ? 'DB outage escaped a route' : 'unhandled error',
+    c.req.method,
+    c.req.path,
+    err
+  );
+
+  const isApi = c.req.path.startsWith('/api/') || c.req.path === '/ws';
+  if (!isApi) {
+    return c.text('Service temporarily unavailable', outage ? 503 : 500);
+  }
+
+  if (outage) {
+    return c.json(
+      {
+        error: {
+          message:
+            'تعذر تحميل البيانات مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق',
+          code: 'DB_TEMPORARILY_UNAVAILABLE',
+        },
+      },
+      503
+    );
+  }
+
+  return c.json(
+    {
+      error: {
+        message: 'حدث خطأ غير متوقع — برجاء المحاولة مرة أخرى',
+        code: 'INTERNAL_ERROR',
+      },
+    },
+    500
+  );
+});
+
 export default {
   fetch(request, env, ctx) {
     return app.fetch(request, env, ctx);
