@@ -48,7 +48,18 @@ authRoutes.post('/login', async (c) => {
   }
 
   const db = c.env.DB;
-  const user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
+  let user;
+  try {
+    user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
+  } catch (err) {
+    // This is the ONE D1 read that can never be moved off D1 (credentials
+    // must be checked somewhere) — if D1 itself is unreachable/over quota,
+    // say so plainly instead of the generic "فشل الطلب" a raw 500 produces.
+    // Anyone with an EXISTING session is unaffected by this — see
+    // lib/auth.js's requireAuth, which no longer touches D1 at all.
+    console.error('login: D1 unavailable while checking credentials', err);
+    return jsonError(c, 503, 'تعذر تسجيل الدخول مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 
   // Constant-shape response whether or not the user exists, to avoid
   // leaking which usernames are valid.
