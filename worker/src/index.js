@@ -28,6 +28,7 @@ import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
 import { sweepLateAttendance, sweepOffHoursAvailability } from './lib/workhours.js';
 import { sweepOpsReports } from './lib/opsreports.js';
+import { sweepAutoReclaim } from './lib/reclaim.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
 
@@ -93,6 +94,13 @@ api.route('/complaints', complaintRoutes);
 api.route('/favorites', favoriteRoutes);
 api.route('/chat', chatRoutes);
 api.route('/ops-reports', opsReportRoutes);
+// NOTE: '/attendance' route (routes/attendance.js) is written and ready but
+// deliberately NOT wired in yet — it depends on the attendance_records /
+// attendance_penalties tables (migration 0008), which can't be created
+// until the D1 daily quota unblocks. Wire it back in alongside that
+// migration, together with the matching frontend pieces (app.js topbar
+// button, views-attendance.js) — see the standing note in that migration
+// file for the full checklist.
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
@@ -129,5 +137,6 @@ export default {
     ctx.waitUntil(sweepLateAttendance(env.DB, env).catch((e) => console.error('sweepLateAttendance failed', e)));
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
+    ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
   },
 };
