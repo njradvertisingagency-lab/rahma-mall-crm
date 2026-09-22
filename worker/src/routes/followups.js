@@ -1,9 +1,20 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { logActivity, createNotification, broadcast, jsonError, nowIso } from '../lib/db.js';
+import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const followupRoutes = new Hono();
 followupRoutes.use('*', requireAuth);
+
+// Same short-TTL cache + stale-fallback pattern as customers.js's list —
+// this is a live task list (who to call next), so freshness matters more
+// than for a KPI widget, but a genuine D1 outage should still show the last
+// known list (clearly marked stale) instead of an error screen.
+const FOLLOWUPS_LIST_CACHE_TTL_MS = 10 * 1000;
+function followupsListCacheKey(user, queryString) {
+  const scope = user.role === 'employee' ? `emp:${user.employeeId}` : 'tl';
+  return `cache:followups_list:${scope}:${queryString}`;
+}
 
 function followupRowToJson(row) {
   const now = Date.now();
@@ -62,33 +73,53 @@ followupRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const q = c.req.query();
-  const conds = [];
-  const binds = [];
 
-  if (user.role === 'employee') {
-    conds.push('f.employee_id = ?');
-    binds.push(user.employeeId);
-  } else if (q.employeeId) {
-    conds.push('f.employee_id = ?');
-    binds.push(Number(q.employeeId));
-  }
-  if (q.status === 'COMPLETED' || q.status === 'CANCELLED') {
-    conds.push('f.status = ?');
-    binds.push(q.status);
-  } else if (q.status === 'OPEN') {
-    conds.push(`f.status = 'UPCOMING'`);
+  const cacheKey = followupsListCacheKey(user, c.req.url.split('?')[1] || '');
+  const cached = await sessGet(c.env, cacheKey).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < FOLLOWUPS_LIST_CACHE_TTL_MS) {
+    return c.json(cached.payload);
   }
 
-  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const rows = await db
-    .prepare(`SELECT f.*, e.name AS employee_name, c.name AS customer_name, c.phone AS customer_phone FROM followups f LEFT JOIN employees e ON e.id = f.employee_id LEFT JOIN customers c ON c.id = f.customer_id ${where} ORDER BY f.scheduled_for ASC LIMIT 500`)
-    .bind(...binds)
-    .all();
+  try {
+    const conds = [];
+    const binds = [];
 
-  let results = rows.results.map((r) => ({ ...followupRowToJson(r), customerName: r.customer_name, customerPhone: r.customer_phone }));
-  if (q.overdue === 'true') results = results.filter((f) => f.status === 'OVERDUE');
-  if (q.due === 'true') results = results.filter((f) => f.status === 'DUE');
-  return c.json({ followups: results });
+    if (user.role === 'employee') {
+      conds.push('f.employee_id = ?');
+      binds.push(user.employeeId);
+    } else if (q.employeeId) {
+      conds.push('f.employee_id = ?');
+      binds.push(Number(q.employeeId));
+    }
+    if (q.status === 'COMPLETED' || q.status === 'CANCELLED') {
+      conds.push('f.status = ?');
+      binds.push(q.status);
+    } else if (q.status === 'OPEN') {
+      conds.push(`f.status = 'UPCOMING'`);
+    }
+
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const rows = await db
+      .prepare(`SELECT f.*, e.name AS employee_name, c.name AS customer_name, c.phone AS customer_phone FROM followups f LEFT JOIN employees e ON e.id = f.employee_id LEFT JOIN customers c ON c.id = f.customer_id ${where} ORDER BY f.scheduled_for ASC LIMIT 500`)
+      .bind(...binds)
+      .all();
+
+    let results = rows.results.map((r) => ({ ...followupRowToJson(r), customerName: r.customer_name, customerPhone: r.customer_phone }));
+    if (q.overdue === 'true') results = results.filter((f) => f.status === 'OVERDUE');
+    if (q.due === 'true') results = results.filter((f) => f.status === 'DUE');
+
+    const payload = { followups: results };
+    c.executionCtx.waitUntil(
+      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
+        console.error('followups list: could not update cache (non-fatal)', err)
+      )
+    );
+    return c.json(payload);
+  } catch (err) {
+    console.error('followups list: D1 unavailable, falling back to last known list', err);
+    if (cached) return c.json({ ...cached.payload, stale: true });
+    return jsonError(c, 503, 'تعذر تحميل قائمة المتابعات مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 followupRoutes.patch('/:id', async (c) => {

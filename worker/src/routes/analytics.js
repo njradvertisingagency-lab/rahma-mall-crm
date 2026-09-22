@@ -145,10 +145,20 @@ analyticsRoutes.get('/charts', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const q = c.req.query();
+
+  // Read-only insight data (like /dashboard) — safe to cache and to serve
+  // stale on a D1 outage, unlike the live customer/followup queues.
+  const cacheKey = `cache:analytics_charts:${user.role}:${user.employeeId ?? 'all'}:${c.req.url.split('?')[1] || ''}`;
+  const cached = await sessGet(c.env, cacheKey).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < DASHBOARD_CACHE_TTL_MS) {
+    return c.json(cached.payload);
+  }
+
   const { from, to } = rangeToDates(q.range || '7d', q.from, q.to);
   const scope = user.role === 'employee' ? 'AND c.assigned_employee_id = ?' : '';
   const scopeBinds = user.role === 'employee' ? [user.employeeId] : [];
 
+  try {
   const [byEmployee, byStatus, daily, bySource, byCampaign] = await Promise.all([
     db
       .prepare(
@@ -177,14 +187,25 @@ analyticsRoutes.get('/charts', async (c) => {
       .all(),
   ]);
 
-  return c.json({
+  const payload = {
     range: { from, to },
     customersByEmployee: byEmployee.results,
     statusDistribution: byStatus.results,
     dailyActivity: daily.results,
     bySource: bySource.results,
     byCampaign: byCampaign.results,
-  });
+  };
+  c.executionCtx.waitUntil(
+    sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
+      console.error('analytics/charts: could not update cache (non-fatal)', err)
+    )
+  );
+  return c.json(payload);
+  } catch (err) {
+    console.error('analytics/charts: D1 unavailable, falling back to last known numbers', err);
+    if (cached) return c.json({ ...cached.payload, stale: true });
+    return jsonError(c, 503, 'تعذر تحميل الرسوم البيانية مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 // ---------------------------------------------------------------------------

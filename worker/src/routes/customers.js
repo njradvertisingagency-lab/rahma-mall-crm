@@ -7,9 +7,25 @@ import { recordSeenIfNeeded, getCustomerSeenHistory } from '../lib/seen.js';
 import { computeCustomerSla, getSlaRules, findSeenSlaCandidates, findContactSlaCandidates, findInterestedFollowupSlaCandidates } from '../lib/sla.js';
 import { computeLeadScore } from '../lib/leadscore.js';
 import { computeDealStatus, getCustomerLifetimeValue } from '../lib/sales.js';
+import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const customerRoutes = new Hono();
 customerRoutes.use('*', requireAuth);
+
+// Same cache + stale-fallback pattern as analytics.js's /dashboard, but much
+// more conservative — this is a live sales queue, not a KPI widget, so a
+// stale read here can mean an employee calling a customer someone else just
+// closed. The TTL is short (10s, just enough to absorb an auto-refresh/
+// re-render hitting the exact same view twice in a row) and keyed on the
+// FULL query string + user scope, so different filters/pages never collide.
+// On a genuine D1 failure it falls back to the last good response for that
+// *exact* view, clearly marked `stale: true`, instead of a blank error
+// screen — same honest-degradation principle as everywhere else.
+const CUSTOMERS_LIST_CACHE_TTL_MS = 10 * 1000;
+function customersListCacheKey(user, queryString) {
+  const scope = user.role === 'employee' ? `emp:${user.employeeId}` : 'tl';
+  return `cache:customers_list:${scope}:${queryString}`;
+}
 
 const STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
@@ -54,6 +70,14 @@ customerRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const q = c.req.query();
+
+  const cacheKey = customersListCacheKey(user, c.req.url.split('?')[1] || '');
+  const cached = await sessGet(c.env, cacheKey).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < CUSTOMERS_LIST_CACHE_TTL_MS) {
+    return c.json(cached.payload);
+  }
+
+  try {
   const conds = ['1=1'];
   const binds = [];
 
@@ -183,10 +207,21 @@ customerRoutes.get('/', async (c) => {
     .bind(...binds, pageSize, offset)
     .all();
 
-  return c.json({
+  const payload = {
     customers: rows.results.map(customerRowToJson),
     pagination: { page, pageSize, total: countRow.n },
-  });
+  };
+  c.executionCtx.waitUntil(
+    sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
+      console.error('customers list: could not update cache (non-fatal)', err)
+    )
+  );
+  return c.json(payload);
+  } catch (err) {
+    console.error('customers list: D1 unavailable, falling back to last known view', err);
+    if (cached) return c.json({ ...cached.payload, stale: true });
+    return jsonError(c, 503, 'تعذر تحميل قائمة العملاء مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 customerRoutes.get('/:id', async (c) => {
