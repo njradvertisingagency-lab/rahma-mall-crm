@@ -12,6 +12,7 @@ const App = (window.App = {
     chatUnread: 0,
     employees: [],
     settings: {},
+    attendance: null, // { checkedInAt, checkedOutAt, isLate, lateMinutes, lateCountThisMonth, remainingLateAllowance, isHolidayToday }
   },
   views: {},
   listeners: {},
@@ -557,7 +558,10 @@ const NAV_TL = [
   ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
-const NAV_TL_OWNER_EXTRA = ['team-leader-performance', '👑', 'أداء قائد الفريق'];
+const NAV_TL_OWNER_EXTRA = [
+  ['team-leader-performance', '👑', 'أداء قائد الفريق'],
+  ['attendance-dashboard', '🕒', 'حضور وانصراف الفريق'],
+];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
@@ -574,7 +578,7 @@ const NAV_EMPLOYEE = [
 function renderShell() {
   const user = App.state.user;
   let nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
-  if (user.role === 'team_leader' && user.isOwner) nav = [...nav, NAV_TL_OWNER_EXTRA];
+  if (user.role === 'team_leader' && user.isOwner) nav = [...nav, ...NAV_TL_OWNER_EXTRA];
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 
@@ -607,6 +611,7 @@ function renderShell() {
   const notifBell = renderNotifBell();
   const soundToggle = renderSoundToggle();
   const adminReportsBtn = renderAdminReportsButton();
+  const attendanceBtn = renderAttendanceButton();
   const topbar = el('div', { class: 'topbar' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
     el('div', { class: 'search' }, [
@@ -619,6 +624,7 @@ function renderShell() {
     el('div', { class: 'topbar-actions' }, [
       connBadge,
       soundToggle,
+      attendanceBtn,
       notifBell,
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -632,7 +638,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt, soundToggle.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt, soundToggle.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -825,6 +831,82 @@ async function openAdminReportsModal() {
 }
 
 // ---------------------------------------------------------------------------
+// الحضور والانصراف — زر في الشريط العلوي ظاهر لكل الحسابات (موظف أو قائد
+// فريق، بما في ذلك حساب أستاذ هاني نفسه) — منفصل تمامًا عن تسجيل الدخول/
+// الخروج. الحالة تُحمّل مرة عند فتح الجلسة (boot) وتُحدَّث محليًا فور كل
+// إجراء (تسجيل حضور/انصراف) دون الحاجة لانتظار الاتصال المباشر.
+// ---------------------------------------------------------------------------
+async function refreshAttendanceStatus() {
+  try {
+    App.state.attendance = await api('/attendance/me');
+  } catch {
+    App.state.attendance = null;
+  }
+  App.emit('attendance-updated');
+}
+App.refreshAttendanceStatus = refreshAttendanceStatus;
+
+function renderAttendanceButton() {
+  if (!App.state.user) return null;
+  const btn = el('button', { class: 'btn btn-icon', title: 'الحضور والانصراف', onclick: openAttendanceModal }, ['🕒']);
+  function update() {
+    const a = App.state.attendance;
+    if (a && a.checkedInAt && !a.checkedOutAt) btn.style.color = 'var(--success)';
+    else if (a && a.checkedOutAt) btn.style.color = 'var(--muted)';
+    else btn.style.color = a && a.isHolidayToday ? 'var(--muted)' : 'var(--danger)';
+  }
+  btn.offEvt = App.on('attendance-updated', update);
+  update();
+  return btn;
+}
+
+async function openAttendanceModal() {
+  const body = el('div', {});
+  const footer = el('div', { class: 'flex gap-8' });
+  const dlg = modal('🕒 الحضور والانصراف', body, [footer]);
+
+  async function render() {
+    body.innerHTML = '';
+    footer.innerHTML = '';
+    body.appendChild(el('div', { class: 'muted' }, ['جارِ التحميل…']));
+    try {
+      const a = await api('/attendance/me');
+      App.state.attendance = a;
+      App.emit('attendance-updated');
+      body.innerHTML = '';
+
+      if (a.isHolidayToday) {
+        body.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🌙']), 'اليوم عطلة رسمية — لا حاجة لتسجيل حضور.']));
+        return;
+      }
+
+      body.appendChild(el('div', { class: 'mb-12' }, [
+        el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['وقت الحضور']), el('span', { style: 'font-weight:700' }, [a.checkedInAt ? fmtDateTime(a.checkedInAt) : '— لم يُسجَّل بعد —'])]),
+        el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['وقت الانصراف']), el('span', { style: 'font-weight:700' }, [a.checkedOutAt ? fmtDateTime(a.checkedOutAt) : '—'])]),
+        a.checkedInAt ? el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['حالة الحضور']), a.isLate ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, [`متأخر ${a.lateMinutes} د`]) : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد'])]) : null,
+        el('div', { class: 'flex-between' }, [el('span', {}, ['تأخيرات هذا الشهر']), el('span', { style: 'font-weight:700' }, [`${a.lateCountThisMonth} (متبقّي ${a.remainingLateAllowance})`])]),
+      ]));
+
+      if (!a.checkedInAt) {
+        const btn = el('button', { class: 'btn btn-primary btn-block', onclick: async () => { btn.disabled = true; try { await api('/attendance/check-in', { method: 'POST' }); toast('تم تسجيل الحضور', 'success'); await render(); } catch (e) { toast(e.message || 'تعذّر تسجيل الحضور', 'error'); btn.disabled = false; } } }, ['✅ تسجيل حضور']);
+        footer.appendChild(btn);
+      } else if (!a.checkedOutAt) {
+        const btn = el('button', { class: 'btn btn-outline btn-block', onclick: async () => { btn.disabled = true; try { await api('/attendance/check-out', { method: 'POST' }); toast('تم تسجيل الانصراف', 'success'); await render(); } catch (e) { toast(e.message || 'تعذّر تسجيل الانصراف', 'error'); btn.disabled = false; } } }, ['🚪 تسجيل انصراف']);
+        footer.appendChild(btn);
+      } else {
+        footer.appendChild(el('div', { class: 'muted' }, ['تم تسجيل الحضور والانصراف لهذا اليوم.']));
+      }
+      footer.appendChild(el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق']));
+    } catch (e) {
+      body.innerHTML = '';
+      body.appendChild(el('div', { class: 'error-text' }, [e.message || 'تعذّر تحميل بيانات الحضور']));
+      footer.appendChild(el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق']));
+    }
+  }
+  await render();
+}
+
+// ---------------------------------------------------------------------------
 // قفل الوصول لأجهزة الكمبيوتر فقط (Desktop-only gate). لا يوجد فحص واحد من
 // داخل المتصفح "مضمون ١٠٠٪" ضد شخص عنيد مصمّم على التحايل (أي فحص جافاسكريبت
 // يمكن نظريًا تعديله) — لكن الفحوصات دي مجتمعة توقف عمليًا أي موبايل أو تابلت
@@ -908,6 +990,7 @@ async function boot() {
     App.startPresenceHeartbeat();
     refreshNotifications();
     refreshChatUnread();
+    refreshAttendanceStatus();
   }
   renderRoute();
 }
