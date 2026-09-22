@@ -55,6 +55,9 @@ function customerRowToJson(row) {
     version: row.version,
     whatsappContactStatus: row.whatsapp_contact_status,
     whatsappContactedAt: row.whatsapp_contacted_at,
+    // Only present on the list query, which computes it. Absent elsewhere,
+    // so treat a missing value as "nothing pending" rather than false-alarming.
+    needsNote: row.needs_note === undefined ? undefined : !!row.needs_note,
   };
 }
 
@@ -200,7 +203,22 @@ customerRoutes.get('/', async (c) => {
 
   const rows = await db
     .prepare(
-      `SELECT c.*, e.name AS employee_name FROM customers c
+      // needs_note: the assigned employee opened this customer but never
+      // wrote a note afterwards. The customer is shown in red until a note
+      // lands, so nobody silently drops a lead they already looked at.
+      // Both lookups ride existing indexes (customer_seen's primary key and
+      // idx_notes_customer), so this stays cheap on the list query.
+      `SELECT c.*, e.name AS employee_name,
+              EXISTS (
+                SELECT 1 FROM customer_seen cs
+                WHERE cs.customer_id = c.id
+                  AND cs.employee_id = c.assigned_employee_id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM customer_notes n
+                    WHERE n.customer_id = c.id AND n.created_at >= cs.seen_at
+                  )
+              ) AS needs_note
+       FROM customers c
        LEFT JOIN employees e ON e.id = c.assigned_employee_id
        WHERE ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`
     )
