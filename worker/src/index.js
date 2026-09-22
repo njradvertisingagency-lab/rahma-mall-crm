@@ -120,16 +120,18 @@ export default {
     return app.fetch(request, env, ctx);
   },
 
-  // Cron trigger (every minute — see wrangler.toml). Independent sweeps —
-  // each isolated so one failing never blocks the others: overdue
-  // follow-ups, employee idle/offline presence, SLA warning/breach
-  // detection, "customer waiting for you" staleness alerts, today's
-  // performance snapshot (upserted every tick), temporary Do-Not-Disturb
-  // auto-revert, late-attendance alerts, automatic outside-hours DND, and
-  // the two admin-only daily ops reports (start-of-day / end-of-shift).
+  // Cron trigger — TWO cadences (see wrangler.toml for why): "* * * * *"
+  // every minute for the one thing worth checking that often (presence),
+  // and "*/5 * * * *" every 5 minutes for everything else. Each sweep stays
+  // isolated so one failing never blocks the others.
   async scheduled(event, env, ctx) {
+    if (event.cron === '* * * * *') {
+      ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
+      return;
+    }
+    // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
+    // future trigger never silently runs nothing).
     ctx.waitUntil(sweepOverdueFollowups(env));
-    ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
     ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
     ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
     ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
