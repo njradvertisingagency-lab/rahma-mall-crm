@@ -195,7 +195,7 @@ export default {
     }
     // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
     // future trigger never silently runs nothing).
-    ctx.waitUntil(sweepOverdueFollowups(env));
+    ctx.waitUntil(sweepOverdueFollowups(env).catch((e) => console.error('sweepOverdueFollowups failed', e)));
     ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
     ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
     ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
