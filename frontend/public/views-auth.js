@@ -80,6 +80,13 @@
 
       async function onSubmit() {
         errorBox.style.display = 'none';
+        // طبقة حماية إضافية مباشرة قبل الإرسال — الفحص الأساسي يمنع حتى ظهور
+        // هذه الشاشة على موبايل/تابلت، وهذا فحص ثانٍ لحظة الضغط على الزر نفسه.
+        if (typeof App.isLikelyDesktopDevice === 'function' && !App.isLikelyDesktopDevice()) {
+          errorBox.textContent = 'هذا النظام يعمل من جهاز كمبيوتر فقط.';
+          errorBox.style.display = 'block';
+          return;
+        }
         submit.disabled = true;
         submit.textContent = 'جارِ الدخول…';
         const username = isTeamLeader ? document.getElementById('f-username').value.trim() || 'Teamleader' : prefillUsername;

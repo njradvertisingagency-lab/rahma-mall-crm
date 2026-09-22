@@ -480,6 +480,12 @@ function teardownPreviousRender() {
 
 async function renderRoute() {
   const root = document.getElementById('app');
+  // يُفحص عند كل تنقّل، مش بس أول تحميل — تعديل الرابط يدويًا (hashchange)
+  // بعد الحظر الأول ما ينفعش يلتف حول شاشة الحظر.
+  if (!isLikelyDesktopDevice()) {
+    showDeviceBlockedScreen();
+    return;
+  }
   if (!App.state.user) {
     teardownPreviousRender();
     if (location.hash !== '#/login') {
@@ -819,9 +825,78 @@ async function openAdminReportsModal() {
 }
 
 // ---------------------------------------------------------------------------
+// قفل الوصول لأجهزة الكمبيوتر فقط (Desktop-only gate). لا يوجد فحص واحد من
+// داخل المتصفح "مضمون ١٠٠٪" ضد شخص عنيد مصمّم على التحايل (أي فحص جافاسكريبت
+// يمكن نظريًا تعديله) — لكن الفحوصات دي مجتمعة توقف عمليًا أي موبايل أو تابلت
+// عادي حتى في وضع "عرض كموقع كمبيوتر" اللي بيغيّر الـ User-Agent فقط:
+//   ١) عند تحميل الصفحة: فحص خصائص الجهاز الحقيقية (pointer:fine، hover،
+//      عدم وجود نقاط لمس) قبل حتى إظهار شاشة تسجيل الدخول.
+//   ٢) طوال الجلسة (أثناء وبعد تسجيل الدخول): أي حدث لمس فعلي على الشاشة
+//      يقفل الجلسة فورًا.
+//   ٣) أي تغيّر في اتجاه الشاشة (Portrait/Landscape) — ميزة موجودة فعليًا
+//      فقط في الموبايل والتابلت — يقفل الجلسة فورًا أيضًا.
+// ---------------------------------------------------------------------------
+function isLikelyDesktopDevice() {
+  const hasFinePointer = !!(window.matchMedia && window.matchMedia('(pointer: fine)').matches);
+  const supportsHover = !!(window.matchMedia && window.matchMedia('(hover: hover)').matches);
+  const noTouchPoints = !navigator.maxTouchPoints || navigator.maxTouchPoints === 0;
+  // أي إشارتين حقيقيتين من الثلاثة كافيتين — لا نثق أبدًا بسلسلة الـ User-Agent وحدها.
+  const passing = [hasFinePointer, supportsHover, noTouchPoints].filter(Boolean).length;
+  return passing >= 2;
+}
+App.isLikelyDesktopDevice = isLikelyDesktopDevice;
+
+function showDeviceBlockedScreen(reason) {
+  const root = document.getElementById('app') || document.body;
+  root.innerHTML = '';
+  root.appendChild(
+    el('div', { style: 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center' }, [
+      el('div', {}, [
+        el('div', { style: 'font-size:44px;margin-bottom:16px' }, ['🖥️']),
+        el('div', { style: 'font-size:19px;font-weight:800;margin-bottom:10px' }, ['هذا النظام يعمل من جهاز كمبيوتر (PC) فقط']),
+        el('div', { class: 'muted', style: 'max-width:420px;margin:0 auto' }, [
+          reason || 'تم رصد أن هذا الجهاز موبايل أو تابلت. لا يمكن استخدام نظام إدارة فريق المبيعات إلا من جهاز كمبيوتر.',
+        ]),
+      ]),
+    ])
+  );
+}
+
+let deviceGuardStarted = false;
+let deviceViolationHandled = false;
+async function handleDeviceViolation(reason) {
+  if (deviceViolationHandled) return;
+  deviceViolationHandled = true;
+  if (App.state.user) {
+    try { await api('/auth/logout', { method: 'POST' }); } catch {}
+    App.state.user = null;
+    try { RT.disconnect(); } catch {}
+  }
+  showDeviceBlockedScreen(reason);
+}
+
+function startDeviceGuard() {
+  if (deviceGuardStarted) return;
+  deviceGuardStarted = true;
+  document.addEventListener('touchstart', () => handleDeviceViolation('تم رصد تفاعل لمس أثناء الجلسة — هذا النظام يعمل من جهاز كمبيوتر فقط.'), { passive: true, capture: true });
+  window.addEventListener('orientationchange', () => handleDeviceViolation('تم رصد تغيّر في اتجاه الشاشة — هذا النظام يعمل من جهاز كمبيوتر فقط.'));
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(orientation: portrait)');
+    const onChange = () => handleDeviceViolation('تم رصد تغيّر في اتجاه الشاشة — هذا النظام يعمل من جهاز كمبيوتر فقط.');
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else if (mq.addListener) mq.addListener(onChange); // Safari القديم
+  }
+}
+
+// ---------------------------------------------------------------------------
 // الإقلاع
 // ---------------------------------------------------------------------------
 async function boot() {
+  if (!isLikelyDesktopDevice()) {
+    showDeviceBlockedScreen();
+    return;
+  }
+  startDeviceGuard();
   try {
     const data = await api('/auth/me');
     App.state.user = data.user;
