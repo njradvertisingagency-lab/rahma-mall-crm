@@ -236,7 +236,19 @@ async function api(path, opts) {
     const message = (data && data.error && data.error.message) || 'فشل الطلب';
     throw new Error(message);
   }
+  // الخادم يرد بآخر نسخة معروفة من البيانات إذا تعذّر الوصول لقاعدة البيانات،
+  // ويضع stale: true. لا يصح أن يتصرّف الفريق في بيانات عميل دون أن يعرف أنها
+  // قد تكون قديمة — ننبّه مرة واحدة كل دقيقة حتى لا يتحوّل التنبيه إلى إزعاج.
+  if (data && data.stale === true) notifyStaleData();
   return data;
+}
+
+let lastStaleNoticeAt = 0;
+function notifyStaleData() {
+  const now = Date.now();
+  if (now - lastStaleNoticeAt < 60 * 1000) return;
+  lastStaleNoticeAt = now;
+  toast('البيانات المعروضة قد تكون غير محدَّثة — قاعدة البيانات تحت ضغط مؤقت', 'warn');
 }
 App.api = api;
 App.apiBase = API_BASE; // مُستخدم لبناء روابط مباشرة (مثل تصدير CSV) تعمل حتى لو اختلف النطاق
