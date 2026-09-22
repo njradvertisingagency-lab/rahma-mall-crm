@@ -238,7 +238,13 @@ employeeRoutes.post('/:id/dnd', async (c) => {
   if (!minutes || minutes <= 0 || minutes > 480) return jsonError(c, 400, 'عدد الدقائق غير صالح (الحد الأقصى ٨ ساعات)', 'INVALID_MINUTES');
 
   const until = new Date(Date.now() + minutes * 60000).toISOString();
-  await db.prepare(`UPDATE employees SET availability = 'UNAVAILABLE', dnd_until = ?, updated_at = ? WHERE id = ?`).bind(until, nowIso(), id).run();
+  // A manual DND always overrides any automatic outside-hours switch, and
+  // takes ownership of the state cleanly — the morning off-hours sweep must
+  // never restore a stale pre-DND value on top of this later decision.
+  await db
+    .prepare(`UPDATE employees SET availability = 'UNAVAILABLE', dnd_until = ?, off_hours_auto = 0, pre_off_hours_availability = NULL, updated_at = ? WHERE id = ?`)
+    .bind(until, nowIso(), id)
+    .run();
   await logActivity(db, { actor: user, action: 'EMPLOYEE_DND_STARTED', entityType: 'employee', entityId: String(id), metadata: { minutes, until } });
   await broadcast(c.env, 'EMPLOYEE_AVAILABILITY_CHANGED', { employeeId: id, availability: 'UNAVAILABLE', dndUntil: until }, { scope: 'role', role: 'team_leader' });
   return c.json({ ok: true, dndUntil: until });
@@ -250,7 +256,10 @@ employeeRoutes.post('/:id/dnd/cancel', async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   if (user.role === 'employee' && user.employeeId !== id) return jsonError(c, 403, 'يمكنك فقط إلغاء عدم الإزعاج لنفسك', 'FORBIDDEN_OWNERSHIP');
-  await db.prepare(`UPDATE employees SET availability = 'AVAILABLE', dnd_until = NULL, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
+  await db
+    .prepare(`UPDATE employees SET availability = 'AVAILABLE', dnd_until = NULL, off_hours_auto = 0, pre_off_hours_availability = NULL, updated_at = ? WHERE id = ?`)
+    .bind(nowIso(), id)
+    .run();
   await logActivity(db, { actor: user, action: 'EMPLOYEE_DND_CANCELLED', entityType: 'employee', entityId: String(id) });
   await broadcast(c.env, 'EMPLOYEE_AVAILABILITY_CHANGED', { employeeId: id, availability: 'AVAILABLE' }, { scope: 'role', role: 'team_leader' });
   return c.json({ ok: true });
@@ -278,6 +287,11 @@ employeeRoutes.patch('/:id', async (c) => {
     // Any manual availability change cancels a pending temporary DND — it
     // should never silently override a decision the employee/TL just made.
     fields.push('dnd_until = NULL');
+    // Same for an automatic outside-hours switch: a manual choice always
+    // wins, and takes over ownership of the state so the morning off-hours
+    // sweep never restores a now-stale "before" value on top of it.
+    fields.push('off_hours_auto = 0');
+    fields.push('pre_off_hours_availability = NULL');
   }
   if ('active' in body && user.role === 'team_leader') {
     fields.push('active = ?');
