@@ -15,15 +15,30 @@ database_id = "254cf99d-8a08-4fcd-875a-a4abd67fc766"
 migrations_dir = "worker/migrations"
 
 # ---------------------------------------------------------------------------
-# Durable Object binding — real-time room (one global instance for the team)
+# Durable Object bindings:
+#   TEAM_ROOM        — real-time room (one global instance for the team)
+#   ATTENDANCE_STORE — attendance check-in/out + penalties (one global
+#                      instance). Deliberately a Durable Object rather than a
+#                      new D1 table — see durable-objects/attendance-store.js
+#                      for why (D1's free-tier daily row-read quota was
+#                      blocking new tables outright and unpredictably; a DO
+#                      is a completely separate resource, unaffected by it).
 # ---------------------------------------------------------------------------
 [[durable_objects.bindings]]
 name = "TEAM_ROOM"
 class_name = "TeamRoom"
 
+[[durable_objects.bindings]]
+name = "ATTENDANCE_STORE"
+class_name = "AttendanceStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TeamRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["AttendanceStore"]
 
 # ---------------------------------------------------------------------------
 # Static assets (frontend) — served directly by this Worker via assets binding.
