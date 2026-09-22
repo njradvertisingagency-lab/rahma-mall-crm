@@ -8,8 +8,13 @@
 // touches employees.last_late_alert_date, never anything presence-related.
 import { nowIso, broadcast, createNotification } from './db.js';
 
-const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 18, endMinute: 0, lateAfterMinutes: 15 };
+const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 18, endMinute: 0, lateAfterMinutes: 15, holidayWeekdays: ['Thursday', 'Friday'] };
 const TIMEZONE = 'Africa/Cairo';
+
+/** Full English weekday name for Cairo "now" (e.g. "Thursday") — used only to compare against settings.holidayWeekdays. */
+export function getCairoWeekday() {
+  return new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, weekday: 'long' }).format(new Date());
+}
 
 export async function getWorkHoursSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'work_hours'`).first();
@@ -42,12 +47,33 @@ function toMinutes(h, m) {
   return h * 60 + m;
 }
 
+/**
+ * The UTC instant range covering one Cairo calendar day (e.g. "2026-09-22"
+ * 00:00:00 through 23:59:59.999, Cairo-local) — computed from Cairo's actual
+ * current UTC offset via Intl rather than a hardcoded +2/+3, so it stays
+ * correct whichever DST rule is in effect for that date. Used anywhere a
+ * report needs to scope a query to "that Cairo business day" precisely
+ * (attendance dashboard, per-day call/closed counts) instead of drifting by
+ * a couple of hours the way a naive `dateStr + 'T00:00:00Z'` would.
+ */
+export function getCairoDayBoundsUtc(dateStr) {
+  const naiveUtc = new Date(`${dateStr}T00:00:00.000Z`);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(naiveUtc);
+  const h = Number(parts.find((p) => p.type === 'hour')?.value) % 24;
+  const m = Number(parts.find((p) => p.type === 'minute')?.value);
+  const dayStartUtcMs = naiveUtc.getTime() - (h * 60 + m) * 60000;
+  const dayEndUtcMs = dayStartUtcMs + 24 * 3600 * 1000 - 1;
+  return { dayStartIso: new Date(dayStartUtcMs).toISOString(), dayEndIso: new Date(dayEndUtcMs).toISOString() };
+}
+
 export async function getWorkHoursStatus(db) {
   const settings = await getWorkHoursSettings(db);
   const { dateStr, minutesSinceMidnight } = getCairoNow();
   const startMin = toMinutes(settings.startHour, settings.startMinute);
   const endMin = toMinutes(settings.endHour, settings.endMinute);
   const lateCutoff = startMin + settings.lateAfterMinutes;
+  const holidayWeekdays = Array.isArray(settings.holidayWeekdays) ? settings.holidayWeekdays : DEFAULT_WORK_HOURS.holidayWeekdays;
+  const isHolidayToday = holidayWeekdays.includes(getCairoWeekday());
   return {
     settings,
     dateStr,
@@ -55,8 +81,11 @@ export async function getWorkHoursStatus(db) {
     startMin,
     endMin,
     lateCutoff,
-    isWorkHoursNow: minutesSinceMidnight >= startMin && minutesSinceMidnight < endMin,
-    isPastLateCutoff: minutesSinceMidnight >= lateCutoff,
+    isHolidayToday,
+    // A holiday is never "work hours", whatever the clock says — Thursday/
+    // Friday (by default) count as a full day off for everyone.
+    isWorkHoursNow: !isHolidayToday && minutesSinceMidnight >= startMin && minutesSinceMidnight < endMin,
+    isPastLateCutoff: !isHolidayToday && minutesSinceMidnight >= lateCutoff,
   };
 }
 
@@ -65,39 +94,49 @@ function pad(n) {
 }
 
 // ---------------------------------------------------------------------------
-// 1) LATE ATTENDANCE — once per employee per Cairo calendar day. Fires on
-// the first cron tick after the cutoff (start + lateAfterMinutes) that finds
-// the employee still hasn't logged in today, and stops re-checking them
-// once alerted (last_late_alert_date = today) — whether they log in five
-// minutes later or never show up at all. Reaches every team_leader-role
-// account: the real Team Leader AND Mr. Hany's admin account both carry
-// that role, so both are meant to see this one (unlike the two ops reports
-// below, which are owner-only).
+// 1) LATE ATTENDANCE — once per employee per Cairo calendar day, and never
+// on a holiday. Fires on the first cron tick after the cutoff (start +
+// lateAfterMinutes) that finds the employee hasn't logged in yet today, and
+// stops re-checking them once alerted (last_late_alert_date = today) —
+// whether they log in five minutes later or never show up at all. Reaches
+// every team_leader-role account: the real Team Leader AND Mr. Hany's admin
+// account both carry that role, so both are meant to see this one (unlike
+// the two ops reports below and the monthly penalty alert, which are
+// owner-only).
+//
+// NOTE: this is a login-based check (employee_sessions), same signal used
+// before the dedicated check-in/check-out attendance system existed. Once
+// lib/attendance.js's attendance_records table is live, this should switch
+// to reading real check-in times from there instead — more accurate, since
+// an employee can be logged in without having tapped "check in" yet. Left
+// as login-based for now purely because the attendance table doesn't exist
+// in the live database yet; nothing here is blocked on that.
 // ---------------------------------------------------------------------------
 export async function sweepLateAttendance(db, env) {
   const status = await getWorkHoursStatus(db);
   // Only worth checking during the work day itself — never in the evening/
-  // night for a day that's already over.
+  // night for a day that's already over, and never on a holiday.
   if (!status.isPastLateCutoff || status.minutesSinceMidnight >= status.endMin) return { alerted: 0 };
 
+  const { dayStartIso } = getCairoDayBoundsUtc(status.dateStr);
   const employees = await db
     .prepare(
-      `SELECT e.id, e.name, e.name_ar, ep.last_login_at
-       FROM employees e LEFT JOIN employee_presence ep ON ep.employee_id = e.id
+      `SELECT e.id, e.name, e.name_ar,
+              (SELECT 1 FROM employee_sessions es WHERE es.employee_id = e.id AND es.login_at >= ? LIMIT 1) AS logged_in_today
+       FROM employees e
        WHERE e.active = 1 AND (e.last_late_alert_date IS NULL OR e.last_late_alert_date != ?)`
     )
-    .bind(status.dateStr)
+    .bind(dayStartIso, status.dateStr)
     .all();
   if (employees.results.length === 0) return { alerted: 0 };
 
   const leaders = await db.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all();
   let alerted = 0;
   for (const emp of employees.results) {
-    const loggedInToday = emp.last_login_at && emp.last_login_at.slice(0, 10) === status.dateStr;
-    if (loggedInToday) continue;
+    if (emp.logged_in_today) continue; // already logged in today — nothing to alert about
     const label = emp.name_ar ? `${emp.name} (${emp.name_ar})` : emp.name;
     const title = '⏰ تأخر عن الحضور';
-    const message = `${label} لم يسجّل الدخول بعد رغم مرور ${status.settings.lateAfterMinutes} دقيقة على بدء الدوام (${pad(status.settings.startHour)}:${pad(status.settings.startMinute)} صباحًا).`;
+    const message = `${label} لم يسجّل حضوره بعد رغم مرور ${status.settings.lateAfterMinutes} دقيقة على بدء الدوام (${pad(status.settings.startHour)}:${pad(status.settings.startMinute)} صباحًا).`;
     for (const tl of leaders.results) {
       await createNotification(db, { userId: tl.id, type: 'LATE_ATTENDANCE', title, message, entityType: 'employee', entityId: String(emp.id) });
     }

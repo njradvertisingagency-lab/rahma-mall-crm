@@ -115,6 +115,7 @@ async function notifyOwners(db, env, { type, title, message }) {
 // ---------------------------------------------------------------------------
 export async function sweepOpsReports(db, env) {
   const status = await getWorkHoursStatus(db);
+  if (status.isHolidayToday) return {}; // Thursday/Friday (by default) — nobody's expected to work, so no reports either
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'ops_reports_sent'`).first();
   let sent = {};
   try {
