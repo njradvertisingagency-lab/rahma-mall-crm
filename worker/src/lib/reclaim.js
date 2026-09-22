@@ -11,10 +11,10 @@
 //     no customer_status_history row AND no customer_notes row for that
 //     customer with a timestamp >= the assignment time.
 //   - "أفضل شخص منتظم" = fewest late check-ins THIS MONTH first (via the
-//     attendance system's attendance_records — degrades gracefully to
-//     "everyone tied at zero" if that table doesn't exist yet on an older
-//     deployment, so this sweep is never blocked on the attendance system),
-//     then highest performance score as the tiebreaker.
+//     attendance system's Durable Object store — lib/attendance.js — with a
+//     graceful fallback to "everyone tied at zero" if it's ever
+//     unreachable, so this sweep is never blocked on the attendance
+//     system), then highest performance score as the tiebreaker.
 //   - Execution = automatic immediately, plus a notification to the
 //     employee it was pulled from, the employee who received it, AND every
 //     owner account (Mr. Hany) — never silent.
@@ -25,12 +25,13 @@
 import { nowIso, createNotification, broadcast, logActivity, nextDistributionLabel } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc } from './workhours.js';
 import { computeAllEmployeeStats } from './performance.js';
+import { getLateCountThisMonth } from './attendance.js';
 
 function monthOf(dateStr) {
   return dateStr.slice(0, 7);
 }
 
-async function pickBestTeammate(db, excludeEmployeeId, month) {
+async function pickBestTeammate(db, env, excludeEmployeeId, month) {
   const employees = (
     await db.prepare(`SELECT e.id, e.user_id, e.name, e.name_ar FROM employees e WHERE e.active = 1 AND e.id != ?`).bind(excludeEmployeeId).all()
   ).results;
@@ -38,13 +39,13 @@ async function pickBestTeammate(db, excludeEmployeeId, month) {
 
   let lateCounts = {};
   try {
-    const rows = await db
-      .prepare(`SELECT user_id, COUNT(*) AS n FROM attendance_records WHERE is_late = 1 AND substr(work_date, 1, 7) = ? GROUP BY user_id`)
-      .bind(month)
-      .all();
-    lateCounts = Object.fromEntries(rows.results.map((r) => [r.user_id, r.n]));
+    for (const e of employees) {
+      lateCounts[e.user_id] = await getLateCountThisMonth(env, e.user_id, month);
+    }
   } catch (err) {
-    // attendance_records may not exist yet — fall back to performance score alone.
+    // The attendance store should always be reachable (it's a Durable Object,
+    // unrelated to D1) — but fall back to performance score alone rather
+    // than fail the whole handoff if something's ever wrong with it.
     console.error('pickBestTeammate: attendance ranking unavailable, using performance only', err);
   }
 
@@ -98,7 +99,7 @@ export async function sweepAutoReclaim(db, env) {
 
     for (const [employeeIdStr, custs] of Object.entries(byEmployee)) {
       const employeeId = Number(employeeIdStr);
-      const best = await pickBestTeammate(db, employeeId, month);
+      const best = await pickBestTeammate(db, env, employeeId, month);
       if (!best) continue; // no other active employee to hand off to — leave untouched rather than fail loudly
 
       const fromEmp = await db.prepare(`SELECT name, name_ar, user_id FROM employees WHERE id = ?`).bind(employeeId).first();

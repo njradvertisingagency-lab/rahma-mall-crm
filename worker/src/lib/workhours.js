@@ -17,11 +17,17 @@ export function getCairoWeekday() {
 }
 
 export async function getWorkHoursSettings(db) {
-  const row = await db.prepare(`SELECT value FROM settings WHERE key = 'work_hours'`).first();
-  if (!row) return { ...DEFAULT_WORK_HOURS };
+  // Wrapped end-to-end (not just the JSON.parse) so a D1 hiccup — the free
+  // tier's daily read quota has been unpredictable, even for tiny reads on
+  // an existing table — degrades to sane defaults instead of throwing and
+  // taking down every caller (attendance, off-hours DND, ops reports,
+  // auto-reclaim all start from this).
   try {
+    const row = await db.prepare(`SELECT value FROM settings WHERE key = 'work_hours'`).first();
+    if (!row) return { ...DEFAULT_WORK_HOURS };
     return { ...DEFAULT_WORK_HOURS, ...JSON.parse(row.value) };
-  } catch {
+  } catch (err) {
+    console.error('getWorkHoursSettings: D1 unavailable, using defaults', err);
     return { ...DEFAULT_WORK_HOURS };
   }
 }
