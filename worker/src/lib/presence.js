@@ -91,9 +91,16 @@ export async function recordLogout(db, env, { employeeId, token }) {
   }
   if (!employeeId) return;
   await setPresenceState(db, employeeId, 'OFFLINE', now);
+  // last_activity_at must be refreshed here too — logging out is itself a real,
+  // right-now signal from the employee. Without this, "آخر ظهور" (last seen) on
+  // the team-leader table falls back to whatever the last heartbeat happened to
+  // be (heartbeats stop once there's been no real mouse/keyboard activity for a
+  // couple of minutes), so an employee who sat idle-but-present for a while
+  // before logging out would show as last-seen an hour ago the instant after
+  // they close, instead of "just now".
   await db
-    .prepare(`UPDATE employee_presence SET last_logout_at = ?, current_session_token = NULL, current_session_started_at = NULL WHERE employee_id = ?`)
-    .bind(now, employeeId)
+    .prepare(`UPDATE employee_presence SET last_logout_at = ?, last_activity_at = ?, current_session_token = NULL, current_session_started_at = NULL WHERE employee_id = ?`)
+    .bind(now, now, employeeId)
     .run();
   await broadcast(env, 'EMPLOYEE_LOGOUT', { employeeId }, { scope: 'role', role: 'team_leader' });
   await broadcast(env, 'EMPLOYEE_OFFLINE', { employeeId, reason: 'LOGOUT' }, { scope: 'role', role: 'team_leader' });
