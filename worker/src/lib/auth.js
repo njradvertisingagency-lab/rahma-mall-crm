@@ -1,6 +1,6 @@
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomToken } from './passwords.js';
-import { nowIso, jsonError } from './db.js';
+import { nowIso, jsonError, backgroundWrite } from './db.js';
 import { sessGet, sessPut, sessDelete } from './sessionStore.js';
 
 export const SESSION_COOKIE = 'rm_session';
@@ -79,17 +79,15 @@ export async function requireAuth(c, next) {
     return jsonError(c, 401, 'الجلسة غير صالحة', 'INVALID_SESSION');
   }
   if (new Date(session.expiresAt).getTime() < Date.now()) {
-    c.executionCtx.waitUntil(sessDelete(c.env, token).catch(() => {}));
+    backgroundWrite(c, () => sessDelete(c.env, token), 'requireAuth expired-session cleanup');
     clearSessionCookie(c);
     return jsonError(c, 401, 'انتهت صلاحية الجلسة', 'SESSION_EXPIRED');
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
-  c.executionCtx.waitUntil(
-    sessPut(c.env, token, { ...session, lastSeenAt: nowIso() }).catch((err) =>
-      console.error('requireAuth: could not update lastSeenAt (non-fatal)', err)
-    )
-  );
+  // Touching lastSeenAt is bookkeeping. It runs on EVERY authenticated
+  // request, so if it could throw it would take the whole app down with it.
+  backgroundWrite(c, () => sessPut(c.env, token, { ...session, lastSeenAt: nowIso() }), 'requireAuth lastSeenAt');
 
   c.set('user', {
     id: session.userId,

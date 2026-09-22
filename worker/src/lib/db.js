@@ -105,3 +105,39 @@ export async function broadcast(env, event, payload, audience = { scope: 'all' }
 export function jsonError(c, status, message, code) {
   return c.json({ error: { message, code: code ?? null } }, status);
 }
+
+/**
+ * Fire-and-forget a background write (refreshing a cache, touching a
+ * last-seen timestamp). It must NEVER change what the caller returns.
+ *
+ * Reaching for `c.executionCtx` is itself risky: Hono exposes it as a getter
+ * that THROWS when no execution context is attached to the request. When that
+ * happens inside a `try` that also wraps a D1 query, the caller's catch block
+ * treats it as a database failure — which is how a perfectly healthy database
+ * ends up telling someone "try again in a few minutes" on the login screen.
+ * So every step here is guarded: building the promise, attaching the
+ * rejection handler, and asking for the execution context.
+ */
+export function backgroundWrite(c, makePromise, label) {
+  let promise;
+  try {
+    promise = makePromise();
+  } catch (err) {
+    console.error(`${label}: background write threw synchronously (ignored)`, err);
+    return;
+  }
+  if (!promise || typeof promise.catch !== 'function') return;
+
+  // Swallow the rejection first, so the promise can never surface as an
+  // unhandled rejection even if waitUntil below is unavailable.
+  const settled = promise.catch((err) =>
+    console.error(`${label}: background write failed (ignored)`, err)
+  );
+
+  try {
+    c.executionCtx.waitUntil(settled);
+  } catch {
+    // No execution context on this request — the work is already in flight
+    // and its failure is already handled, so simply let it run to completion.
+  }
+}
