@@ -2,9 +2,23 @@ import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { jsonError } from '../lib/db.js';
 import { computeFunnel } from '../lib/funnel.js';
+import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const analyticsRoutes = new Hono();
 analyticsRoutes.use('*', requireAuth);
+
+// Same cache + stale-fallback pattern as auth.js's /employees-public, reusing
+// the SessionStore Durable Object as a generic KV cache. The dashboard is the
+// single heaviest read in the app AND the first thing anyone looks at, so a
+// short-lived cache (numbers are "fresh enough" within 30s for a KPI widget)
+// cuts D1 pressure dramatically, and a "last known good" fallback means a D1
+// outage shows slightly-stale numbers instead of a blank error screen.
+// Scoped per role/employee since a team_leader and an employee see different
+// numbers.
+const DASHBOARD_CACHE_TTL_MS = 30 * 1000;
+function dashboardCacheKey(user) {
+  return `cache:dashboard:${user.role}:${user.employeeId ?? 'all'}`;
+}
 
 function round2(n) {
   return Math.round(n * 100) / 100;
@@ -37,13 +51,21 @@ analyticsRoutes.get('/dashboard', async (c) => {
   const scope = user.role === 'employee' ? 'AND assigned_employee_id = ?' : '';
   const binds = user.role === 'employee' ? [user.employeeId] : [];
 
+  const cacheKey = dashboardCacheKey(user);
+  const cached = await sessGet(c.env, cacheKey).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < DASHBOARD_CACHE_TTL_MS) {
+    return c.json(cached.payload);
+  }
+
   // This is the main dashboard KPI widget — a dozen+ D1 queries fired on
   // every visit to the control room, so it is the single heaviest, most
   // frequently-hit read in the whole app. When D1's quota is exhausted, this
   // was throwing a raw 500 mid-way through and taking down the whole
   // dashboard with an opaque "فشل الطلب" toast — wrapped the same way as
   // auth.js's login/employees-public handlers so the failure is at least
-  // honest and doesn't look like the app itself is broken.
+  // honest, plus a short cache + stale fallback (see above) so most visits
+  // never even reach D1, and an outage shows the last known numbers instead
+  // of an error screen.
   try {
     const statusRows = await db.prepare(`SELECT status, COUNT(*) AS n FROM customers WHERE archived = 0 ${scope} GROUP BY status`).bind(...binds).all();
     const byStatus = Object.fromEntries(statusRows.results.map((r) => [r.status, r.n]));
@@ -81,7 +103,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(monthAgo, ...waBinds).first(),
     ]);
 
-    return c.json({
+    const payload = {
       kpis: {
         whatsappToday: waToday.n,
         whatsappWeek: waWeek.n,
@@ -104,9 +126,17 @@ analyticsRoutes.get('/dashboard', async (c) => {
         todayOverdue: overdueFollowups.n,
         completionRate,
       },
-    });
+    };
+
+    c.executionCtx.waitUntil(
+      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
+        console.error('analytics/dashboard: could not update cache (non-fatal)', err)
+      )
+    );
+    return c.json(payload);
   } catch (err) {
-    console.error('analytics/dashboard: D1 unavailable', err);
+    console.error('analytics/dashboard: D1 unavailable, falling back to last known numbers', err);
+    if (cached) return c.json({ ...cached.payload, stale: true });
     return jsonError(c, 503, 'تعذر تحميل لوحة التحكم مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
   }
 });
