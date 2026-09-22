@@ -43,9 +43,23 @@ not_found_handling = "single-page-application"
 [vars]
 APP_ENV = "development"
 
-# Every minute: sweeps UPCOMING follow-ups into OVERDUE, detects employee
-# idle/offline presence, and evaluates SLA warning/breach thresholds. All three
-# need minute-level granularity to feel "live" — a 5-minute cadence made idle
-# detection (5 min default threshold) imprecise by up to 5 extra minutes.
+# Two cron cadences, split by actual cost/urgency (see index.js's scheduled()
+# for which sweep runs on which one) — this replaced a single "everything,
+# every minute" trigger that was reading far more D1 rows per day than the
+# free tier allows, almost entirely from cron overhead rather than real
+# traffic (recordDailySnapshots alone recomputes a full report-style query
+# set for every employee on every one of 1,440 ticks/day, whether or not
+# anyone is using the app — e.g. at 3am or on a holiday).
+#   * * * * *   — presence idle/offline detection only. This is the one
+#                 thing people actually notice within a minute (a stale
+#                 "online" dot), and it's cheap (only touches employees whose
+#                 state is actually changing, not a full per-employee scan).
+#   */5 * * * * — everything else: overdue follow-ups, SLA/customer-waiting
+#                 alerts, the daily performance snapshot, temporary-DND
+#                 revert, late-attendance/off-hours-DND/ops-reports/
+#                 auto-reclaim. All of these already have their own
+#                 same-day dedup guards, so a 5-minute cadence only ever
+#                 costs a few minutes of lag, never a missed or duplicate
+#                 run — but cuts their D1 reads by roughly 80%.
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "*/5 * * * *"]
