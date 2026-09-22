@@ -1,19 +1,43 @@
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomToken } from './passwords.js';
 import { nowIso, jsonError } from './db.js';
+import { sessGet, sessPut, sessDelete } from './sessionStore.js';
 
 export const SESSION_COOKIE = 'rm_session';
 const SHORT_SESSION_HOURS = 12;
 const REMEMBER_SESSION_DAYS = 30;
 
-export async function createSession(db, user, { remember = false, userAgent = '' } = {}) {
+// Session storage lives in the SessionStore Durable Object, NOT a D1 table —
+// see durable-objects/session-store.js for why (D1's free-tier daily
+// row-read quota was being exhausted partly BY this exact query running on
+// every single authenticated request app-wide; a DO is a separate resource,
+// unaffected by it). The session record below deliberately carries a
+// snapshot of the fields requireAuth used to JOIN from the `users` table
+// (role, displayName, isOwner, employeeId) so that after login, validating
+// a session never touches D1 again for the rest of its lifetime. The
+// trade-off: if an account is disabled or its role changes, that only takes
+// effect on their NEXT login, not instantly — routes/employees.js's
+// password-reset flow already force-revokes sessions for a user, which
+// covers the one place in the app that needed instant effect.
+export async function createSession(env, user, { remember = false, userAgent = '', employeeId = null } = {}) {
   const token = randomToken(32);
   const ms = remember ? REMEMBER_SESSION_DAYS * 24 * 3600 * 1000 : SHORT_SESSION_HOURS * 3600 * 1000;
   const expiresAt = new Date(Date.now() + ms).toISOString();
-  await db
-    .prepare(`INSERT INTO sessions (token, user_id, role, expires_at, user_agent) VALUES (?, ?, ?, ?, ?)`)
-    .bind(token, user.id, user.role, expiresAt, userAgent.slice(0, 200))
-    .run();
+  const now = nowIso();
+  await sessPut(env, token, {
+    token,
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    displayName: user.display_name,
+    isOwner: !!user.is_owner,
+    active: !!user.active,
+    employeeId,
+    userAgent: String(userAgent).slice(0, 200),
+    createdAt: now,
+    lastSeenAt: now,
+    expiresAt,
+  });
   return { token, expiresAt };
 }
 
@@ -37,45 +61,43 @@ export function clearSessionCookie(c) {
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
 }
 
-/** Attaches c.set('user', {...}) for a valid, unexpired, active session. */
+/** Attaches c.set('user', {...}) for a valid, unexpired, active session. Reads NO D1 at all. */
 export async function requireAuth(c, next) {
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return jsonError(c, 401, 'لم يتم تسجيل الدخول', 'NO_SESSION');
-  const db = c.env.DB;
-  const session = await db
-    .prepare(
-      `SELECT s.token, s.user_id, s.expires_at, u.username, u.role AS user_role, u.display_name, u.active, u.is_owner
-       FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?`
-    )
-    .bind(token)
-    .first();
+
+  let session;
+  try {
+    session = await sessGet(c.env, token);
+  } catch (err) {
+    console.error('requireAuth: session store unreachable', err);
+    return jsonError(c, 503, 'الخدمة غير متاحة مؤقتًا، برجاء المحاولة بعد لحظات', 'SERVICE_UNAVAILABLE');
+  }
+
   if (!session) {
     clearSessionCookie(c);
     return jsonError(c, 401, 'الجلسة غير صالحة', 'INVALID_SESSION');
   }
-  if (new Date(session.expires_at).getTime() < Date.now()) {
-    c.executionCtx.waitUntil(db.prepare(`DELETE FROM sessions WHERE token = ?`).bind(token).run());
+  if (new Date(session.expiresAt).getTime() < Date.now()) {
+    c.executionCtx.waitUntil(sessDelete(c.env, token).catch(() => {}));
     clearSessionCookie(c);
     return jsonError(c, 401, 'انتهت صلاحية الجلسة', 'SESSION_EXPIRED');
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
   c.executionCtx.waitUntil(
-    db.prepare(`UPDATE sessions SET last_seen_at = ? WHERE token = ?`).bind(nowIso(), token).run()
+    sessPut(c.env, token, { ...session, lastSeenAt: nowIso() }).catch((err) =>
+      console.error('requireAuth: could not update lastSeenAt (non-fatal)', err)
+    )
   );
 
-  let employeeId = null;
-  if (session.user_role === 'employee') {
-    const emp = await db.prepare(`SELECT id FROM employees WHERE user_id = ?`).bind(session.user_id).first();
-    employeeId = emp?.id ?? null;
-  }
   c.set('user', {
-    id: session.user_id,
+    id: session.userId,
     username: session.username,
-    role: session.user_role,
-    displayName: session.display_name,
-    employeeId,
-    isOwner: !!session.is_owner,
+    role: session.role,
+    displayName: session.displayName,
+    employeeId: session.employeeId ?? null,
+    isOwner: !!session.isOwner,
     token,
   });
   await next();
