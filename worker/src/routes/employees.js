@@ -5,7 +5,7 @@ import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
 import { hashPassword, randomSaltHex } from '../lib/passwords.js';
-import { sessListAll, sessDelete } from '../lib/sessionStore.js';
+import { sessListAll, sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const employeeRoutes = new Hono();
 employeeRoutes.use('*', requireAuth);
@@ -145,38 +145,66 @@ employeeRoutes.post('/:id/reset-password', requireRole('team_leader'), async (c)
   return c.json({ ok: true });
 });
 
+// The team list is loaded by almost every screen, and for a team leader it
+// aggregates stats across several tables — easily the most expensive read in
+// the app. A short cache keeps it cheap during normal traffic, and the cached
+// copy doubles as the fallback when D1 is unreachable, so the team still sees
+// who is on shift instead of an error.
+const EMPLOYEES_CACHE_TTL_MS = 15 * 1000;
+
 employeeRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  if (user.role === 'employee') {
-    const emp = await db.prepare(`SELECT * FROM employees WHERE id = ?`).bind(user.employeeId).first();
-    const counters = await computeEmployeeCounters(db, user.employeeId);
-    return c.json({ employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, dndUntil: emp.dnd_until, active: !!emp.active, avatarUrl: emp.avatar_data_url, ...counters }] });
+  const cacheKey = `cache:employees:${user.role === 'employee' ? `emp:${user.employeeId}` : 'tl'}`;
+  const cached = await sessGet(c.env, cacheKey).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < EMPLOYEES_CACHE_TTL_MS) {
+    return c.json(cached.payload);
   }
-  const { weights, stats } = await computeAllEmployeeStats(db);
-  const dndRows = await db.prepare(`SELECT id, dnd_until FROM employees WHERE active = 1`).all();
-  const dndById = Object.fromEntries(dndRows.results.map((r) => [r.id, r.dnd_until]));
-  return c.json({
-    weights,
-    employees: stats.map((s) => ({
-      id: s.employee.id,
-      name: s.employee.name,
-      nameAr: s.employee.nameAr,
-      username: s.employee.username,
-      availability: s.employee.availability,
-      dndUntil: dndById[s.employee.id] ?? null,
-      avatarUrl: s.employee.avatarUrl,
-      assigned: s.assigned,
-      byStatus: s.byStatus,
-      closed: s.closed,
-      followupsTotal: s.followupsTotal,
-      followupsCompleted: s.followupsCompleted,
-      followupsOverdue: s.followupsOverdue,
-      completionRate: s.completionRate,
-      performanceScore: s.performanceScore,
-      scoreBreakdown: s.scoreBreakdown,
-    })),
-  });
+
+  try {
+    let payload;
+    if (user.role === 'employee') {
+      const emp = await db.prepare(`SELECT * FROM employees WHERE id = ?`).bind(user.employeeId).first();
+      const counters = await computeEmployeeCounters(db, user.employeeId);
+      payload = { employees: [{ id: emp.id, name: emp.name, nameAr: emp.name_ar, availability: emp.availability, dndUntil: emp.dnd_until, active: !!emp.active, avatarUrl: emp.avatar_data_url, ...counters }] };
+    } else {
+      const { weights, stats } = await computeAllEmployeeStats(db);
+      const dndRows = await db.prepare(`SELECT id, dnd_until FROM employees WHERE active = 1`).all();
+      const dndById = Object.fromEntries(dndRows.results.map((r) => [r.id, r.dnd_until]));
+      payload = {
+        weights,
+        employees: stats.map((s) => ({
+          id: s.employee.id,
+          name: s.employee.name,
+          nameAr: s.employee.nameAr,
+          username: s.employee.username,
+          availability: s.employee.availability,
+          dndUntil: dndById[s.employee.id] ?? null,
+          avatarUrl: s.employee.avatarUrl,
+          assigned: s.assigned,
+          byStatus: s.byStatus,
+          closed: s.closed,
+          followupsTotal: s.followupsTotal,
+          followupsCompleted: s.followupsCompleted,
+          followupsOverdue: s.followupsOverdue,
+          completionRate: s.completionRate,
+          performanceScore: s.performanceScore,
+          scoreBreakdown: s.scoreBreakdown,
+        })),
+      };
+    }
+
+    c.executionCtx.waitUntil(
+      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
+        console.error('employees list: could not update cache (non-fatal)', err)
+      )
+    );
+    return c.json(payload);
+  } catch (err) {
+    console.error('employees list: D1 unavailable, falling back to last known list', err);
+    if (cached) return c.json({ ...cached.payload, stale: true });
+    return jsonError(c, 503, 'تعذر تحميل قائمة الموظفين مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 // Performance-over-time — a trend chart's data, not just today's snapshot.
