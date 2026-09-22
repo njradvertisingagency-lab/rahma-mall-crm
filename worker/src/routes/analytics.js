@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { jsonError } from '../lib/db.js';
+import { jsonError, backgroundWrite } from '../lib/db.js';
 import { computeFunnel } from '../lib/funnel.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
 
@@ -128,11 +128,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
       },
     };
 
-    c.executionCtx.waitUntil(
-      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
-        console.error('analytics/dashboard: could not update cache (non-fatal)', err)
-      )
-    );
+    backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'analytics/dashboard: could not update cache (non-fatal)');
     return c.json(payload);
   } catch (err) {
     console.error('analytics/dashboard: D1 unavailable, falling back to last known numbers', err);
@@ -195,11 +191,7 @@ analyticsRoutes.get('/charts', async (c) => {
     bySource: bySource.results,
     byCampaign: byCampaign.results,
   };
-  c.executionCtx.waitUntil(
-    sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
-      console.error('analytics/charts: could not update cache (non-fatal)', err)
-    )
-  );
+  backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'analytics/charts: could not update cache (non-fatal)');
   return c.json(payload);
   } catch (err) {
     console.error('analytics/charts: D1 unavailable, falling back to last known numbers', err);

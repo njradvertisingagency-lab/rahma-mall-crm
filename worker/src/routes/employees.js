@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
+import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore, getPerformanceHistory, computeBadges } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
@@ -194,11 +194,7 @@ employeeRoutes.get('/', async (c) => {
       };
     }
 
-    c.executionCtx.waitUntil(
-      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
-        console.error('employees list: could not update cache (non-fatal)', err)
-      )
-    );
+    backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'employees list: could not update cache (non-fatal)');
     return c.json(payload);
   } catch (err) {
     console.error('employees list: D1 unavailable, falling back to last known list', err);

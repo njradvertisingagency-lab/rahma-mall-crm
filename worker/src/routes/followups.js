@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { logActivity, createNotification, broadcast, jsonError, nowIso } from '../lib/db.js';
+import { logActivity, createNotification, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const followupRoutes = new Hono();
@@ -109,11 +109,7 @@ followupRoutes.get('/', async (c) => {
     if (q.due === 'true') results = results.filter((f) => f.status === 'DUE');
 
     const payload = { followups: results };
-    c.executionCtx.waitUntil(
-      sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
-        console.error('followups list: could not update cache (non-fatal)', err)
-      )
-    );
+    backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'followups list: could not update cache (non-fatal)');
     return c.json(payload);
   } catch (err) {
     console.error('followups list: D1 unavailable, falling back to last known list', err);

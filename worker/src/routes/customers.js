@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson } from '../lib/db.js';
+import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
 import { parsePastedNumbers, parseCsvToRecords, parseXlsxToRecords, buildImportPreview } from '../lib/import.js';
 import { recordSeenIfNeeded, getCustomerSeenHistory } from '../lib/seen.js';
@@ -211,11 +211,7 @@ customerRoutes.get('/', async (c) => {
     customers: rows.results.map(customerRowToJson),
     pagination: { page, pageSize, total: countRow.n },
   };
-  c.executionCtx.waitUntil(
-    sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }).catch((err) =>
-      console.error('customers list: could not update cache (non-fatal)', err)
-    )
-  );
+  backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'customers list: could not update cache (non-fatal)');
   return c.json(payload);
   } catch (err) {
     console.error('customers list: D1 unavailable, falling back to last known view', err);

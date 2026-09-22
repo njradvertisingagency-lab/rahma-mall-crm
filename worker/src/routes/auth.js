@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { verifyPassword, hashPassword, randomSaltHex } from '../lib/passwords.js';
 import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
-import { logActivity, jsonError, nowIso } from '../lib/db.js';
+import { logActivity, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { recordLogin, recordLogout } from '../lib/presence.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
@@ -44,11 +44,7 @@ authRoutes.get('/employees-public', async (c) => {
       )
       .all();
     const employees = rows.results;
-    c.executionCtx.waitUntil(
-      sessPut(c.env, EMPLOYEES_PUBLIC_CACHE_KEY, { employees, cachedAt: Date.now() }).catch((err) =>
-        console.error('employees-public: could not update cache (non-fatal)', err)
-      )
-    );
+    backgroundWrite(c, () => sessPut(c.env, EMPLOYEES_PUBLIC_CACHE_KEY, { employees, cachedAt: Date.now() }), 'employees-public: could not update cache (non-fatal)');
     return c.json({ employees });
   } catch (err) {
     console.error('employees-public: D1 unavailable, falling back to last known list', err);
@@ -98,12 +94,11 @@ authRoutes.post('/login', async (c) => {
   const userCacheKey = `cache:user:${username}`;
   let user;
   try {
+    // ONLY the D1 read belongs in this try. Anything else in here — including
+    // refreshing the cache below — would be caught by the handler underneath
+    // and reported to the person as a database outage while the database is
+    // perfectly healthy, locking them out of their own system.
     user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
-    c.executionCtx.waitUntil(
-      sessPut(c.env, userCacheKey, { user: user ?? null, cachedAt: Date.now() }).catch((err) =>
-        console.error('login: could not update user cache (non-fatal)', err)
-      )
-    );
   } catch (err) {
     console.error('login: D1 unavailable while checking credentials, trying last known snapshot', err);
     const cached = await sessGet(c.env, userCacheKey).catch(() => null);
@@ -116,6 +111,14 @@ authRoutes.post('/login', async (c) => {
       return jsonError(c, 503, 'تعذر تسجيل الدخول مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
     }
   }
+
+  // Refresh the fallback snapshot outside the try above — a failure here must
+  // never cost anyone their login.
+  backgroundWrite(
+    c,
+    () => sessPut(c.env, userCacheKey, { user: user ?? null, cachedAt: Date.now() }),
+    'login user cache'
+  );
 
   // Constant-shape response whether or not the user exists, to avoid
   // leaking which usernames are valid.
