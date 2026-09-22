@@ -264,7 +264,8 @@
         rowActions.push(el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة']));
       }
       cells.push(el('div', { class: 'flex gap-8 wrap' }, rowActions));
-      return el('tr', {}, cells.map((c2) => el('td', {}, [c2])));
+      // العميل اتفتح ولسه متكتبلوش ملاحظة — يفضل أحمر لحد ما الملاحظة تتكتب.
+      return el('tr', c.needsNote ? { class: 'row-needs-note', title: 'تم فتح العميل ولم تُكتب ملاحظة بعد' } : {}, cells.map((c2) => el('td', {}, [c2])));
     }
 
     async function restoreCustomer(c) {
@@ -277,7 +278,8 @@
     }
 
     function renderCard(c) {
-      return el('div', { class: 'customer-card' }, [
+      return el('div', { class: 'customer-card' + (c.needsNote ? ' needs-note' : '') }, [
+        c.needsNote ? el('div', { class: 'needs-note-tag' }, ['📝 محتاج ملاحظة']) : null,
         el('div', { class: 'flex-between' }, [el('div', { class: 'phone mono' }, [c.isVip ? '👑 ' : '', c.phone]), badges.status(c.status)]),
         el('div', { class: 'row' }, [el('span', { class: 'muted' }, [c.name || c.id]), badges.priority(c.priority)]),
         user.role === 'team_leader' ? el('div', { class: 'row' }, [el('span', { class: 'muted' }, ['الموظف']), c.assignedEmployeeName || 'غير موزّع']) : null,
