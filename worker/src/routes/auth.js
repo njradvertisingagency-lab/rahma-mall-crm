@@ -83,17 +83,38 @@ authRoutes.post('/login', async (c) => {
   }
 
   const db = c.env.DB;
+  // A per-username snapshot of the users row, cached in the SessionStore DO
+  // (same reused-as-KV trick as employees-public/dashboard). There are only
+  // a handful of accounts and they change rarely (password change, activate/
+  // deactivate), so this is always refreshed from a fresh D1 read when D1 is
+  // up — the cache is ONLY a last-resort fallback for the one D1 read that
+  // can never be moved off D1 entirely (credentials must be checked
+  // somewhere). This closes the one remaining gap: previously, even a
+  // brand-new login was blocked whenever D1's quota was exhausted, while an
+  // already-logged-in session was fully unaffected (requireAuth in
+  // lib/auth.js never touches D1). Now a login can succeed from the last
+  // known-good snapshot too, as long as that account has logged in
+  // successfully at least once since D1 was last reachable.
+  const userCacheKey = `cache:user:${username}`;
   let user;
   try {
     user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
+    c.executionCtx.waitUntil(
+      sessPut(c.env, userCacheKey, { user: user ?? null, cachedAt: Date.now() }).catch((err) =>
+        console.error('login: could not update user cache (non-fatal)', err)
+      )
+    );
   } catch (err) {
-    // This is the ONE D1 read that can never be moved off D1 (credentials
-    // must be checked somewhere) — if D1 itself is unreachable/over quota,
-    // say so plainly instead of the generic "فشل الطلب" a raw 500 produces.
-    // Anyone with an EXISTING session is unaffected by this — see
-    // lib/auth.js's requireAuth, which no longer touches D1 at all.
-    console.error('login: D1 unavailable while checking credentials', err);
-    return jsonError(c, 503, 'تعذر تسجيل الدخول مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+    console.error('login: D1 unavailable while checking credentials, trying last known snapshot', err);
+    const cached = await sessGet(c.env, userCacheKey).catch(() => null);
+    if (cached) {
+      user = cached.user;
+    } else {
+      // If D1 itself is unreachable/over quota and we have no snapshot for
+      // this account, say so plainly instead of the generic "فشل الطلب" a
+      // raw 500 produces.
+      return jsonError(c, 503, 'تعذر تسجيل الدخول مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+    }
   }
 
   // Constant-shape response whether or not the user exists, to avoid
@@ -105,33 +126,47 @@ authRoutes.post('/login', async (c) => {
     : (await verifyPassword(password, dummySalt, dummyHash), false);
 
   if (!ok) {
-    await logActivity(db, { actor: null, action: 'LOGIN_FAILED', entityType: 'user', entityId: username });
+    // Best-effort audit log — a wrong password must still come back as a
+    // clean 401 even if D1 can't take this write right now.
+    await logActivity(db, { actor: null, action: 'LOGIN_FAILED', entityType: 'user', entityId: username }).catch((err) =>
+      console.error('login: could not log LOGIN_FAILED (non-fatal)', err)
+    );
     return jsonError(c, 401, 'اسم المستخدم أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
   }
 
   const userAgent = uaHeader;
 
+  // From here on, the credential check has already succeeded (from D1 or the
+  // cached snapshot) — nothing below should be able to turn that into a
+  // failed login. Every remaining D1 touch is either best-effort (presence/
+  // activity logging) or degrades to a safe default (availability/avatar).
   let employeeId = null;
   let availability = null;
   let avatarUrl = null;
   if (user.role === 'employee') {
-    const emp = await db.prepare(`SELECT id, availability, avatar_data_url FROM employees WHERE user_id = ?`).bind(user.id).first();
-    employeeId = emp?.id ?? null;
-    availability = emp?.availability ?? null;
-    avatarUrl = emp?.avatar_data_url ?? null;
+    try {
+      const emp = await db.prepare(`SELECT id, availability, avatar_data_url FROM employees WHERE user_id = ?`).bind(user.id).first();
+      employeeId = emp?.id ?? null;
+      availability = emp?.availability ?? null;
+      avatarUrl = emp?.avatar_data_url ?? null;
+    } catch (err) {
+      console.error('login: could not load employee profile (non-fatal)', err);
+    }
   }
 
   const { token } = await createSession(c.env, user, { remember, userAgent, employeeId });
   setSessionCookie(c, token, remember);
 
-  await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent });
+  await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent }).catch((err) =>
+    console.error('login: could not record presence/session-history row (non-fatal)', err)
+  );
 
   await logActivity(db, {
     actor: { id: user.id, displayName: user.display_name, role: user.role },
     action: 'LOGIN',
     entityType: 'user',
     entityId: String(user.id),
-  });
+  }).catch((err) => console.error('login: could not log LOGIN activity (non-fatal)', err));
 
   return c.json({
     user: {
