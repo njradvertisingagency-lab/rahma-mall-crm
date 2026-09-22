@@ -21,6 +21,18 @@ authRoutes.get('/employees-public', async (c) => {
   return c.json({ employees: rows.results });
 });
 
+// Desktop-only login is enforced mainly client-side (app.js: feature
+// detection before the login form even renders, plus a continuous
+// touch/orientation guard for the rest of the session — see the user's
+// picked options). This is a baseline COMPLEMENT, not a replacement: it
+// only catches the case of someone skipping the browser entirely and
+// hitting this endpoint directly (curl/Postman/a script) with a real
+// mobile-device User-Agent. It cannot catch a spoofed or stripped
+// User-Agent — that is exactly what the client-side feature detection is
+// for — so this check is deliberately narrow and never the only line of
+// defense.
+const MOBILE_UA_PATTERN = /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i;
+
 authRoutes.post('/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const username = String(body.username || '').trim();
@@ -28,6 +40,11 @@ authRoutes.post('/login', async (c) => {
   const remember = !!body.remember;
 
   if (!username || !password) return jsonError(c, 400, 'اسم المستخدم وكلمة المرور مطلوبان', 'MISSING_FIELDS');
+
+  const uaHeader = c.req.header('user-agent') || '';
+  if (MOBILE_UA_PATTERN.test(uaHeader)) {
+    return jsonError(c, 403, 'هذا النظام يعمل من جهاز كمبيوتر فقط', 'DESKTOP_ONLY');
+  }
 
   const db = c.env.DB;
   const user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
@@ -45,7 +62,7 @@ authRoutes.post('/login', async (c) => {
     return jsonError(c, 401, 'اسم المستخدم أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
   }
 
-  const userAgent = c.req.header('user-agent') || '';
+  const userAgent = uaHeader;
   const { token } = await createSession(db, user, { remember, userAgent });
   setSessionCookie(c, token, remember);
 
