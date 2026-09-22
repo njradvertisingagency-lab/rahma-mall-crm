@@ -121,15 +121,19 @@ app.notFound((c) => {
 // is broken" rather than "the database is busy, try again shortly".
 // Recognising the outage here, once, gives every remaining endpoint an
 // honest answer without touching hundreds of call sites.
+// Matched against the error text. These stay deliberately specific: a loose
+// word like "exceeded" also appears in "Maximum call stack size exceeded",
+// and reporting a real bug as a database problem would send whoever is
+// debugging it after entirely the wrong thing.
 const DB_OUTAGE_SIGNATURES = [
-  'exceeded',
-  'row read limit',
   'd1_error',
-  'daily limit',
-  'quota',
+  'row read limit',
+  'daily row read',
+  'rows read limit',
   'network connection lost',
   'storage operation exceeded timeout',
   'too many api requests',
+  'd1 is temporarily unavailable',
 ];
 
 function isDatabaseOutage(err) {
@@ -138,7 +142,10 @@ function isDatabaseOutage(err) {
     .join(' ')
     .toLowerCase();
   if (!text) return false;
-  return DB_OUTAGE_SIGNATURES.some((sig) => text.includes(sig));
+  if (DB_OUTAGE_SIGNATURES.some((sig) => text.includes(sig))) return true;
+  // The quota error's exact wording has changed before, so also treat any
+  // D1-attributed limit/quota complaint as an outage.
+  return text.includes('d1') && (text.includes('limit') || text.includes('quota'));
 }
 
 app.onError((err, c) => {
