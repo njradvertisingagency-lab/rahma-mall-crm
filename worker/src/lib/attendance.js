@@ -203,10 +203,24 @@ export async function getAttendanceDashboard(env, { date } = {}) {
 
   let callsByEmp = {};
   let closedByEmp = {};
+  // Everything the owner needs to judge one day's work, gathered as one
+  // GROUP BY per metric rather than a query per person — the cost stays flat
+  // no matter how many people are on the team.
+  let seenByEmp = {};
+  let notesByUser = {};
+  let whatsappByEmp = {};
+  let followupsDoneByEmp = {};
+  let followupsOverdueByEmp = {};
+  let statusChangesByEmp = {};
+  let needsNoteByEmp = {};
+  let assignedByEmp = {};
   try {
     const dayStart = dateStr + 'T00:00:00.000Z';
     const dayEnd = dateStr + 'T23:59:59.999Z';
-    const [callsRows, closedRows] = await Promise.all([
+    const [
+      callsRows, closedRows, seenRows, notesRows, waRows,
+      fuDoneRows, fuOverdueRows, statusRows, needsNoteRows, assignedRows,
+    ] = await Promise.all([
       env.DB.prepare(`SELECT employee_id, COUNT(*) AS n FROM call_attempts WHERE created_at >= ? AND created_at <= ? GROUP BY employee_id`).bind(dayStart, dayEnd).all(),
       env.DB
         .prepare(
@@ -216,11 +230,55 @@ export async function getAttendanceDashboard(env, { date } = {}) {
         )
         .bind(dayStart, dayEnd)
         .all(),
+      env.DB.prepare(`SELECT employee_id, COUNT(*) AS n FROM customer_seen WHERE seen_at >= ? AND seen_at <= ? GROUP BY employee_id`).bind(dayStart, dayEnd).all(),
+      env.DB.prepare(`SELECT author_id, COUNT(*) AS n FROM customer_notes WHERE created_at >= ? AND created_at <= ? GROUP BY author_id`).bind(dayStart, dayEnd).all(),
+      env.DB.prepare(`SELECT employee_id, COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? AND created_at <= ? GROUP BY employee_id`).bind(dayStart, dayEnd).all(),
+      env.DB.prepare(`SELECT employee_id, COUNT(*) AS n FROM followups WHERE status = 'COMPLETED' AND completed_at >= ? AND completed_at <= ? GROUP BY employee_id`).bind(dayStart, dayEnd).all(),
+      env.DB
+        .prepare(
+          `SELECT employee_id, COUNT(*) AS n FROM followups
+           WHERE (status = 'OVERDUE' OR (status = 'UPCOMING' AND scheduled_for < ?)) GROUP BY employee_id`
+        )
+        .bind(nowIso())
+        .all(),
+      env.DB
+        .prepare(
+          `SELECT c.assigned_employee_id AS employee_id, COUNT(*) AS n
+           FROM customer_status_history h JOIN customers c ON c.id = h.customer_id
+           WHERE h.changed_at >= ? AND h.changed_at <= ? GROUP BY c.assigned_employee_id`
+        )
+        .bind(dayStart, dayEnd)
+        .all(),
+      // Customers this person opened and still owes a note on — the single
+      // clearest "unfinished work" signal, same rule as the red row in the
+      // customers list.
+      env.DB
+        .prepare(
+          `SELECT c.assigned_employee_id AS employee_id, COUNT(*) AS n FROM customers c
+           WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
+             AND EXISTS (
+               SELECT 1 FROM customer_seen cs
+               WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id
+                 AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= cs.seen_at)
+             )
+           GROUP BY c.assigned_employee_id`
+        )
+        .all(),
+      env.DB.prepare(`SELECT assigned_employee_id AS employee_id, COUNT(*) AS n FROM customers WHERE archived = 0 AND assigned_employee_id IS NOT NULL GROUP BY assigned_employee_id`).all(),
     ]);
-    callsByEmp = Object.fromEntries(callsRows.results.map((r) => [r.employee_id, r.n]));
-    closedByEmp = Object.fromEntries(closedRows.results.map((r) => [r.employee_id, r.n]));
+    const byId = (rows, key = 'employee_id') => Object.fromEntries(rows.results.map((r) => [r[key], r.n]));
+    callsByEmp = byId(callsRows);
+    closedByEmp = byId(closedRows);
+    seenByEmp = byId(seenRows);
+    notesByUser = byId(notesRows, 'author_id');
+    whatsappByEmp = byId(waRows);
+    followupsDoneByEmp = byId(fuDoneRows);
+    followupsOverdueByEmp = byId(fuOverdueRows);
+    statusChangesByEmp = byId(statusRows);
+    needsNoteByEmp = byId(needsNoteRows);
+    assignedByEmp = byId(assignedRows);
   } catch (err) {
-    console.error('attendance dashboard: calls/closed-today unavailable (D1), showing zeros', err);
+    console.error('attendance dashboard: daily activity unavailable (D1), showing zeros', err);
   }
 
   const monthEntries = await asList(env, monthRecordPrefix(month));
@@ -259,10 +317,53 @@ export async function getAttendanceDashboard(env, { date } = {}) {
       hoursWorkedSeconds: hoursSeconds,
       callsToday: (p.employee_id != null ? callsByEmp[p.employee_id] : null) || 0,
       closedToday: (p.employee_id != null ? closedByEmp[p.employee_id] : null) || 0,
+      seenToday: (p.employee_id != null ? seenByEmp[p.employee_id] : null) || 0,
+      notesToday: notesByUser[p.user_id] || 0,
+      whatsappToday: (p.employee_id != null ? whatsappByEmp[p.employee_id] : null) || 0,
+      followupsDoneToday: (p.employee_id != null ? followupsDoneByEmp[p.employee_id] : null) || 0,
+      followupsOverdue: (p.employee_id != null ? followupsOverdueByEmp[p.employee_id] : null) || 0,
+      statusChangesToday: (p.employee_id != null ? statusChangesByEmp[p.employee_id] : null) || 0,
+      needsNoteCount: (p.employee_id != null ? needsNoteByEmp[p.employee_id] : null) || 0,
+      assignedTotal: (p.employee_id != null ? assignedByEmp[p.employee_id] : null) || 0,
       lateCountThisMonth: lateCountByUser[p.user_id] || 0,
       penaltyCountThisMonth: penaltyCountByUser[p.user_id] || 0,
     };
   });
 
-  return { dateStr, isHolidayToday: status.isHolidayToday, people: rows };
+  // A deliberately simple, readable score: touches are what the person did,
+  // results are what it produced, and the two penalties are work left hanging.
+  // Kept transparent on purpose — the owner should be able to see WHY someone
+  // ranks where they do, not trust an opaque number. It is a conversation
+  // starter, never an automatic judgement, and carries no money implications.
+  const scored = rows.map((r) => {
+    const touches = r.callsToday + r.whatsappToday + r.notesToday;
+    const results = r.closedToday * 3 + r.followupsDoneToday * 2;
+    const pending = r.needsNoteCount + r.followupsOverdue;
+    const score = Math.max(0, touches + results - pending * 2 - (r.isLate ? 2 : 0));
+    return { ...r, activityScore: score };
+  });
+
+  const workers = scored.filter((r) => r.employeeId != null);
+  const ranked = [...workers].sort((a, b) => b.activityScore - a.activityScore);
+  ranked.forEach((r, i) => { r.rank = i + 1; });
+
+  const sum = (key) => workers.reduce((s, r) => s + (r[key] || 0), 0);
+  const team = {
+    headcount: workers.length,
+    checkedIn: workers.filter((r) => r.checkInAt).length,
+    lateToday: workers.filter((r) => r.isLate).length,
+    absent: workers.filter((r) => !r.checkInAt).length,
+    callsToday: sum('callsToday'),
+    whatsappToday: sum('whatsappToday'),
+    notesToday: sum('notesToday'),
+    seenToday: sum('seenToday'),
+    closedToday: sum('closedToday'),
+    followupsDoneToday: sum('followupsDoneToday'),
+    followupsOverdue: sum('followupsOverdue'),
+    needsNoteTotal: sum('needsNoteCount'),
+    assignedTotal: sum('assignedTotal'),
+    topPerformer: ranked[0] ? ranked[0].name : null,
+  };
+
+  return { dateStr, isHolidayToday: status.isHolidayToday, people: scored, team };
 }
