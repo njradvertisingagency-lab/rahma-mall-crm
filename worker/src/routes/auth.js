@@ -3,23 +3,58 @@ import { verifyPassword, hashPassword, randomSaltHex } from '../lib/passwords.js
 import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso } from '../lib/db.js';
 import { recordLogin, recordLogout } from '../lib/presence.js';
-import { sessDelete } from '../lib/sessionStore.js';
+import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
 
 // Public: the employee-picker screen needs names/avatars before any password
 // is entered. Only non-sensitive identity fields are exposed.
+//
+// This is the very FIRST request anyone makes — every visitor hits it on
+// page load, before logging in, often repeatedly if they keep retrying a
+// failed page. That made it one of the heaviest, most repetitive D1 reads
+// in the whole app (a JOIN, on every single page view). It now has two
+// layers of protection, reusing the SessionStore Durable Object (already
+// deployed, no new binding needed) purely as a small key/value cache here —
+// unrelated to sessions, just a convenient existing KV store:
+//   1. A 60-second cache: most page views in any given minute cost zero D1
+//      reads.
+//   2. A "last known good" fallback with no expiry: if D1 is ever
+//      unreachable (quota, outage), the picker screen still shows the
+//      employee list from the last successful read instead of an error —
+//      the data is close to static (names/avatars), so a stale copy is far
+//      better than a blank screen.
+const EMPLOYEES_PUBLIC_CACHE_KEY = 'cache:employees_public';
+const EMPLOYEES_PUBLIC_CACHE_TTL_MS = 60 * 1000;
+
 authRoutes.get('/employees-public', async (c) => {
+  const cached = await sessGet(c.env, EMPLOYEES_PUBLIC_CACHE_KEY).catch(() => null);
+  if (cached && Date.now() - cached.cachedAt < EMPLOYEES_PUBLIC_CACHE_TTL_MS) {
+    return c.json({ employees: cached.employees });
+  }
+
   const db = c.env.DB;
-  const rows = await db
-    .prepare(
-      `SELECT u.username, e.name, e.name_ar, e.avatar_initial, e.avatar_data_url
-       FROM employees e JOIN users u ON u.id = e.user_id
-       WHERE e.active = 1 AND u.active = 1
-       ORDER BY e.name COLLATE NOCASE`
-    )
-    .all();
-  return c.json({ employees: rows.results });
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT u.username, e.name, e.name_ar, e.avatar_initial, e.avatar_data_url
+         FROM employees e JOIN users u ON u.id = e.user_id
+         WHERE e.active = 1 AND u.active = 1
+         ORDER BY e.name COLLATE NOCASE`
+      )
+      .all();
+    const employees = rows.results;
+    c.executionCtx.waitUntil(
+      sessPut(c.env, EMPLOYEES_PUBLIC_CACHE_KEY, { employees, cachedAt: Date.now() }).catch((err) =>
+        console.error('employees-public: could not update cache (non-fatal)', err)
+      )
+    );
+    return c.json({ employees });
+  } catch (err) {
+    console.error('employees-public: D1 unavailable, falling back to last known list', err);
+    if (cached) return c.json({ employees: cached.employees, stale: true });
+    return jsonError(c, 503, 'تعذر تحميل قائمة الموظفين مؤقتًا — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+  }
 });
 
 // Desktop-only login is enforced mainly client-side (app.js: feature
