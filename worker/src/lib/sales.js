@@ -132,6 +132,28 @@ export async function createManualPurchase(db, env, input) {
   if (attributedEmployeeId) await broadcast(env, 'DEAL_DONE_CREATED', { customerId, purchaseId: purchase.id, amount: totalAmount }, { scope: 'employee', employeeId: attributedEmployeeId });
   await broadcast(env, 'REVENUE_UPDATED', {}, { scope: 'role', role: 'team_leader' });
 
+  // إغلاق تلقائي لحالة العميل عند إتمام الصفقة — "تمت الصفقة" هي الآن الطريق
+  // الوحيد لحالة "مغلق" (لم تعد تُختار يدويًا من قائمة الحالة). غير قاتل:
+  // فشل هنا لا يجب أن يفشل تسجيل الصفقة نفسها أو مكافأتها.
+  try {
+    const cust = await db.prepare(`SELECT status FROM customers WHERE id = ?`).bind(customerId).first();
+    if (cust && cust.status !== 'CLOSED') {
+      await db
+        .prepare(`UPDATE customers SET status = 'CLOSED', closed_at = ?, closed_reason = 'Purchased', closed_by = ?, updated_at = ?, version = version + 1 WHERE id = ?`)
+        .bind(nowIso(), createdBy, nowIso(), customerId)
+        .run();
+      await db
+        .prepare(`INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by, note) VALUES (?, ?, 'CLOSED', ?, 'Purchased')`)
+        .bind(customerId, cust.status, createdBy)
+        .run();
+      await logActivity(db, { actor: { id: createdBy }, action: 'STATUS_CHANGED', entityType: 'customer', entityId: customerId, metadata: { from: cust.status, to: 'CLOSED', closedReason: 'Purchased' } });
+      await broadcast(env, 'CUSTOMER_STATUS_CHANGED', { id: customerId, from: cust.status, to: 'CLOSED' }, { scope: 'role', role: 'team_leader' });
+      await broadcast(env, 'CUSTOMER_CLOSED', { id: customerId, closedReason: 'Purchased' }, { scope: 'role', role: 'team_leader' });
+    }
+  } catch (err) {
+    console.error('auto-close customer on deal done failed (non-fatal)', err);
+  }
+
   // مكافأة الموظف — كل صفقة مكتملة منسوبة لموظف تمنحه مكافأة ثابتة (قابلة
   // للتعديل من الإعدادات). فشل هنا لا يجب أن يفشل تسجيل الصفقة نفسها.
   try {
