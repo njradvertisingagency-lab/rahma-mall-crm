@@ -44,6 +44,16 @@ function penaltyKey(month, userId, ts) {
   return `pen:${month}:${userId}:${ts}`;
 }
 
+// "6:00 مساءً" من settings.endHour/endMinute (24-ساعة) — تُستخدم في رسالة
+// تأكيد الانصراف المبكر بالواجهة، فتعكس الشيفت المُعدّ فعليًا في الإعدادات
+// بدل رقم ثابت قد يختلف عنه لو غُيِّر الشيفت مستقبلًا.
+function formatHourAr(hour, minute) {
+  const period = hour < 12 ? 'صباحًا' : 'مساءً';
+  let h12 = hour % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12}:${pad(minute)} ${period}`;
+}
+
 async function safeNotify(db, args) {
   try {
     await createNotification(db, args);
@@ -79,6 +89,10 @@ export async function getMyAttendanceStatus(env, userId) {
     lateMinutes: record?.lateMinutes ?? null,
     lateCountThisMonth: lateCount,
     remainingLateAllowance: Math.max(0, MONTHLY_LATE_ALLOWANCE - lateCount),
+    // للواجهة: تأكيد "انصراف مبكر" لو الموظف بيسجّل انصراف قبل نهاية الشيفت
+    // الفعلية (المُعدّة في الإعدادات، مش رقم ثابت في كود الواجهة).
+    isBeforeShiftEnd: status.minutesSinceMidnight < status.endMin,
+    shiftEndText: formatHourAr(status.settings.endHour, status.settings.endMinute),
   };
 }
 
