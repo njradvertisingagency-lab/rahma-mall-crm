@@ -164,6 +164,35 @@ export async function getEmployeeRewardsSummary(db, employeeId, { limit = 50 } =
   return { balance, salesCount: salesCount.n, transactions: rows.results };
 }
 
+/**
+ * تعديل يدوي عام على رصيد موظف — تستخدمه lib/motivation.js لكل أنواع
+ * المكافآت/الخصومات الجديدة (أول صفقة في اليوم، خصم تأخير ملاحظة، أعلى ٣
+ * مبيعات شهريًا...) بدل توسيع CHECK constraint الخاص بعمود reason، فيبقى
+ * نطاقه المسموح كما هو (MANUAL_ADJUSTMENT) وتفاصيل النوع نفسه تُكتب في notes
+ * ليقرأها الموظف وقائد الفريق بوضوح في سجل المكافآت.
+ */
+export async function applyManualAdjustment(db, env, { employeeId, amount, notes, createdBy, purchaseId, customerId, title }) {
+  if (!employeeId || !amount) return null;
+  await insertTransaction(db, { employeeId, purchaseId, customerId, amount, reason: 'MANUAL_ADJUSTMENT', notes, createdBy });
+  const balance = await getEmployeeBalance(db, employeeId);
+  const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(employeeId).first();
+  if (emp?.user_id) {
+    const positive = amount >= 0;
+    await createNotification(db, {
+      userId: emp.user_id,
+      type: positive ? 'REWARD_EARNED' : 'REWARD_REVERSED',
+      title: title || (positive ? '🎉 مكافأة جديدة' : '⚠️ خصم من رصيد المكافآت'),
+      message: `${notes || ''} — ${positive ? 'أُضيف' : 'خُصم'} ${Math.abs(amount)} ج.م. رصيدك الآن ${balance} ج.م.`,
+      entityType: customerId ? 'customer' : 'employee',
+      entityId: customerId || String(employeeId),
+    });
+    await broadcast(env, positive ? 'REWARD_EARNED' : 'REWARD_REVERSED', { amount, balance, notes }, { scope: 'employee', employeeId });
+  }
+  await logActivity(db, { actor: { id: createdBy }, action: amount >= 0 ? 'REWARD_EARNED' : 'REWARD_REVERSED', entityType: 'employee', entityId: String(employeeId), metadata: { amount, notes } });
+  await broadcast(env, 'REWARDS_UPDATED', { employeeId }, { scope: 'role', role: 'team_leader' });
+  return { amount, balance };
+}
+
 const REASON_LABELS_AR = {
   SALE_BONUS: 'مكافأة صفقة',
   SALE_CANCELLED: 'عكس مكافأة — إبطال صفقة',

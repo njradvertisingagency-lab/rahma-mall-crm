@@ -11,6 +11,7 @@
 // touches that column.
 import { nowIso, broadcast, createNotification, logActivity } from './db.js';
 import { creditSaleReward, reverseSaleReward, moveSaleReward } from './rewards.js';
+import { checkFirstDealOfDayBonus, checkMonthlyGoalProgress } from './motivation.js';
 
 export async function getSalesSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'sales_settings'`).first();
@@ -137,6 +138,19 @@ export async function createManualPurchase(db, env, input) {
     await creditSaleReward(db, env, { employeeId: attributedEmployeeId, purchaseId: purchase.id, customerId, createdBy });
   } catch (err) {
     console.error('creditSaleReward failed (non-fatal)', err);
+  }
+  // نظام التحفيز — أول صفقة في اليوم + تقدّم الهدف الشهري. مستقلة تمامًا عن
+  // مكافأة الصفقة نفسها، فكل واحدة معزولة بـtry خاص بها لضمان عدم تعطيل
+  // تسجيل الصفقة أو باقي المكافآت لو فشلت واحدة منها فقط.
+  try {
+    await checkFirstDealOfDayBonus(db, env, { employeeId: attributedEmployeeId, purchaseId: purchase.id, customerId, createdBy });
+  } catch (err) {
+    console.error('checkFirstDealOfDayBonus failed (non-fatal)', err);
+  }
+  try {
+    await checkMonthlyGoalProgress(db, env, { employeeId: attributedEmployeeId });
+  } catch (err) {
+    console.error('checkMonthlyGoalProgress failed (non-fatal)', err);
   }
 
   return { id: purchase.id, purchaseAt: purchase.purchase_at, totalAmount, subtotal, discountTotal, taxTotal };
