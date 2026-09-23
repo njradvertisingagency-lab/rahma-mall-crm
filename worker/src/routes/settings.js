@@ -5,7 +5,7 @@ import { logActivity, jsonError, nowIso } from '../lib/db.js';
 export const settingsRoutes = new Hono();
 settingsRoutes.use('*', requireAuth, requireRole('team_leader'));
 
-const KEYS = ['performance_weights', 'distribution_defaults', 'notification_prefs', 'whatsapp_template', 'sla_rules', 'lead_score_weights', 'presence_thresholds', 'sales_settings', 'rewards_settings'];
+const KEYS = ['performance_weights', 'distribution_defaults', 'notification_prefs', 'whatsapp_template', 'sla_rules', 'lead_score_weights', 'presence_thresholds', 'sales_settings', 'rewards_settings', 'motivation_settings'];
 
 settingsRoutes.get('/', async (c) => {
   const db = c.env.DB;
