@@ -10,6 +10,7 @@
 // customers.status (the call-team pipeline status) — nothing here ever
 // touches that column.
 import { nowIso, broadcast, createNotification, logActivity } from './db.js';
+import { creditSaleReward, reverseSaleReward, moveSaleReward } from './rewards.js';
 
 export async function getSalesSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'sales_settings'`).first();
@@ -130,6 +131,14 @@ export async function createManualPurchase(db, env, input) {
   if (attributedEmployeeId) await broadcast(env, 'DEAL_DONE_CREATED', { customerId, purchaseId: purchase.id, amount: totalAmount }, { scope: 'employee', employeeId: attributedEmployeeId });
   await broadcast(env, 'REVENUE_UPDATED', {}, { scope: 'role', role: 'team_leader' });
 
+  // مكافأة الموظف — كل صفقة مكتملة منسوبة لموظف تمنحه مكافأة ثابتة (قابلة
+  // للتعديل من الإعدادات). فشل هنا لا يجب أن يفشل تسجيل الصفقة نفسها.
+  try {
+    await creditSaleReward(db, env, { employeeId: attributedEmployeeId, purchaseId: purchase.id, customerId, createdBy });
+  } catch (err) {
+    console.error('creditSaleReward failed (non-fatal)', err);
+  }
+
   return { id: purchase.id, purchaseAt: purchase.purchase_at, totalAmount, subtotal, discountTotal, taxTotal };
 }
 
@@ -197,6 +206,11 @@ export async function cancelPurchase(db, env, purchaseId, { cancelledBy, reason 
   await logActivity(db, { actor: { id: cancelledBy }, action: 'PURCHASE_CANCELLED', entityType: 'customer', entityId: existing.customer_id, metadata: { purchaseId, reason } });
   await broadcast(env, 'PURCHASE_CANCELLED', { customerId: existing.customer_id, purchaseId }, { scope: 'role', role: 'team_leader' });
   await broadcast(env, 'REVENUE_UPDATED', {}, { scope: 'role', role: 'team_leader' });
+  try {
+    await reverseSaleReward(db, env, purchaseId, { reason: 'SALE_CANCELLED', changedBy: cancelledBy });
+  } catch (err) {
+    console.error('reverseSaleReward failed (non-fatal)', err);
+  }
   return await getPurchase(db, purchaseId);
 }
 
@@ -225,6 +239,15 @@ export async function createRefund(db, env, purchaseId, { refundAmount, refundRe
   const event = newStatus === 'REFUNDED' ? 'PURCHASE_REFUNDED' : 'PURCHASE_PARTIALLY_REFUNDED';
   await broadcast(env, event, { customerId: existing.customer_id, purchaseId, amount }, { scope: 'role', role: 'team_leader' });
   await broadcast(env, 'REVENUE_UPDATED', {}, { scope: 'role', role: 'team_leader' });
+  // استرجاع جزئي لا يعكس المكافأة — الموظف بذل الجهد وأتمّ الصفقة فعليًا.
+  // فقط استرجاع كامل (يساوي قيمة الصفقة بالكامل) يُلغي المكافأة.
+  if (newStatus === 'REFUNDED') {
+    try {
+      await reverseSaleReward(db, env, purchaseId, { reason: 'SALE_REFUNDED', changedBy: refundedBy });
+    } catch (err) {
+      console.error('reverseSaleReward failed (non-fatal)', err);
+    }
+  }
   return await getPurchase(db, purchaseId);
 }
 
@@ -281,6 +304,17 @@ export async function changeAttribution(db, env, purchaseId, { newEmployeeId, ch
     .run();
   await logActivity(db, { actor: { id: changedBy }, action: 'ATTRIBUTION_CHANGED', entityType: 'customer', entityId: existing.customer_id, metadata: { purchaseId, from: existing.attributed_employee_id, to: newEmployeeId, reason } });
   await broadcast(env, 'PURCHASE_UPDATED', { customerId: existing.customer_id, purchaseId }, { scope: 'role', role: 'team_leader' });
+  try {
+    await moveSaleReward(db, env, purchaseId, {
+      previousEmployeeId: existing.attributed_employee_id,
+      newEmployeeId,
+      purchaseStatus: existing.status,
+      customerId: existing.customer_id,
+      changedBy,
+    });
+  } catch (err) {
+    console.error('moveSaleReward failed (non-fatal)', err);
+  }
   return await getPurchase(db, purchaseId);
 }
 
