@@ -28,7 +28,7 @@ import { sweepPresence } from './lib/presence.js';
 import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
-import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday } from './lib/workhours.js';
+import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
 import { sweepOpsReports } from './lib/opsreports.js';
 import { sweepAutoReclaim } from './lib/reclaim.js';
 import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
@@ -240,7 +240,12 @@ export default {
     if (!sweepsShouldRunNow()) return;
 
     if (event.cron === '* * * * *') {
-      ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
+      // كانت كل دقيقة (١٤٤٠ تشغيلة/يوم) — أهم سبب في استهلاك حصة القراءة
+      // المجانية اليومية. التواجد (presence) ما يحتاجش دقة دقيقة بدقيقة؛
+      // كل ٣ دقايق كافي جدًا وبيوفر ثلثي القراءات من غير ما حد يحس بفرق.
+      if (isDueEvery(3, 1)) {
+        ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
+      }
       return;
     }
     // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
@@ -248,13 +253,23 @@ export default {
     ctx.waitUntil(sweepOverdueFollowups(env).catch((e) => console.error('sweepOverdueFollowups failed', e)));
     ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
     ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
-    ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
+    // كانت بتشتغل كل ٥ دقايق وبتعمل ٤ استعلامات لكل موظف نشط في كل تشغيلة —
+    // أكبر مستهلك لحصة القراءة اليومية بالكامل. البيانات دي لرسم بياني
+    // تاريخي (trend chart) مش شاشة لايف، فمرة كل ساعة كافية تمامًا وبتوفر
+    // ٩٢٪ من قراءات هذا الجزء تحديدًا.
+    if (isDueEvery(60, 5)) {
+      ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
+    }
     ctx.waitUntil(sweepDnd(env.DB, env).catch((e) => console.error('sweepDnd failed', e)));
     ctx.waitUntil(sweepLateAttendance(env.DB, env).catch((e) => console.error('sweepLateAttendance failed', e)));
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
-    ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
+    // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
+    // كل ١٥ دقيقة بدل ٥ يقلل ثلثي مرات فحص العملاء المتأخرين.
+    if (isDueEvery(15, 5)) {
+      ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
+    }
     ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
   },
 };
