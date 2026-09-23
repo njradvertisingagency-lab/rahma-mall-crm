@@ -462,6 +462,14 @@ App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === '
 // الموجَّه scope:'employee'). تنبيه احتفالي واضح بدل توست عادي — الهدف
 // تحفيز الموظف فعليًا، وليس مجرد إعلامه.
 App.on('rt:REWARD_EARNED', (p) => { pushAlert(`🎉💰 مبروك! حصلت على مكافأة ${p.amount} ج.م — رصيدك الآن ${p.balance} ج.م`, 'success'); });
+// خصم شفاف من رصيد المكافآت (مثل تأخير كتابة ملاحظة) — نفس وضوح تنبيه
+// المكافأة، بالسالب، حتى لا يفاجأ الموظف لاحقًا برصيد أقل من غير سبب واضح.
+App.on('rt:REWARD_REVERSED', (p) => { if (p.amount < 0) pushAlert(`⚠️ تم خصم ${Math.abs(p.amount)} ج.م من رصيد مكافآتك — رصيدك الآن ${p.balance} ج.م`, 'warn'); });
+// إنجازات تحفيزية بلا مقابل مالي (اقتراب من الهدف الشهري / تحقيقه بالكامل).
+App.on('rt:MOTIVATION_MILESTONE', (p) => {
+  if (p.kind === 'MONTHLY_GOAL_HIT') pushAlert(`🎯 مبروك! حققت هدفك الشهري (${p.target} صفقات) 👏`, 'success');
+  else if (p.kind === 'MONTHLY_GOAL_NEAR') pushAlert('🔥 باقي صفقة واحدة فقط لتحقيق هدفك الشهري!', 'info');
+});
 
 async function refreshNotifications() {
   if (!App.state.user) return;

@@ -90,6 +90,53 @@
     } }, ['حفظ إعدادات المكافآت']));
     container.appendChild(rewardsCard);
 
+    // --- نظام التحفيز (أهداف شهرية، مكافآت أول صفقة، خصم تأخير الملاحظة، أعلى ٣ مبيعات) ---
+    const ms = settings.motivation_settings || { monthlySalesTarget: 8, firstDealOfDay: { enabled: true, amount: 50 }, lateNotePenalty: { enabled: true, amount: 20, deadlineHours: 24 }, monthlyTop3: { enabled: true, amounts: [500, 300, 150] } };
+    const motCard = el('div', { class: 'card card-pad mb-16' });
+    motCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:6px' }, ['🎯 نظام التحفيز']));
+    motCard.appendChild(el('div', { class: 'muted mb-12', style: 'font-size:12.5px' }, [
+      'كل هذه القيم قابلة للتعديل أو الإيقاف في أي وقت — التغيير يسري على الحركات الجديدة فقط، ولا يمس أي مكافأة أو خصم سابق.',
+    ]));
+
+    const targetInput = el('input', { type: 'number', step: '1', min: '1', value: ms.monthlySalesTarget ?? 8 });
+    motCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['الهدف الشهري لكل موظف (عدد الصفقات)']), targetInput]));
+
+    motCard.appendChild(el('div', { style: 'font-weight:700;margin:14px 0 6px' }, ['🥇 مكافأة أول صفقة في اليوم']));
+    const fdEnabled = el('input', { type: 'checkbox', checked: ms.firstDealOfDay?.enabled !== false || undefined });
+    motCard.appendChild(el('label', { class: 'checkbox-row mb-8' }, [fdEnabled, 'تفعيل']));
+    const fdAmount = el('input', { type: 'number', step: '1', min: '0', value: ms.firstDealOfDay?.amount ?? 50 });
+    motCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['قيمة مكافأة أول موظف يقفل صفقة كل يوم (ج.م)']), fdAmount]));
+
+    motCard.appendChild(el('div', { style: 'font-weight:700;margin:14px 0 6px' }, ['⏰ خصم تأخير كتابة الملاحظة']));
+    const lnEnabled = el('input', { type: 'checkbox', checked: ms.lateNotePenalty?.enabled !== false || undefined });
+    motCard.appendChild(el('label', { class: 'checkbox-row mb-8' }, [lnEnabled, 'تفعيل']));
+    const lnAmount = el('input', { type: 'number', step: '1', min: '0', value: ms.lateNotePenalty?.amount ?? 20 });
+    motCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['قيمة الخصم من رصيد المكافآت (ج.م)']), lnAmount]));
+    const lnHours = el('input', { type: 'number', step: '1', min: '1', value: ms.lateNotePenalty?.deadlineHours ?? 24 });
+    motCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['المهلة قبل اعتبار الملاحظة متأخرة (بالساعات)']), lnHours]));
+
+    motCard.appendChild(el('div', { style: 'font-weight:700;margin:14px 0 6px' }, ['🏆 مكافأة أعلى ٣ موظفين مبيعات كل شهر']));
+    const mtEnabled = el('input', { type: 'checkbox', checked: ms.monthlyTop3?.enabled !== false || undefined });
+    motCard.appendChild(el('label', { class: 'checkbox-row mb-8' }, [mtEnabled, 'تفعيل']));
+    const mtAmounts = [0, 1, 2].map((i) => el('input', { type: 'number', step: '1', min: '0', value: (ms.monthlyTop3?.amounts || [500, 300, 150])[i] ?? 0 }));
+    motCard.appendChild(el('div', { class: 'flex gap-8 wrap' }, [
+      el('div', { class: 'field', style: 'flex:1;min-width:100px' }, [el('label', {}, ['المركز الأول']), mtAmounts[0]]),
+      el('div', { class: 'field', style: 'flex:1;min-width:100px' }, [el('label', {}, ['المركز الثاني']), mtAmounts[1]]),
+      el('div', { class: 'field', style: 'flex:1;min-width:100px' }, [el('label', {}, ['المركز الثالث']), mtAmounts[2]]),
+    ]));
+
+    motCard.appendChild(el('button', { class: 'btn btn-primary btn-sm mt-8', onclick: async () => {
+      const body = {
+        monthlySalesTarget: Number(targetInput.value) || 8,
+        firstDealOfDay: { enabled: fdEnabled.checked, amount: Number(fdAmount.value) || 0 },
+        lateNotePenalty: { enabled: lnEnabled.checked, amount: Number(lnAmount.value) || 0, deadlineHours: Number(lnHours.value) || 24 },
+        monthlyTop3: { enabled: mtEnabled.checked, amounts: mtAmounts.map((i) => Number(i.value) || 0) },
+      };
+      await api('/settings/motivation_settings', { method: 'PATCH', body });
+      toast('تم حفظ إعدادات التحفيز', 'success');
+    } }, ['حفظ إعدادات التحفيز']));
+    container.appendChild(motCard);
+
     // --- إدارة الفروع ---
     const branchesCard = el('div', { class: 'card card-pad mb-16' });
     branchesCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['إدارة الفروع']));

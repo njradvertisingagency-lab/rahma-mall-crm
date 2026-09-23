@@ -150,11 +150,34 @@
         el('tbody', {}, data.transactions.map((t) => el('tr', {}, [
           el('td', {}, [fmt.dateTime(t.created_at)]),
           el('td', {}, [t.customer_name || t.customer_id || '—']),
-          el('td', {}, [REWARD_REASON_LABELS[t.reason] || t.reason]),
+          el('td', {}, [t.reason === 'MANUAL_ADJUSTMENT' && t.notes ? t.notes : (REWARD_REASON_LABELS[t.reason] || t.reason)]),
           el('td', { style: `font-weight:800;color:${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}` }, [`${t.amount >= 0 ? '+' : ''}${t.amount} ج.م`]),
         ]))),
       ]),
     ]);
+  }
+
+  // بطاقة "نظام التحفيز" — تقدّم الهدف الشهري + الشارات + المستوى + التتابع.
+  // مشتركة بين بروفايل الموظف نفسه وسجل قائد الفريق لأي موظف.
+  function renderMotivationCard(m) {
+    const box = el('div', {});
+    box.appendChild(el('div', { class: 'flex-between mb-8', style: 'font-size:13px' }, [
+      el('span', { class: 'muted' }, [`الهدف الشهري: ${m.monthlySalesCount} / ${m.monthlyTarget} صفقة`]),
+      el('span', { style: 'font-weight:800' }, [`${m.monthlyProgressPercent}%`]),
+    ]));
+    const barOuter = el('div', { style: 'background:var(--surface-2);border-radius:99px;height:10px;overflow:hidden;margin-bottom:10px' });
+    barOuter.appendChild(el('div', { style: `background:var(--success);height:100%;width:${m.monthlyProgressPercent}%;transition:width .3s` }));
+    box.appendChild(barOuter);
+    if (m.remainingToTarget === 1) box.appendChild(el('div', { class: 'mb-8', style: 'color:var(--warning);font-weight:700;font-size:12.5px' }, ['🔥 باقي صفقة واحدة لتحقيق الهدف!']));
+    else if (m.remainingToTarget === 0) box.appendChild(el('div', { class: 'mb-8', style: 'color:var(--success);font-weight:700;font-size:12.5px' }, ['🎯 تم تحقيق الهدف الشهري بالفعل!']));
+
+    box.appendChild(el('div', { class: 'flex gap-8 wrap mb-8' }, [
+      el('span', { class: 'badge', style: 'background:var(--brand-soft)' }, [m.levelTier]),
+      m.currentStreak > 0 ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, [`🔥 تتابع ${m.currentStreak} يوم`]) : null,
+    ]));
+    if (m.milestoneBadges?.length) box.appendChild(el('div', { class: 'flex gap-8 wrap mb-8' }, m.milestoneBadges.map((b) => el('span', { class: 'badge', style: 'background:var(--surface-2)' }, [b]))));
+    box.appendChild(el('div', { class: 'flex-between', style: 'font-size:12.5px' }, [el('span', { class: 'muted' }, ['إجمالي المكافآت منذ أول يوم عمل']), el('span', { style: 'font-weight:800;color:var(--success)' }, [`${m.careerTotalEarned} ج.م`])]));
+    return box;
   }
 
   App.route('/employees', async () => {
@@ -214,6 +237,10 @@
             renderRewardsHistory(data),
           ]), []);
         } }, ['🏆 سجل المكافآت']));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
+          const m = await api('/rewards/motivation/employees/' + e.id);
+          modal(`🎯 نظام التحفيز — ${e.name}`, renderMotivationCard(m), []);
+        } }, ['🎯 نظام التحفيز']));
         card.appendChild(el('div', { class: 'field mt-12' }, [
           el('label', {}, ['الإتاحة']),
           el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
@@ -390,7 +417,27 @@
       // فورًا من غير ما يحتاج يعمل تحديث للصفحة يدويًا.
       const offRewards = App.on('rt:REWARD_EARNED', loadRewards);
       const offRewardsRev = App.on('rt:REWARD_REVERSED', loadRewards);
-      container.cleanup = () => { offRewards(); offRewardsRev(); };
+
+      // --- نظام التحفيز — هدف شهري، شارات إنجاز، مستوى، تتابع أيام مبيعات ---
+      const motCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:520px' });
+      motCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['🎯 نظام التحفيز']));
+      const motBody = el('div', { class: 'muted' }, ['جارِ التحميل…']);
+      motCard.appendChild(motBody);
+      container.appendChild(motCard);
+      async function loadMotivation() {
+        try {
+          const m = await api('/rewards/motivation/me');
+          motBody.innerHTML = '';
+          motBody.appendChild(renderMotivationCard(m));
+        } catch (e) {
+          motBody.innerHTML = '';
+          motBody.appendChild(el('div', { class: 'muted' }, ['تعذّر تحميل بيانات التحفيز.']));
+        }
+      }
+      await loadMotivation();
+      const offMotivation = App.on('rt:MOTIVATION_MILESTONE', loadMotivation);
+      const offMotivation2 = App.on('rt:REWARD_EARNED', loadMotivation);
+      container.cleanup = () => { offRewards(); offRewardsRev(); offMotivation(); offMotivation2(); };
 
       // --- وضع "عدم الإزعاج" المؤقت — بدل "غير متاح" الدائمة، يرجع تلقائيًا لـ"متاح" بعد المدة المحددة ---
       const dndCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:420px' });
