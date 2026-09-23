@@ -54,6 +54,23 @@ function toMinutes(h, m) {
 }
 
 /**
+ * Tick-throttling gate for cron sweeps that don't need to run on every
+ * invocation — e.g. a sweep that only needs hourly freshness still fires on
+ * every-5-minute or every-1-minute cron trigger, so without this it re-runs
+ * (and re-reads D1) far more often than the data actually needs, which is
+ * exactly what was exhausting the free-tier daily row-read quota mid-morning.
+ * `tickSpacingMinutes` must match the cron's own interval (1 for the
+ * once-a-minute trigger, 5 for the every-5-minutes trigger) so exactly one
+ * tick per `intervalMinutes` window passes the gate — e.g. isDueEvery(60, 5)
+ * fires once per hour on the 5-minute cron, isDueEvery(3, 1) fires once
+ * every 3 minutes on the 1-minute cron.
+ */
+export function isDueEvery(intervalMinutes, tickSpacingMinutes = 5) {
+  const { minutesSinceMidnight } = getCairoNow();
+  return minutesSinceMidnight % intervalMinutes < tickSpacingMinutes;
+}
+
+/**
  * The UTC instant range covering one Cairo calendar day (e.g. "2026-09-22"
  * 00:00:00 through 23:59:59.999, Cairo-local) — computed from Cairo's actual
  * current UTC offset via Intl rather than a hardcoded +2/+3, so it stays
