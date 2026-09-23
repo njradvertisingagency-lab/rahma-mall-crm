@@ -132,6 +132,31 @@
     );
   }
 
+  // تسميات أسباب حركات المكافآت — مشتركة بين "الملف الشخصي" (الموظف) وسجل
+  // المكافآت الذي يراه قائد الفريق/المالك لأي موظف.
+  const REWARD_REASON_LABELS = {
+    SALE_BONUS: '🎉 مكافأة صفقة',
+    SALE_CANCELLED: '↩ عكس — إبطال صفقة',
+    SALE_REFUNDED: '↩ عكس — استرجاع كامل',
+    ATTRIBUTION_MOVED_OUT: '↪ نُقلت الصفقة لموظف آخر',
+    ATTRIBUTION_MOVED_IN: '🎉 صفقة مُعاد نسبها إليك',
+    MANUAL_ADJUSTMENT: '⚙️ تعديل يدوي',
+  };
+  function renderRewardsHistory(data) {
+    if (data.transactions.length === 0) return el('div', { class: 'empty-state' }, ['لا توجد حركات مكافآت بعد.']);
+    return el('div', { class: 'table-wrap' }, [
+      el('table', { class: 'data-table' }, [
+        el('thead', {}, [el('tr', {}, ['التاريخ', 'العميل', 'السبب', 'المبلغ'].map((h) => el('th', {}, [h])))]),
+        el('tbody', {}, data.transactions.map((t) => el('tr', {}, [
+          el('td', {}, [fmt.dateTime(t.created_at)]),
+          el('td', {}, [t.customer_name || t.customer_id || '—']),
+          el('td', {}, [REWARD_REASON_LABELS[t.reason] || t.reason]),
+          el('td', { style: `font-weight:800;color:${t.amount >= 0 ? 'var(--success)' : 'var(--danger)'}` }, [`${t.amount >= 0 ? '+' : ''}${t.amount} ج.م`]),
+        ]))),
+      ]),
+    ]);
+  }
+
   App.route('/employees', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
@@ -172,6 +197,23 @@
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['متأخر']), String(e.followupsOverdue)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['النقاط']), String(e.performanceScore)]),
         ]));
+        const rewardsLine = el('div', { class: 'flex-between mt-8', style: 'font-size:12.5px' }, [el('span', { class: 'muted' }, ['🏆 مكافآت المبيعات']), el('span', { class: 'muted' }, ['…'])]);
+        card.appendChild(rewardsLine);
+        api('/rewards/employees/' + e.id).then((r) => {
+          rewardsLine.lastChild.textContent = `${r.balance} ج.م (${r.salesCount} صفقة)`;
+          rewardsLine.lastChild.style.fontWeight = '800';
+          rewardsLine.lastChild.style.color = 'var(--success)';
+        }).catch(() => { rewardsLine.lastChild.textContent = '—'; });
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
+          const data = await api('/rewards/employees/' + e.id);
+          modal(`سجل مكافآت — ${e.name}`, el('div', {}, [
+            el('div', { class: 'card-pad', style: 'text-align:center;margin-bottom:12px' }, [
+              el('div', { style: 'font-size:26px;font-weight:800;color:var(--success)' }, [`${data.balance} ج.م`]),
+              el('div', { class: 'muted' }, [`إجمالي ${data.salesCount} صفقة مكافأة`]),
+            ]),
+            renderRewardsHistory(data),
+          ]), []);
+        } }, ['🏆 سجل المكافآت']));
         card.appendChild(el('div', { class: 'field mt-12' }, [
           el('label', {}, ['الإتاحة']),
           el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
@@ -322,6 +364,33 @@
       }
       avatarCard.appendChild(btnRow);
       container.appendChild(avatarCard);
+
+      // --- محفظة مكافآت المبيعات — كل تفاصيل كل صفقة تمّت ومكافأتها ---
+      const rewardsCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:520px' });
+      rewardsCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['🏆 مكافآت المبيعات']));
+      const rewardsBody = el('div', { class: 'muted' }, ['جارِ التحميل…']);
+      rewardsCard.appendChild(rewardsBody);
+      container.appendChild(rewardsCard);
+      async function loadRewards() {
+        try {
+          const data = await api('/rewards/me');
+          rewardsBody.innerHTML = '';
+          rewardsBody.appendChild(el('div', { style: 'text-align:center;margin-bottom:16px;padding:12px;border-radius:var(--radius);background:var(--success-soft)' }, [
+            el('div', { style: 'font-size:30px;font-weight:800;color:var(--success)' }, [`${data.balance} ج.م`]),
+            el('div', { class: 'muted', style: 'font-size:12.5px' }, [`رصيدك الحالي — من ${data.salesCount} صفقة مكافأة (كل صفقة = ${data.amountPerSale} ج.م)`]),
+          ]));
+          rewardsBody.appendChild(renderRewardsHistory(data));
+        } catch (e) {
+          rewardsBody.innerHTML = '';
+          rewardsBody.appendChild(el('div', { class: 'muted' }, ['تعذّر تحميل بيانات المكافآت.']));
+        }
+      }
+      await loadRewards();
+      // تحديث لحظي — لو مكافأة جديدة وصلت وهو فاتح صفحته، يشوف رصيده يتحدّث
+      // فورًا من غير ما يحتاج يعمل تحديث للصفحة يدويًا.
+      const offRewards = App.on('rt:REWARD_EARNED', loadRewards);
+      const offRewardsRev = App.on('rt:REWARD_REVERSED', loadRewards);
+      container.cleanup = () => { offRewards(); offRewardsRev(); };
 
       // --- وضع "عدم الإزعاج" المؤقت — بدل "غير متاح" الدائمة، يرجع تلقائيًا لـ"متاح" بعد المدة المحددة ---
       const dndCard = el('div', { class: 'card card-pad mb-16', style: 'max-width:420px' });
