@@ -613,7 +613,39 @@ async function renderRoute() {
     content.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['⚠️']), err.message || 'حدث خطأ ما']));
   }
 }
-window.addEventListener('hashchange', renderRoute);
+// ---------------------------------------------------------------------------
+// حارس "الملاحظة الإلزامية" — تسجّله صفحة تفاصيل العميل عندما يكون العميل
+// المفتوح محتاج ملاحظة (فُتح ولم تُكتب عنه ملاحظة بعد)، ويمنع أي تنقّل — زر
+// رجوع، رابط في القائمة الجانبية، أو زر رجوع المتصفح — لحد ما تُكتب الملاحظة.
+// hashchange تسجّل التنقّل بعد ما يحصل فعلًا، فالحيلة إننا نرجّع الهاش فورًا
+// لمكانه (revertingGuardedHash يمنع هذا الرجوع نفسه من إعادة تشغيل الحارس)
+// ونعرض نافذة الملاحظة الإلزامية بدل الصفحة الجديدة. الهدف اللي كان بيحاول
+// يوصله المستخدم يتذكّر (pendingBlockedHash) عشان يوصله تلقائيًا بعد الحفظ.
+// ---------------------------------------------------------------------------
+let activeNoteGuard = null; // { hash, onRequireNote() } | null
+let pendingBlockedHash = null;
+let revertingGuardedHash = false;
+App.setNoteGuard = (guard) => { activeNoteGuard = guard; };
+App.clearNoteGuard = () => { activeNoteGuard = null; pendingBlockedHash = null; };
+App.consumeBlockedNavigation = () => { const h = pendingBlockedHash; pendingBlockedHash = null; return h; };
+
+function guardedHashChange() {
+  if (revertingGuardedHash) { revertingGuardedHash = false; renderRoute(); return; }
+  if (activeNoteGuard && location.hash !== activeNoteGuard.hash) {
+    pendingBlockedHash = location.hash;
+    revertingGuardedHash = true;
+    location.hash = activeNoteGuard.hash;
+    activeNoteGuard.onRequireNote();
+    return;
+  }
+  renderRoute();
+}
+window.addEventListener('hashchange', guardedHashChange);
+// إغلاق التاب/تحديث الصفحة لا يمكن منعه فعليًا (ولا ينبغي)، لكن تحذير
+// المتصفح الافتراضي هنا أفضل من مغادرة صامتة تمامًا بدون ملاحظة.
+window.addEventListener('beforeunload', (e) => {
+  if (activeNoteGuard) { e.preventDefault(); e.returnValue = ''; }
+});
 App.navigate = (hash) => { location.hash = hash; };
 // يعيد رسم الصفحة الحالية (الهيكل والمحتوى) دون تغيير الرابط — مفيد بعد تعديل
 // بيانات المستخدم نفسه (مثل الصورة الشخصية) حيث لا يُطلق hashchange لنفس الرابط.

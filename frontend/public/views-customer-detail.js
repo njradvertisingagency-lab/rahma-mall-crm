@@ -1,7 +1,13 @@
 'use strict';
 (function () {
   const { el, api, toast, badges, fmt } = App;
-  const STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
+  // الحالات القابلة للاختيار يدويًا من القائمة — بعد طلب أستاذ هاني تبسيط
+  // القائمة: "جديد" تلقائية (تختفي فور أول فتح للعميل، مفيش داعي تُختار)،
+  // "جاري الاتصال"/"مشغول"/"مهتم" اتشالوا (مش مضيفين قيمة عملية)، و"مغلق"
+  // بقت تتحدد تلقائيًا فقط عبر زر "تمت الصفقة" (مش قائمة يدوية بعد كده).
+  // الترتيب مقصود: لا يوجد رد (محتاج إعادة محاولة) ← متابعة (نتيجة إيجابية،
+  // العميل جاي للفرع) ← غير مهتم (إغلاق سلبي نهائي).
+  const SELECTABLE_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'NOT_INTERESTED'];
   const STATUS_LABELS = App.labels.status;
   const SLA_LEVEL_LABELS = { OK: 'ضمن الموعد', WARNING: 'اقترب الموعد', BREACHED: 'تم تجاوز الموعد' };
   const PAYMENT_METHOD_LABELS = { CASH: 'نقدًا', CARD: 'بطاقة', INSTALLMENT: 'تقسيط', OTHER: 'أخرى' };
@@ -122,6 +128,53 @@
       grid.appendChild(left);
       grid.appendChild(right);
       container.appendChild(grid);
+
+      updateNoteGuard();
+    }
+
+    // ---------------------------------------------------------------------
+    // ملاحظة إلزامية — لو الموظف فتح هذا العميل ولم يكتب ملاحظة بعد، يُمنع
+    // من مغادرة الصفحة (زر رجوع، أي رابط، رجوع المتصفح) لحد ما يكتبها.
+    // مقصورة على الموظف صاحب العميل — قائد الفريق يتصفح بحرية دائمًا.
+    // ---------------------------------------------------------------------
+    function updateNoteGuard() {
+      if (App.state.user.role === 'employee' && data.customer.needsNote) {
+        App.setNoteGuard({ hash: location.hash, onRequireNote: showMandatoryNoteModal });
+      } else {
+        App.clearNoteGuard();
+      }
+    }
+
+    function showMandatoryNoteModal() {
+      // يمنع تكرار النافذة لو الحارس اتفعّل أكتر من مرة قبل ما يتقفل القديم
+      document.querySelectorAll('.mandatory-note-backdrop').forEach((n) => n.remove());
+      const textarea = el('textarea', { placeholder: 'اكتب ملاحظتك عن هذا العميل قبل المتابعة…', style: 'min-height:120px' });
+      const errorMsg = el('div', { style: 'color:var(--danger);font-size:12.5px;display:none;margin-top:6px' }, ['من فضلك اكتب ملاحظة قبل المتابعة.']);
+      const backdrop = el('div', { class: 'modal-backdrop mandatory-note-backdrop' }); // بدون إغلاق بالنقر على الخلفية
+      const m = el('div', { class: 'modal' }, [
+        el('div', { class: 'modal-header' }, [el('div', { class: 'modal-title' }, ['📝 قبل ما تكمل — اكتب ملاحظتك عن العميل'])]),
+        el('div', { class: 'modal-body' }, [
+          el('div', { class: 'muted mb-8', style: 'font-size:13px' }, ['فتحت هذا العميل ولم تكتب ملاحظة بعد — اكتبها الآن حتى يعرف الفريق ما حدث في هذه المكالمة/الزيارة.']),
+          textarea,
+          errorMsg,
+        ]),
+        el('div', { class: 'modal-footer' }, [
+          el('button', { class: 'btn btn-primary btn-block', onclick: async () => {
+            if (!textarea.value.trim()) { errorMsg.style.display = 'block'; return; }
+            try {
+              await api('/customers/' + data.customer.id + '/notes', { method: 'POST', body: { note: textarea.value.trim() } });
+              backdrop.remove();
+              App.clearNoteGuard();
+              await load();
+              const target = App.consumeBlockedNavigation();
+              if (target) location.hash = target;
+              else render();
+            } catch (e) { toast(e.message, 'error'); }
+          } }, ['حفظ الملاحظة والمتابعة']),
+        ]),
+      ]);
+      backdrop.appendChild(m);
+      document.body.appendChild(backdrop);
     }
 
     // --- شريط 360: تقييم العميل (قابل للتفسير)، حالة الموعد، من رآه ---
@@ -241,10 +294,10 @@
     // --- زيارات الفرع والمشتريات (تمت الصفقة) — حالة الصفقة نظام مستقل عن حالة العميل. ---
     function renderSalesSection() {
       const wrap = el('div', { class: 'card card-pad' });
-      const canRecordPurchase = App.state.user.role === 'team_leader';
+      // "تمت الصفقة" بقى زر رئيسي في بطاقة "الإجراءات" (يقدر أي موظف يستخدمه
+      // لعميله هو الآن) — هنا نكتفي بزيارة الفرع وسجل الزيارات/المشتريات.
       wrap.appendChild(el('div', { class: 'flex gap-8 mb-12 wrap' }, [
         el('button', { class: 'btn btn-sm btn-outline', onclick: () => logBranchVisit() }, ['🏪 زيارة فرع']),
-        canRecordPurchase ? el('button', { class: 'btn btn-sm btn-success', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']) : null,
       ]));
 
       if (data.branchVisits.length > 0) {
@@ -505,13 +558,27 @@
       }
 
       card.appendChild(el('hr', { style: 'border-color:var(--border);margin:14px 0' }));
+
+      // --- تمت الصفقة — الطريقة الوحيدة الآن لإغلاق العميل، متاحة لأي موظف لعميله هو ---
+      if (c.status !== 'CLOSED') {
+        card.appendChild(el('button', { class: 'btn btn-success btn-block mb-8', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']));
+      }
+
       card.appendChild(el('div', { class: 'field' }, [
         el('label', {}, ['تغيير الحالة']),
-        el('select', { id: 'status-select' }, STATUSES.map((s) => el('option', { value: s, selected: s === c.status || undefined }, [STATUS_LABELS[s] || s]))),
+        el('select', { id: 'status-select' }, [
+          // الحالة الحالية لو كانت من القيم القديمة غير المتاحة يدويًا بعد الآن
+          // (جديد/جاري الاتصال/مشغول/مهتم/مغلق) — تظهر معطّلة أعلى القائمة
+          // حتى لا تختفي من العرض، لكن بدون إمكانية إعادة اختيارها.
+          !SELECTABLE_STATUSES.includes(c.status)
+            ? el('option', { value: c.status, selected: true, disabled: true }, [STATUS_LABELS[c.status] || c.status])
+            : null,
+          ...SELECTABLE_STATUSES.map((s) => el('option', { value: s, selected: s === c.status || undefined }, [STATUS_LABELS[s] || s])),
+        ]),
       ]));
       card.appendChild(el('button', { class: 'btn btn-primary btn-block mb-8', onclick: () => changeStatus(c) }, ['تحديث الحالة']));
 
-      if (c.status === 'CLOSED') {
+      if (c.status === 'CLOSED' && App.state.user.role === 'team_leader') {
         card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => reopenCustomer(c) }, ['إعادة فتح العميل']));
       }
 
@@ -523,15 +590,11 @@
     async function changeStatus(c) {
       const status = document.getElementById('status-select').value;
       if (status === c.status) return;
-      let body = { status };
-      if (status === 'CLOSED') {
-        const reason = await pickClosedReason();
-        if (!reason) return;
-        Object.assign(body, reason);
-      }
       try {
-        await api('/customers/' + c.id + '/status', { method: 'PATCH', body });
-        toast('تم تحديث الحالة', 'success');
+        const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status } });
+        // "لا يوجد رد" يجدول إعادة اتصال تلقائية بعد ١٥ دقيقة من السيرفر —
+        // نوضّح ده للموظف فورًا حتى لا يفتكر إنه لازم يجدولها بنفسه.
+        toast(res.autoFollowup ? 'تم تحديث الحالة — تم جدولة إعادة اتصال تلقائيًا بعد ١٥ دقيقة' : 'تم تحديث الحالة', 'success');
         await load();
         render();
       } catch (e) {
@@ -539,23 +602,6 @@
       }
     }
 
-    function pickClosedReason() {
-      return new Promise((resolve) => {
-        const sel = el('select', {}, CLOSED_REASONS.map(([v, l]) => el('option', { value: v }, [l])));
-        const other = el('input', { placeholder: 'سبب مخصص…', style: 'display:none;margin-top:10px' });
-        sel.addEventListener('change', () => { other.style.display = sel.value === 'Other' ? 'block' : 'none'; });
-        const body = el('div', {}, [el('div', { class: 'field' }, [el('label', {}, ['سبب الإغلاق (مطلوب)']), sel, other])]);
-        const dlg = modal('إغلاق العميل', body, []);
-        dlg.el.querySelector('.modal-footer').append(
-          el('button', { class: 'btn btn-outline', onclick: () => { dlg.close(); resolve(null); } }, ['إلغاء']),
-          el('button', { class: 'btn btn-danger', onclick: () => {
-            if (sel.value === 'Other' && !other.value.trim()) { toast('النص المخصص مطلوب عند اختيار "أخرى"', 'error'); return; }
-            dlg.close();
-            resolve({ closedReason: sel.value, closedReasonText: other.value.trim() });
-          } }, ['تأكيد الإغلاق'])
-        );
-      });
-    }
 
     async function reopenCustomer(c) {
       if (!confirm('إعادة فتح هذا العميل؟')) return;
@@ -714,7 +760,7 @@
 
     render();
     const off = App.on('rt:*', async (evt) => { await load(); render(); });
-    container.cleanup = () => off();
+    container.cleanup = () => { off(); App.clearNoteGuard(); };
     return container;
   });
 })();

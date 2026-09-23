@@ -15,7 +15,9 @@
 
   const SEGMENTS = ['', 'NEW', 'INTERESTED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
   const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', INTERESTED: 'مهتم', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يوجد رد', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد', VIP: '👑 عملاء VIP' };
-  const BULK_STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED'];
+  // مطابقة للحالات القابلة للاختيار يدويًا في صفحة تفاصيل العميل — "جديد"
+  // تلقائية لحد أول فتح، و"تمت الصفقة"/"مغلق" لها زر مخصص، فلا تُختار هنا.
+  const BULK_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'NOT_INTERESTED'];
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
   function modal(title, bodyNode, footerNodes) {
