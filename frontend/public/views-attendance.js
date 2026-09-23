@@ -203,37 +203,6 @@
       }
     }
 
-    // نشاط قادة الفريق (تسجيل دخول، عملاء أنشأهم، توزيعات، صفقات...) —
-    // جزء من "كل حاجة عن الشركة" بردو، لكن بيتحدّث كل شوية مش لحظيًا زي
-    // جدول الحضور، لأنه استعلام أثقل (تسعة أرقام لكل قائد فريق).
-    const tlBox = el('div', { class: 'mt-16' });
-    container.appendChild(el('div', { class: 'section-title mt-16 mb-8', style: 'font-weight:800' }, ['👑 نشاط حسابات قادة الفريق']));
-    container.appendChild(tlBox);
-
-    async function loadTeamLeaders() {
-      try {
-        const { teamLeaders } = await api('/employees/team-leader-performance');
-        tlBox.innerHTML = '';
-        teamLeaders.forEach((tl) => {
-          const card = el('div', { class: 'card card-pad mb-16' });
-          card.appendChild(el('div', { class: 'flex-between mb-12' }, [
-            el('div', { style: 'font-weight:800' }, [tl.isOwner ? '👑 ' : '🧑‍💼 ', tl.displayName, el('span', { class: 'faint' }, [' @' + tl.username])]),
-            el('div', { class: 'faint' }, [tl.lastLoginAt ? 'آخر دخول: ' + fmt.ago(tl.lastLoginAt) : 'لم يسجّل دخول بعد']),
-          ]));
-          card.appendChild(el('div', { class: 'kpi-grid' }, [
-            ['عمليات دخول', tl.loginCount], ['عملاء أُنشئوا', tl.customersCreated], ['استيراد عملاء', tl.customersImported],
-            ['توزيعات', tl.distributionsCreated], ['صفقات مسجّلة', tl.dealsRecorded], ['إدارة موظفين', tl.employeesManaged],
-            ['شكاوى سجّلها', tl.complaintsLogged], ['رسائل دردشة', tl.chatMessagesSent],
-          ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value' }, [String(v)]), el('div', { class: 'kpi-label' }, [l])]))));
-          tlBox.appendChild(card);
-        });
-        if (teamLeaders.length === 0) tlBox.appendChild(el('div', { class: 'empty-state' }, ['لا توجد حسابات قائد فريق.']));
-      } catch (e) {
-        tlBox.innerHTML = '';
-        tlBox.appendChild(el('div', { class: 'error-text' }, [e.message]));
-      }
-    }
-
     // "لوحة التحكم" و"مركز التحكم المباشر" الجاهزتين — نفس صفحات قائد
     // الفريق، مضمّنتين هنا كما هما (نظرة عامة + تواجد الفريق + مبيعات
     // اليوم + قمع اليوم + يحتاج انتباه + جدول الموظفين المباشر).
@@ -291,13 +260,10 @@
     }
 
     await load();
-    await loadTeamLeaders();
     await loadEmbeddedSections();
-    const tlInterval = setInterval(loadTeamLeaders, 2 * 60 * 1000);
     const offAny = App.on('rt:*', scheduleReload);
     container.cleanup = () => {
       offAny && offAny();
-      clearInterval(tlInterval);
       if (tickInterval) clearInterval(tickInterval);
       clearTimeout(reloadTimer);
       embeddedCleanups.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
