@@ -539,6 +539,7 @@ function teardownPreviousRender() {
   }
 }
 
+let ownerLockToastReady = false; // يمنع ظهور التنبيه عند أول تحميل/إعادة توجيه تلقائية
 async function renderRoute() {
   const root = document.getElementById('app');
   // يُفحص عند كل تنقّل، مش بس أول تحميل — تعديل الرابط يدويًا (hashchange)
@@ -566,9 +567,16 @@ async function renderRoute() {
   // الفريق كله لايف، بدون أي إجراء يتخذه هو نفسه — القرارات والإجراءات
   // شغل التيم ليدر. أي رابط تاني يتحول تلقائيًا لنفس الداش بورد.
   if (App.state.user.isOwner && location.hash !== '#/attendance-dashboard') {
+    // قبل كده كنا بنرجّعه للداشبورد بصمت — فكان حساب المالك حاسس إن الأزرار
+    // "مش شغالة" لما يدوس على أي رابط جوه القسم المُضمَّن (تفاصيل عميل،
+    // "الذهاب إلى التوزيع"...): الصفحة كانت بتتحمّل من جديد بالكامل من غير
+    // أي تفسير، فحاسس إن حاجة اتكسرت. التنبيه هنا يوضّح إن ده تصرّف مقصود
+    // (حسابه للعرض فقط) مش عطل، من غير ما نغيّر قاعدة "صفحة واحدة بس".
+    if (ownerLockToastReady) toast('هذا الحساب للعرض فقط — التفاصيل والإجراءات من حساب قائد الفريق', 'info');
     location.hash = '#/attendance-dashboard';
     return;
   }
+  ownerLockToastReady = true;
   const match = matchRoute(location.hash);
   teardownPreviousRender();
   root.innerHTML = '';
