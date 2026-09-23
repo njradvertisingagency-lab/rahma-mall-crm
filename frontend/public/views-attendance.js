@@ -63,7 +63,12 @@
     // -------------------------------------------------------------------
     container.appendChild(sectionHeading('📍', 'متابعة الفريق', 'كل حاجة بتحصل في الفريق اليوم، لحظة بلحظة.'));
 
-    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+    // timeZone: 'Africa/Cairo' صريحة — بدونها "اليوم" هنا كان بيتحسب بتوقيت
+    // جهاز المتصفح، فممكن يختلف عن "اليوم" الفعلي بتوقيت القاهرة اللي
+    // يحسبه السيرفر، ويكسر مقارنة dateInput.value === todayStr (تفعيل
+    // التحديث اللحظي والساعات المتحركة) قرب منتصف الليل لو الجهاز مضبوط
+    // بمنطقة زمنية مختلفة.
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); // YYYY-MM-DD
     const dateInput = el('input', { type: 'date', value: todayStr, onchange: () => load() });
     container.appendChild(el('div', { class: 'flex gap-8 mb-16', style: 'align-items:center' }, [
       el('label', { class: 'muted' }, ['اختر اليوم:']),
@@ -148,7 +153,7 @@
               !p.checkInAt
                 ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, ['لم يحضر'])
                 : p.isLate
-                ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, [`متأخر ${p.lateMinutes} د`])
+                ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, [`متأخر ${fmt.duration(p.lateMinutes * 60)}`])
                 : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد']),
             ]),
             el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
