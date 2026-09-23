@@ -73,6 +73,23 @@
     } }, ['حفظ إعدادات المبيعات']));
     container.appendChild(salesCard);
 
+    // --- إعدادات مكافآت المبيعات ---
+    const rs = settings.rewards_settings || { amountPerSale: 200 };
+    const rewardsCard = el('div', { class: 'card card-pad mb-16' });
+    rewardsCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:6px' }, ['🏆 مكافآت المبيعات']));
+    rewardsCard.appendChild(el('div', { class: 'muted mb-12', style: 'font-size:12.5px' }, [
+      'كل مرة يسجّل فيها قائد الفريق "تمت الصفقة" منسوبةً لموظف، تُضاف هذه القيمة تلقائيًا لمحفظة مكافآته (تظهر في ملفه الشخصي). إبطال الصفقة أو استرجاعها بالكامل يعكس المكافأة تلقائيًا.',
+    ]));
+    const rewardAmountInput = el('input', { type: 'number', step: '1', min: '0', value: rs.amountPerSale ?? 200 });
+    rewardsCard.appendChild(el('div', { class: 'field' }, [el('label', {}, ['قيمة المكافأة لكل صفقة (ج.م)']), rewardAmountInput]));
+    rewardsCard.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
+      const amount = Number(rewardAmountInput.value);
+      if (!(amount >= 0)) { toast('قيمة غير صالحة', 'error'); return; }
+      await api('/settings/rewards_settings', { method: 'PATCH', body: { amountPerSale: amount } });
+      toast('تم حفظ إعدادات المكافآت', 'success');
+    } }, ['حفظ إعدادات المكافآت']));
+    container.appendChild(rewardsCard);
+
     // --- إدارة الفروع ---
     const branchesCard = el('div', { class: 'card card-pad mb-16' });
     branchesCard.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, ['إدارة الفروع']));
