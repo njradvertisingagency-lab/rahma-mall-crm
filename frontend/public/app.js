@@ -886,7 +886,10 @@ async function refreshAttendanceStatus() {
 App.refreshAttendanceStatus = refreshAttendanceStatus;
 
 function renderAttendanceButton() {
-  if (!App.state.user) return null;
+  // Mr. Hany (the owner) doesn't clock in/out — he runs the business, he
+  // doesn't punch a card for it. Hidden for his account only; every other
+  // account (including the regular Team Leader) still uses it.
+  if (!App.state.user || App.state.user.isOwner) return null;
   const btn = el('button', { class: 'btn btn-icon', title: 'الحضور والانصراف', onclick: openAttendanceModal }, ['🕒']);
   function update() {
     const a = App.state.attendance;
