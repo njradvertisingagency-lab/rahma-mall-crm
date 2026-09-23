@@ -19,6 +19,13 @@ attendanceRoutes.get('/me', async (c) => {
 
 attendanceRoutes.post('/check-in', async (c) => {
   const user = c.get('user');
+  // Server-side backstop for the owner exclusion — the frontend already
+  // hides the check-in button for this account, but that alone never stops
+  // a stale cached page or a direct API call from writing a real attendance
+  // record for an account the one dashboard that shows attendance
+  // deliberately excludes (getAttendanceDashboard filters is_owner = 0),
+  // which would otherwise create a phantom record nobody can ever see.
+  if (user.isOwner) return jsonError(c, 403, 'حساب المالك لا يسجل حضورًا', 'FORBIDDEN_OWNER_ATTENDANCE');
   const result = await recordCheckIn(c.env, user);
   if (result.error) return jsonError(c, 409, result.message, result.error);
   return c.json(result);
@@ -26,6 +33,7 @@ attendanceRoutes.post('/check-in', async (c) => {
 
 attendanceRoutes.post('/check-out', async (c) => {
   const user = c.get('user');
+  if (user.isOwner) return jsonError(c, 403, 'حساب المالك لا يسجل حضورًا', 'FORBIDDEN_OWNER_ATTENDANCE');
   const result = await recordCheckOut(c.env, user);
   if (result.error) return jsonError(c, 409, result.message, result.error);
   return c.json(result);
