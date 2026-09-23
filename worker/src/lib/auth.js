@@ -2,6 +2,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomToken } from './passwords.js';
 import { nowIso, jsonError, backgroundWrite } from './db.js';
 import { sessGet, sessPut, sessDelete } from './sessionStore.js';
+import { getShiftGate } from './workhours.js';
 
 export const SESSION_COOKIE = 'rm_session';
 const SHORT_SESSION_HOURS = 12;
@@ -84,6 +85,34 @@ export async function requireAuth(c, next) {
     return jsonError(c, 401, 'انتهت صلاحية الجلسة', 'SESSION_EXPIRED');
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
+
+  // Outside the shift the system is closed to employees. The Team Leader and
+  // the owner account are exempt — they run the business at any hour.
+  //
+  // Refused here, before any query runs, so a closed system costs nothing at
+  // all against the daily database quota. Check-in/check-out get a wider
+  // window so arriving a few minutes early is still recordable.
+  if (session.role === 'employee' && !session.isOwner) {
+    const isAttendance = c.req.path.startsWith('/api/attendance');
+    const gate = getShiftGate({ wide: isAttendance });
+    if (!gate.open) {
+      return c.json(
+        {
+          error: {
+            message: gate.isOffDay
+              ? `النظام مغلق اليوم (${gate.weekdayAr}) — مواعيد العمل ${gate.shiftText}. يفتح بعد ${gate.opensInText}.`
+              : `النظام خارج مواعيد العمل الآن — مواعيد العمل ${gate.shiftText}. يفتح بعد ${gate.opensInText}.`,
+            code: 'OUTSIDE_WORK_HOURS',
+            shiftText: gate.shiftText,
+            opensInText: gate.opensInText,
+            minutesUntilOpen: gate.minutesUntilOpen,
+            isOffDay: !!gate.isOffDay,
+          },
+        },
+        403
+      );
+    }
+  }
 
   // Touching lastSeenAt is bookkeeping. It runs on EVERY authenticated
   // request, so if it could throw it would take the whole app down with it.

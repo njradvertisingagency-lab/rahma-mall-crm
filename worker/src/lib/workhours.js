@@ -195,3 +195,88 @@ export async function sweepOffHoursAvailability(db, env) {
   }
   return { switchedOff: 0, restored: toRestore.results.length };
 }
+
+// ---------------------------------------------------------------------------
+// Shift gate — employees may only use the system during the shift.
+//
+// The Team Leader and the owner account are exempt and work around the clock.
+// For everyone else the system simply closes outside the shift: the request is
+// refused before it touches the database, which is a large part of why the
+// daily read quota used to run out overnight.
+//
+// Hardcoded and D1-free on purpose: this runs on EVERY request, so reading the
+// configurable work_hours row here would cost exactly the reads the gate
+// exists to save. If the shift moves, change it here.
+// ---------------------------------------------------------------------------
+const SHIFT_START_MIN = 10 * 60;      // 10:00
+const SHIFT_END_MIN = 18 * 60;        // 18:00
+// Checking in and out must stay possible a little either side of the shift,
+// otherwise someone arriving at 09:58 is locked out of recording it.
+const ATTENDANCE_START_MIN = 9 * 60;  // 09:00
+const ATTENDANCE_END_MIN = 20 * 60;   // 20:00
+const SHIFT_OFF_WEEKDAYS = ['Thursday', 'Friday'];
+const WEEK_ORDER = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
+const WEEKDAY_AR = {
+  Saturday: 'السبت', Sunday: 'الأحد', Monday: 'الاثنين', Tuesday: 'الثلاثاء',
+  Wednesday: 'الأربعاء', Thursday: 'الخميس', Friday: 'الجمعة',
+};
+
+function formatDelay(minutes) {
+  if (minutes <= 0) return 'الآن';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} دقيقة`;
+  if (m === 0) return `${h} ساعة`;
+  return `${h} ساعة و ${m} دقيقة`;
+}
+
+/**
+ * Is the system open for an employee right now?
+ * `wide` widens the window, for check-in/check-out only.
+ */
+export function getShiftGate({ wide = false } = {}) {
+  const startMin = wide ? ATTENDANCE_START_MIN : SHIFT_START_MIN;
+  const endMin = wide ? ATTENDANCE_END_MIN : SHIFT_END_MIN;
+
+  let weekday;
+  let minutesSinceMidnight;
+  try {
+    weekday = getCairoWeekday();
+    ({ minutesSinceMidnight } = getCairoNow());
+  } catch (err) {
+    // If the clock lookup ever fails, stay OPEN — locking the whole team out
+    // over a timezone hiccup is far worse than a few extra queries.
+    console.error('shift gate: clock lookup failed, staying open', err);
+    return { open: true };
+  }
+
+  const isOffDay = SHIFT_OFF_WEEKDAYS.includes(weekday);
+  if (!isOffDay && minutesSinceMidnight >= startMin && minutesSinceMidnight < endMin) {
+    return { open: true };
+  }
+
+  // Work out when it opens again, so the message can say how long is left.
+  let minutesUntilOpen;
+  if (!isOffDay && minutesSinceMidnight < startMin) {
+    minutesUntilOpen = startMin - minutesSinceMidnight;
+  } else {
+    // Today is done (or is an off day) — find the next working day.
+    let days = 1;
+    let next = WEEK_ORDER[(WEEK_ORDER.indexOf(weekday) + 1) % 7];
+    while (SHIFT_OFF_WEEKDAYS.includes(next)) {
+      days += 1;
+      next = WEEK_ORDER[(WEEK_ORDER.indexOf(next) + 1) % 7];
+    }
+    minutesUntilOpen = days * 24 * 60 - minutesSinceMidnight + startMin;
+  }
+
+  return {
+    open: false,
+    isOffDay,
+    weekdayAr: WEEKDAY_AR[weekday] || weekday,
+    minutesUntilOpen,
+    opensInText: formatDelay(minutesUntilOpen),
+    shiftText: 'من ١٠:٠٠ صباحًا إلى ٦:٠٠ مساءً — عدا الخميس والجمعة',
+  };
+}
