@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
 import { nextDistributionLabel, logActivity, createNotification, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
+import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 
 export const distributionRoutes = new Hono();
 distributionRoutes.use('*', requireAuth, requireRole('team_leader'));
@@ -38,6 +39,50 @@ function planRoundRobin(customerIds, employees) {
   });
   return plan;
 }
+
+// ---------------------------------------------------------------------------
+// TODAY'S DISTRIBUTED CUSTOMERS — طلب أ/ هاني: صفحة لقائد الفريق تجمّع كل
+// الأرقام اللي اتوزّعت النهاردة (لأي موظف) في مكان واحد، عشان يقدر يتواصل
+// معاهم هو كمان كدعم إضافي للموظف المسؤول — بدون ما تتغيّر نسبة العميل ولا
+// حسابات المكافآت (قراءة فقط، مفيش تعديل على assigned_employee_id هنا).
+// ---------------------------------------------------------------------------
+distributionRoutes.get('/today', async (c) => {
+  const db = c.env.DB;
+  const { dateStr } = getCairoNow();
+  const { dayStartIso, dayEndIso } = getCairoDayBoundsUtc(dateStr);
+  const rows = await db
+    .prepare(
+      `SELECT
+         c.id, c.phone, c.normalized_phone, c.name, c.status, c.priority,
+         c.whatsapp_contact_status, c.assigned_at, c.next_follow_up_at, c.updated_at,
+         c.assigned_employee_id, e.name AS employee_name,
+         (SELECT n.note FROM customer_notes n WHERE n.customer_id = c.id ORDER BY n.created_at DESC LIMIT 1) AS last_note,
+         (SELECT n.created_at FROM customer_notes n WHERE n.customer_id = c.id ORDER BY n.created_at DESC LIMIT 1) AS last_note_at
+       FROM customers c
+       LEFT JOIN employees e ON e.id = c.assigned_employee_id
+       WHERE c.assigned_at >= ? AND c.assigned_at <= ? AND c.archived = 0
+       ORDER BY c.assigned_at DESC`
+    )
+    .bind(dayStartIso, dayEndIso)
+    .all();
+  const customers = rows.results.map((r) => ({
+    id: r.id,
+    phone: r.phone,
+    normalizedPhone: r.normalized_phone,
+    name: r.name,
+    status: r.status,
+    priority: r.priority,
+    whatsappContactStatus: r.whatsapp_contact_status,
+    assignedAt: r.assigned_at,
+    nextFollowUpAt: r.next_follow_up_at,
+    updatedAt: r.updated_at,
+    assignedEmployeeId: r.assigned_employee_id,
+    employeeName: r.employee_name,
+    lastNote: r.last_note,
+    lastNoteAt: r.last_note_at,
+  }));
+  return c.json({ date: dateStr, total: customers.length, customers });
+});
 
 distributionRoutes.get('/', async (c) => {
   const db = c.env.DB;

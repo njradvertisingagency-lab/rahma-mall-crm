@@ -41,7 +41,9 @@ attendanceRoutes.post('/check-out', async (c) => {
 
 attendanceRoutes.get('/dashboard', async (c) => {
   const user = c.get('user');
-  if (!user.isOwner) return jsonError(c, 403, 'هذه الصفحة مخصّصة لحساب المالك فقط', 'FORBIDDEN_OWNER_ONLY');
+  // كانت هذه الصفحة مقفولة على حساب المالك فقط — طلب أ/ هاني إتاحة نفس
+  // جدول أداء الفريق (تقييم/تأخير/إنجاز لكل موظف) لحساب قائد الفريق أيضًا.
+  if (!user.isOwner && user.role !== 'team_leader') return jsonError(c, 403, 'هذه الصفحة غير متاحة لحسابك', 'FORBIDDEN_OWNER_ONLY');
   const date = c.req.query('date') || null;
   const dashboard = await getAttendanceDashboard(c.env, { date });
   return c.json(dashboard);
