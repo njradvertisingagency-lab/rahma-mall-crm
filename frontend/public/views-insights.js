@@ -319,37 +319,9 @@
     return container;
   }, { roles: ['team_leader'] });
 
-  // خاص بحساب المالك فقط — رؤية شاملة لنشاط/أداء حسابات قائد الفريق نفسها.
-  App.route('/team-leader-performance', async () => {
-    const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['👑 أداء قائد الفريق'])]));
-    if (!App.state.user.isOwner) {
-      return el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🚫']), 'هذه الصفحة مخصّصة لحساب المالك فقط.']);
-    }
-    container.appendChild(el('div', { class: 'muted mb-16' }, ['نظرة شاملة على نشاط كل حسابات قائد الفريق — مبنية بالكامل من سجل الأنشطة الفعلي، بلا أي تقييم مُخترَع.']));
-    const box = el('div');
-    container.appendChild(box);
-    try {
-      const { teamLeaders } = await api('/employees/team-leader-performance');
-      teamLeaders.forEach((tl) => {
-        const card = el('div', { class: 'card card-pad mb-16' });
-        card.appendChild(el('div', { class: 'flex-between mb-12' }, [
-          el('div', { style: 'font-weight:800' }, [tl.isOwner ? '👑 ' : '🧑‍💼 ', tl.displayName, el('span', { class: 'faint' }, [' @' + tl.username])]),
-          el('div', { class: 'faint' }, [tl.lastLoginAt ? 'آخر دخول: ' + fmt.ago(tl.lastLoginAt) : 'لم يسجّل دخول بعد']),
-        ]));
-        card.appendChild(el('div', { class: 'kpi-grid' }, [
-          ['عمليات دخول', tl.loginCount], ['عملاء أُنشئوا', tl.customersCreated], ['استيراد عملاء', tl.customersImported],
-          ['توزيعات', tl.distributionsCreated], ['صفقات مسجّلة', tl.dealsRecorded], ['إدارة موظفين', tl.employeesManaged],
-          ['شكاوى سجّلها', tl.complaintsLogged], ['رسائل دردشة', tl.chatMessagesSent],
-        ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value' }, [String(v)]), el('div', { class: 'kpi-label' }, [l])]))));
-        box.appendChild(card);
-      });
-      if (teamLeaders.length === 0) box.appendChild(el('div', { class: 'empty-state' }, ['لا توجد حسابات قائد فريق.']));
-    } catch (e) {
-      box.appendChild(el('div', { class: 'empty-state' }, [e.message]));
-    }
-    return container;
-  }, { roles: ['team_leader'] });
+  // ملحوظة: صفحة "أداء قائد الفريق" المنفصلة اتدمجت جوه /attendance-dashboard
+  // (views-attendance.js) — بناءً على طلب المالك بداش بورد واحدة بس تجمع كل
+  // حاجة عن الشركة، بدل ما تكون منتشرة في أكتر من صفحة.
 
   App.route('/ai', async () => {
     const container = el('div');

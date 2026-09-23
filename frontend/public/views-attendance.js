@@ -2,14 +2,22 @@
 (function () {
   const { el, api, fmt } = App;
 
-  // داش بورد أستاذ هاني الكبيرة — كل موظف (وقائد الفريق نفسه) في صفحة واحدة:
-  // جه امتى، مشي امتى، عمل ايه (مكالمات/إغلاق اليوم)، عدد ساعات عمله، وحالة
-  // التأخير/المخالفات هذا الشهر. مبني بالكامل من بيانات حقيقية (attendance
-  // + call_attempts + customer_status_history) — لا شيء مُخترَع. مخصّص
-  // لحساب المالك فقط، ولا يظهر رابطه في القائمة الجانبية لغير حسابه.
+  // داش بورد أستاذ هاني الوحيدة والشاملة — كل حاجة بتحصل في الشركة، لكل
+  // موظف ولقادة الفريق، في صفحة واحدة بس (دمجنا فيها الحضور/الانصراف
+  // اليومي + نشاط قادة الفريق، بعد ما كانوا صفحتين منفصلتين). البيانات
+  // كلها حقيقية من قاعدة البيانات — لا شيء مُخترَع. تتحدّث تلقائيًا لحظة
+  // حصول أي حدث حقيقي (اتصال، ملاحظة، بصمة، إغلاق عميل...) عن طريق نفس
+  // اتصال الـ WebSocket المباشر المستخدم في باقي الموقع — بدون أي تحميل
+  // إضافي على قاعدة البيانات إلا لما حاجة تحصل فعلًا. مخصّصة لحساب المالك
+  // فقط، ولا يظهر رابطها في القائمة الجانبية لغير حسابه.
   App.route('/attendance-dashboard', async () => {
     const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['🕒 حضور وانصراف الفريق'])]));
+    container.appendChild(
+      el('div', { class: 'page-header' }, [
+        el('div', { class: 'page-title' }, ['📊 كل حاجة عن الشركة']),
+        el('div', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['🔴 مباشر — يتحدّث أول ما حاجة تحصل']),
+      ])
+    );
 
     if (!App.state.user.isOwner) {
       return el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🚫']), 'هذه الصفحة مخصّصة لحساب المالك فقط.']);
@@ -32,10 +40,26 @@
       return el('div', { class: 'kpi-card' + (accent ? ' accent-' + accent : '') }, [el('div', { class: 'kpi-value' }, [String(value)]), el('div', { class: 'kpi-label' }, [label])]);
     }
 
+    // ساعات العمل بتتحدّث كل ثانية من غير أي طلب من الخادم — نحسبها محليًا
+    // من وقت الحضور المسجَّل، فتحس إن الرقم بيجري "لايف" لحظة بلحظة، وليس
+    // فقط لما تحصل حادثة جديدة أو يعاد تحميل الصفحة.
+    let tickingCells = []; // [{ td, checkInMs }]
+    let tickInterval = null;
+    function startTicking() {
+      if (tickInterval) clearInterval(tickInterval);
+      tickInterval = setInterval(() => {
+        const now = Date.now();
+        tickingCells.forEach(({ td, checkInMs }) => {
+          td.textContent = fmt.duration((now - checkInMs) / 1000);
+        });
+      }, 1000);
+    }
+
     async function load() {
       box.innerHTML = '';
       summaryGrid.innerHTML = '';
       box.appendChild(el('div', { class: 'muted' }, ['جارِ التحميل…']));
+      tickingCells = [];
       try {
         const data = await api('/attendance/dashboard?date=' + encodeURIComponent(dateInput.value));
         box.innerHTML = '';
@@ -71,6 +95,12 @@
         }
 
         function personRow(p, showRank) {
+          const hoursTd = el('td', {}, [p.checkInAt ? fmt.duration(p.hoursWorkedSeconds) : '—']);
+          // الشخص لسه شغال (حضر ولسه ما مضاش) وده نفس اليوم الحالي — نخليه
+          // يتحدّث كل ثانية. لو بيتفرّج على يوم فات، نسيب الرقم ثابت.
+          if (p.checkInAt && !p.checkOutAt && dateInput.value === todayStr) {
+            tickingCells.push({ td: hoursTd, checkInMs: new Date(p.checkInAt).getTime() });
+          }
           return el('tr', p.needsNoteCount > 0 || p.followupsOverdue > 0 ? { class: 'row-needs-note' } : {}, [
             el('td', {}, [showRank && p.rank ? `#${p.rank}` : '—']),
             el('td', { style: 'font-weight:700' }, [p.isOwner ? '👑 ' : '', p.name]),
@@ -83,7 +113,7 @@
             ]),
             el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
             el('td', {}, [p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—')]),
-            el('td', {}, [p.checkInAt ? fmt.duration(p.hoursWorkedSeconds) : '—']),
+            hoursTd,
             el('td', {}, [cell(p.seenToday)]),
             el('td', {}, [cell(p.callsToday)]),
             el('td', {}, [cell(p.whatsappToday)]),
@@ -120,19 +150,67 @@
           'التقييم = (مكالمات + واتساب + ملاحظات) + (إغلاق×3 + متابعات تمت×2) − (محتاج ملاحظة + متابعات متأخرة)×2 − تأخير اليوم×2. ',
           'رقم إرشادي للمقارنة بين الموظفين في نفس اليوم فقط — وليس أساسًا للخصم.',
         ]));
+
+        startTicking();
       } catch (e) {
         box.innerHTML = '';
         box.appendChild(el('div', { class: 'error-text' }, [e.message || 'تعذّر تحميل بيانات الحضور']));
       }
     }
 
+    // نشاط قادة الفريق (تسجيل دخول، عملاء أنشأهم، توزيعات، صفقات...) —
+    // جزء من "كل حاجة عن الشركة" بردو، لكن بيتحدّث كل شوية مش لحظيًا زي
+    // جدول الحضور، لأنه استعلام أثقل (تسعة أرقام لكل قائد فريق).
+    const tlBox = el('div', { class: 'mt-16' });
+    container.appendChild(el('div', { class: 'section-title mt-16 mb-8', style: 'font-weight:800' }, ['👑 نشاط حسابات قادة الفريق']));
+    container.appendChild(tlBox);
+
+    async function loadTeamLeaders() {
+      try {
+        const { teamLeaders } = await api('/employees/team-leader-performance');
+        tlBox.innerHTML = '';
+        teamLeaders.forEach((tl) => {
+          const card = el('div', { class: 'card card-pad mb-16' });
+          card.appendChild(el('div', { class: 'flex-between mb-12' }, [
+            el('div', { style: 'font-weight:800' }, [tl.isOwner ? '👑 ' : '🧑‍💼 ', tl.displayName, el('span', { class: 'faint' }, [' @' + tl.username])]),
+            el('div', { class: 'faint' }, [tl.lastLoginAt ? 'آخر دخول: ' + fmt.ago(tl.lastLoginAt) : 'لم يسجّل دخول بعد']),
+          ]));
+          card.appendChild(el('div', { class: 'kpi-grid' }, [
+            ['عمليات دخول', tl.loginCount], ['عملاء أُنشئوا', tl.customersCreated], ['استيراد عملاء', tl.customersImported],
+            ['توزيعات', tl.distributionsCreated], ['صفقات مسجّلة', tl.dealsRecorded], ['إدارة موظفين', tl.employeesManaged],
+            ['شكاوى سجّلها', tl.complaintsLogged], ['رسائل دردشة', tl.chatMessagesSent],
+          ].map(([l, v]) => el('div', { class: 'kpi-card' }, [el('div', { class: 'kpi-value' }, [String(v)]), el('div', { class: 'kpi-label' }, [l])]))));
+          tlBox.appendChild(card);
+        });
+        if (teamLeaders.length === 0) tlBox.appendChild(el('div', { class: 'empty-state' }, ['لا توجد حسابات قائد فريق.']));
+      } catch (e) {
+        tlBox.innerHTML = '';
+        tlBox.appendChild(el('div', { class: 'error-text' }, [e.message]));
+      }
+    }
+
+    // تحديث لحظي: أي حدث حقيقي في الشركة (اتصال، ملاحظة، بصمة، عميل جديد،
+    // صفقة، متابعة...) يوصل عن طريق نفس اتصال الـ WebSocket المستخدم في كل
+    // الموقع، فنعيد تحميل الجدول فورًا — بدون أي "polling" أو طلبات زيادة
+    // لما محدّش شغال. الـ debounce بسيط عشان لو حصلت أحداث كتير مع بعض
+    // (استيراد عملاء مثلًا) نحمّل مرة واحدة مش عشرات المرات.
+    let reloadTimer = null;
+    function scheduleReload() {
+      if (dateInput.value !== todayStr) return; // العرض على يوم فات ميتغيرش لوحده
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(load, 400);
+    }
+
     await load();
-    const offs = [
-      App.on('rt:ATTENDANCE_CHECKED_IN', load),
-      App.on('rt:ATTENDANCE_CHECKED_OUT', load),
-      App.on('rt:ATTENDANCE_PENALTY', load),
-    ];
-    container.cleanup = () => offs.forEach((off) => off && off());
+    await loadTeamLeaders();
+    const tlInterval = setInterval(loadTeamLeaders, 2 * 60 * 1000);
+    const offAny = App.on('rt:*', scheduleReload);
+    container.cleanup = () => {
+      offAny && offAny();
+      clearInterval(tlInterval);
+      if (tickInterval) clearInterval(tickInterval);
+      clearTimeout(reloadTimer);
+    };
     return container;
   }, { roles: ['team_leader'] });
 })();
