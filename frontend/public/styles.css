@@ -365,6 +365,8 @@ table.data-table tr:hover td { background: var(--surface-2); }
 /* عميل تم فتحه ولم تُكتب له ملاحظة بعد — يظل أحمر حتى تُكتب الملاحظة. */
 .data-table tr.row-needs-note > td {
   background: var(--danger-soft);
+}
+.data-table tr.row-needs-note > td:first-child {
   box-shadow: inset 2px 0 0 var(--danger);
 }
 .data-table tr.row-needs-note:hover > td { background: var(--danger-soft); }
