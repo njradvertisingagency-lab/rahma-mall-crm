@@ -945,12 +945,31 @@ function renderAttendanceButton() {
   // doesn't punch a card for it. Hidden for his account only; every other
   // account (including the regular Team Leader) still uses it.
   if (!App.state.user || App.state.user.isOwner) return null;
-  const btn = el('button', { class: 'btn btn-icon', title: 'الحضور والانصراف', onclick: openAttendanceModal }, ['🕒']);
+  // كانت مجرد أيقونة ساعة 🕒 صغيرة بين باقي أيقونات الشريط العلوي — ونفس
+  // الأيقونة مستخدمة في الشريط الجانبي لصفحة "سجل الأنشطة" أصلًا، فمش واضح
+  // إنها خاصة بالبصمة تحديدًا. بقت زر بارز بخلفية ملوّنة ونص "البصمة"
+  // صريح، ولونها وخلفيتها تتغيّر حسب الحالة بدل لون النص لوحده.
+  const btn = el('button', {
+    class: 'btn btn-sm',
+    title: 'البصمة — الحضور والانصراف',
+    onclick: openAttendanceModal,
+    style: 'font-weight:800;border:1.5px solid currentColor;white-space:nowrap',
+  }, ['🕒 البصمة']);
   function update() {
     const a = App.state.attendance;
-    if (a && a.checkedInAt && !a.checkedOutAt) btn.style.color = 'var(--success)';
-    else if (a && a.checkedOutAt) btn.style.color = 'var(--muted)';
-    else btn.style.color = a && a.isHolidayToday ? 'var(--muted)' : 'var(--danger)';
+    if (a && a.checkedInAt && !a.checkedOutAt) {
+      btn.style.color = 'var(--success)';
+      btn.style.background = 'var(--success-soft)';
+    } else if (a && a.checkedOutAt) {
+      btn.style.color = 'var(--muted)';
+      btn.style.background = 'var(--surface-2)';
+    } else if (a && a.isHolidayToday) {
+      btn.style.color = 'var(--muted)';
+      btn.style.background = 'var(--surface-2)';
+    } else {
+      btn.style.color = 'var(--danger)';
+      btn.style.background = 'var(--danger-soft)';
+    }
   }
   btn.offEvt = App.on('attendance-updated', update);
   update();
@@ -961,6 +980,47 @@ async function openAttendanceModal() {
   const body = el('div', {});
   const footer = el('div', { class: 'flex gap-8' });
   const dlg = modal('🕒 الحضور والانصراف', body, [footer]);
+
+  // فاصل بصري ١.٢ ثانية بين تنفيذ إجراء (حضور/انصراف) وظهور الزر التالي —
+  // فيه زر الانصراف مش حاضر في الـ DOM أصلًا وقت الفاصل ده، فضغطة تانية
+  // سريعة بالغلط بعد تسجيل الحضور توقعش على "تسجيل انصراف" فوق نفس المكان.
+  function showTransientSuccess(text) {
+    return new Promise((resolve) => {
+      footer.innerHTML = '';
+      body.innerHTML = '';
+      body.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['✅']), text]));
+      setTimeout(resolve, 1200);
+    });
+  }
+
+  // انصراف قبل نهاية الشيفت الفعلية (من الإعدادات، عبر a.isBeforeShiftEnd) —
+  // يطلب تأكيدًا صريحًا بدل تسجيل الانصراف على طول، حتى لا يسجّل أحد
+  // انصرافًا مبكرًا بضغطة واحدة بالغلط.
+  async function handleCheckoutClick(a) {
+    if (!a.isBeforeShiftEnd) return doCheckout();
+    body.innerHTML = '';
+    footer.innerHTML = '';
+    body.appendChild(el('div', { class: 'empty-state' }, [
+      el('div', { class: 'icon' }, ['⚠️']),
+      el('div', { style: 'font-weight:700;margin-bottom:6px' }, ['تسجيل انصراف مبكر']),
+      el('div', { class: 'muted' }, [`لسه الدوام ما خلصش (حتى ${a.shiftEndText}) — متأكد إنك عاوز تسجّل انصراف دلوقتي؟`]),
+    ]));
+    const confirmBtn = el('button', { class: 'btn', style: 'background:var(--danger);color:#fff;border:none;font-weight:800', onclick: () => doCheckout(confirmBtn) }, ['تأكيد الانصراف المبكر']);
+    footer.appendChild(confirmBtn);
+    footer.appendChild(el('button', { class: 'btn btn-outline', onclick: () => render() }, ['رجوع']));
+  }
+
+  async function doCheckout(btn) {
+    if (btn) btn.disabled = true;
+    try {
+      await api('/attendance/check-out', { method: 'POST' });
+      await showTransientSuccess('✅ تم تسجيل الانصراف بنجاح');
+      await render();
+    } catch (e) {
+      toast(e.message || 'تعذّر تسجيل الانصراف', 'error');
+      await render();
+    }
+  }
 
   async function render() {
     body.innerHTML = '';
@@ -985,10 +1045,24 @@ async function openAttendanceModal() {
       ]));
 
       if (!a.checkedInAt) {
-        const btn = el('button', { class: 'btn btn-primary btn-block', onclick: async () => { btn.disabled = true; try { await api('/attendance/check-in', { method: 'POST' }); toast('تم تسجيل الحضور', 'success'); await render(); } catch (e) { toast(e.message || 'تعذّر تسجيل الحضور', 'error'); btn.disabled = false; } } }, ['✅ تسجيل حضور']);
+        // أخضر مليان — شكل مختلف تمامًا عن زر الانصراف الأحمر تحته، حتى لو
+        // ضغط الموظف مرتين بسرعة بالغلط ميقعش على الزر التاني وهو مش واخد
+        // باله (الزرين كمان مبيظهروش مع بعض أصلًا، لكن اللون والنص يفرّقوا
+        // برضه لو رجع الصفحة تاني بعد شوية).
+        const btn = el('button', { class: 'btn btn-block', style: 'background:var(--success);color:#fff;border:none;font-weight:800', onclick: async () => {
+          btn.disabled = true;
+          try {
+            await api('/attendance/check-in', { method: 'POST' });
+            await showTransientSuccess('✅ تم تسجيل الحضور بنجاح');
+            await render();
+          } catch (e) { toast(e.message || 'تعذّر تسجيل الحضور', 'error'); btn.disabled = false; }
+        } }, ['✅ تسجيل حضور']);
         footer.appendChild(btn);
       } else if (!a.checkedOutAt) {
-        const btn = el('button', { class: 'btn btn-outline btn-block', onclick: async () => { btn.disabled = true; try { await api('/attendance/check-out', { method: 'POST' }); toast('تم تسجيل الانصراف', 'success'); await render(); } catch (e) { toast(e.message || 'تعذّر تسجيل الانصراف', 'error'); btn.disabled = false; } } }, ['🚪 تسجيل انصراف']);
+        // أحمر مليان — عكس لون زر الحضور تمامًا، ومنفصل عنه بفاصل "تم
+        // تسجيل الحضور بنجاح" (showTransientSuccess) عشان زر الانصراف
+        // مايظهرش في نفس مكان زر الحضور فورًا لو حصل ضغط مزدوج بالغلط.
+        const btn = el('button', { class: 'btn btn-block', style: 'background:var(--danger);color:#fff;border:none;font-weight:800', onclick: () => handleCheckoutClick(a) }, ['🚪 تسجيل انصراف']);
         footer.appendChild(btn);
       } else {
         footer.appendChild(el('div', { class: 'muted' }, ['تم تسجيل الحضور والانصراف لهذا اليوم.']));
