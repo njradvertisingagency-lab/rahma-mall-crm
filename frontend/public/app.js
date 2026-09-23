@@ -60,14 +60,18 @@ App.el = el;
 
 // نستخدم أرقامًا لاتينية (numberingSystem: latn) مع أسماء الأشهر بالعربي —
 // هذا هو المتعارف عليه في البرامج التجارية المصرية.
+// timeZone: 'Africa/Cairo' صريحة هنا — بدونها، أي وقت معروض كان بيتحوّل
+// لتوقيت جهاز المتصفح نفسه (لو جهاز الموظف مضبوط بمنطقة زمنية مختلفة)
+// بدل توقيت مصر الفعلي، رغم إن كل الأوقات مخزّنة ومحسوبة بتوقيت القاهرة
+// من السيرفر أصلًا (lib/workhours.js).
 function fmtDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('ar-EG-u-nu-latn', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 function fmtDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', day: '2-digit', month: 'short', year: 'numeric' });
 }
 function timeAgo(iso) {
   if (!iso) return '—';
@@ -957,6 +961,10 @@ function renderAttendanceButton() {
   }, ['🕒 البصمة']);
   function update() {
     const a = App.state.attendance;
+    // "لسه ما سجّلش حضور" هي الحالة الوحيدة اللي فيها ننوّر الزر بحلقة
+    // متحركة — لو ناسي يبصم، تبقى ملفتة للنظر بدل لون أحمر ثابت سهل يتفوّت.
+    const forgotToCheckIn = !!a && !a.checkedInAt && !a.isHolidayToday;
+    btn.classList.toggle('attendance-forgot-glow', forgotToCheckIn);
     if (a && a.checkedInAt && !a.checkedOutAt) {
       btn.style.color = 'var(--success)';
       btn.style.background = 'var(--success-soft)';
@@ -1044,30 +1052,39 @@ async function openAttendanceModal() {
         el('div', { class: 'flex-between' }, [el('span', {}, ['تأخيرات هذا الشهر']), el('span', { style: 'font-weight:700' }, [`${a.lateCountThisMonth} (متبقّي ${a.remainingLateAllowance})`])]),
       ]));
 
-      if (!a.checkedInAt) {
-        // أخضر مليان — شكل مختلف تمامًا عن زر الانصراف الأحمر تحته، حتى لو
-        // ضغط الموظف مرتين بسرعة بالغلط ميقعش على الزر التاني وهو مش واخد
-        // باله (الزرين كمان مبيظهروش مع بعض أصلًا، لكن اللون والنص يفرّقوا
-        // برضه لو رجع الصفحة تاني بعد شوية).
-        const btn = el('button', { class: 'btn btn-block', style: 'background:var(--success);color:#fff;border:none;font-weight:800', onclick: async () => {
-          btn.disabled = true;
+      // الزرين ظاهرين مع بعض دايمًا (بدل إظهار واحد بس حسب الحالة) — الغير
+      // منطقي منهم بيتعطّل بدل ما يختفي، حتى يبان بوضوح إيه اللي ممكن
+      // يتعمل دلوقتي. الألوان لسه متضادة تمامًا (أخضر/أحمر) وبرضه فيه
+      // الفاصل الزمني (showTransientSuccess) قبل ما زر الانصراف يتفعّل.
+      const checkInBtn = el('button', {
+        class: 'btn btn-block',
+        style: 'background:var(--success);color:#fff;border:none;font-weight:800',
+        disabled: !!a.checkedInAt,
+        onclick: async () => {
+          checkInBtn.disabled = true;
+          checkOutBtn.disabled = true;
           try {
             await api('/attendance/check-in', { method: 'POST' });
             await showTransientSuccess('✅ تم تسجيل الحضور بنجاح');
             await render();
-          } catch (e) { toast(e.message || 'تعذّر تسجيل الحضور', 'error'); btn.disabled = false; }
-        } }, ['✅ تسجيل حضور']);
-        footer.appendChild(btn);
-      } else if (!a.checkedOutAt) {
-        // أحمر مليان — عكس لون زر الحضور تمامًا، ومنفصل عنه بفاصل "تم
-        // تسجيل الحضور بنجاح" (showTransientSuccess) عشان زر الانصراف
-        // مايظهرش في نفس مكان زر الحضور فورًا لو حصل ضغط مزدوج بالغلط.
-        const btn = el('button', { class: 'btn btn-block', style: 'background:var(--danger);color:#fff;border:none;font-weight:800', onclick: () => handleCheckoutClick(a) }, ['🚪 تسجيل انصراف']);
-        footer.appendChild(btn);
-      } else {
-        footer.appendChild(el('div', { class: 'muted' }, ['تم تسجيل الحضور والانصراف لهذا اليوم.']));
+          } catch (e) {
+            toast(e.message || 'تعذّر تسجيل الحضور', 'error');
+            checkInBtn.disabled = !!a.checkedInAt;
+            checkOutBtn.disabled = !a.checkedInAt || !!a.checkedOutAt;
+          }
+        },
+      }, ['✅ تسجيل حضور']);
+      const checkOutBtn = el('button', {
+        class: 'btn btn-block',
+        style: 'background:var(--danger);color:#fff;border:none;font-weight:800',
+        disabled: !a.checkedInAt || !!a.checkedOutAt,
+        onclick: () => handleCheckoutClick(a),
+      }, ['🚪 تسجيل انصراف']);
+      footer.appendChild(el('div', { class: 'flex gap-8', style: 'width:100%' }, [checkInBtn, checkOutBtn]));
+      if (a.checkedInAt && a.checkedOutAt) {
+        footer.appendChild(el('div', { class: 'muted mt-8', style: 'width:100%' }, ['تم تسجيل الحضور والانصراف لهذا اليوم.']));
       }
-      footer.appendChild(el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق']));
+      footer.appendChild(el('button', { class: 'btn btn-outline mt-8', style: 'width:100%', onclick: () => dlg.close() }, ['إغلاق']));
     } catch (e) {
       body.innerHTML = '';
       body.appendChild(el('div', { class: 'error-text' }, [e.message || 'تعذّر تحميل بيانات الحضور']));
