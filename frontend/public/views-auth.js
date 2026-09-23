@@ -7,6 +7,7 @@
     let screen = 'pick';
     let employees = [];
     let selectedEmployee = null;
+    let employeesClosedInfo = null; // { shiftText, opensInText, isOffDay } when outside work hours
 
     async function render() {
       container.innerHTML = '';
@@ -36,14 +37,29 @@
       } else if (screen === 'tl-form') {
         container.appendChild(renderLoginForm('Teamleader-optional', 'تسجيل دخول قائد الفريق', true));
       } else if (screen === 'employee-pick') {
-        container.appendChild(
-          el('div', { class: 'employee-pick-grid' }, employees.map((e) =>
-            el('div', { class: 'employee-pick', onclick: () => { selectedEmployee = e; screen = 'employee-form'; render(); } }, [
-              App.avatar({ url: e.avatar_data_url, name: e.name }),
-              el('div', { style: 'font-weight:700;font-size:13px' }, [e.name]),
+        if (employeesClosedInfo) {
+          const info = employeesClosedInfo;
+          container.appendChild(
+            el('div', { class: 'empty-state' }, [
+              el('div', { class: 'icon' }, ['🔒']),
+              el('div', { style: 'font-weight:700;margin-bottom:6px' }, ['النظام مغلق حاليًا لحسابات الموظفين']),
+              el('div', { class: 'muted' }, [
+                info.isOffDay
+                  ? `اليوم إجازة — مواعيد العمل ${info.shiftText}. يفتح بعد ${info.opensInText}.`
+                  : `مواعيد العمل ${info.shiftText}. يفتح بعد ${info.opensInText}.`,
+              ]),
             ])
-          ))
-        );
+          );
+        } else {
+          container.appendChild(
+            el('div', { class: 'employee-pick-grid' }, employees.map((e) =>
+              el('div', { class: 'employee-pick', onclick: () => { selectedEmployee = e; screen = 'employee-form'; render(); } }, [
+                App.avatar({ url: e.avatar_data_url, name: e.name }),
+                el('div', { style: 'font-weight:700;font-size:13px' }, [e.name]),
+              ])
+            ))
+          );
+        }
         container.appendChild(el('button', { class: 'btn btn-outline mt-16', onclick: () => { screen = 'pick'; render(); } }, ['← رجوع']));
       } else if (screen === 'employee-form') {
         container.appendChild(renderLoginForm(selectedEmployee.username, `أهلاً بك، ${selectedEmployee.name}`, false));
@@ -55,6 +71,7 @@
       try {
         const data = await api('/auth/employees-public');
         employees = data.employees;
+        employeesClosedInfo = data.closed ? { shiftText: data.shiftText, opensInText: data.opensInText, isOffDay: data.isOffDay } : null;
       } catch (e) {
         toast('تعذّر تحميل قائمة الموظفين', 'error');
       }
