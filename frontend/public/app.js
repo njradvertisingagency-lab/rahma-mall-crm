@@ -163,6 +163,7 @@ const ACTIVITY_ACTION_LABELS = {
   COMPLAINT_LOGGED: 'تسجيل شكوى', COMPLAINT_DELETED: 'حذف شكوى', CHAT_MESSAGE_SENT: 'إرسال رسالة دردشة',
   EMPLOYEE_DND_STARTED: 'تفعيل عدم الإزعاج المؤقت', EMPLOYEE_DND_CANCELLED: 'إلغاء عدم الإزعاج',
   CUSTOMER_MARKED_VIP: 'تمييز عميل كـ VIP', CUSTOMER_UNMARKED_VIP: 'إلغاء تمييز VIP',
+  REWARD_EARNED: 'مكافأة صفقة', REWARD_REVERSED: 'عكس مكافأة', REWARD_MOVED: 'نقل مكافأة صفقة',
 };
 const ACTIVITY_ROLE_LABELS = { team_leader: 'قائد الفريق', employee: 'موظف' };
 App.labels = { status: STATUS_LABELS, priority: PRIORITY_LABELS, activity: ACTIVITY_ACTION_LABELS, role: ACTIVITY_ROLE_LABELS };
@@ -456,6 +457,11 @@ App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leade
 App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
 App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
 App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
+
+// مكافأة صفقة — تصل للموظف صاحب الصفقة فقط (السيرفر يحدد المستلم بالبث
+// الموجَّه scope:'employee'). تنبيه احتفالي واضح بدل توست عادي — الهدف
+// تحفيز الموظف فعليًا، وليس مجرد إعلامه.
+App.on('rt:REWARD_EARNED', (p) => { pushAlert(`🎉💰 مبروك! حصلت على مكافأة ${p.amount} ج.م — رصيدك الآن ${p.balance} ج.م`, 'success'); });
 
 async function refreshNotifications() {
   if (!App.state.user) return;
