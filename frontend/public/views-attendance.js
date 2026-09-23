@@ -2,14 +2,23 @@
 (function () {
   const { el, api, fmt } = App;
 
-  // داش بورد أستاذ هاني الوحيدة والشاملة — كل حاجة بتحصل في الشركة، لكل
-  // موظف ولقادة الفريق، في صفحة واحدة بس (دمجنا فيها الحضور/الانصراف
-  // اليومي + نشاط قادة الفريق، بعد ما كانوا صفحتين منفصلتين). البيانات
-  // كلها حقيقية من قاعدة البيانات — لا شيء مُخترَع. تتحدّث تلقائيًا لحظة
-  // حصول أي حدث حقيقي (اتصال، ملاحظة، بصمة، إغلاق عميل...) عن طريق نفس
-  // اتصال الـ WebSocket المباشر المستخدم في باقي الموقع — بدون أي تحميل
-  // إضافي على قاعدة البيانات إلا لما حاجة تحصل فعلًا. مخصّصة لحساب المالك
-  // فقط، ولا يظهر رابطها في القائمة الجانبية لغير حسابه.
+  // داش بورد أستاذ هاني الوحيدة والشاملة — الصفحة الوحيدة اللي حسابه بيشوفها
+  // على الإطلاق (مفروضة عليه من renderRoute في app.js، مفيش شريط جانبي ولا
+  // أي صفحة تانية). مقسّمة لثلاثة أقسام واضحة بناءً على طلبه صراحةً:
+  //   1) "متابعة الفريق" — كل حاجة لايف عن الفريق اليوم (حضور/انصراف،
+  //      نظرة عامة، مركز التحكم المباشر).
+  //   2) "تحليلات الفريق" — تحليل تفصيلي لكل موظف على حدة (اليوم/أسبوع/شهر)
+  //      مع رسوم بيانية، ولوحة صدارة + الإنجازات.
+  //   3) "باقي الأقسام" — كل صفحات قائد الفريق المتبقية التي هي عرض بيانات
+  //      بحت (تقارير + سجل الأنشطة)، باستثناء أي صفحة إدخال بيانات أو تنفيذ
+  //      إجراء (استيراد عملاء، توزيع، إدارة الموظفين، الإعدادات، الدردشة...)
+  //      — حسابه للمشاهدة فقط، القرارات والتنفيذ شغل التيم ليدر دائمًا.
+  //
+  // الأقسام 1 و2 و3 تُبنى بإعادة استخدام صفحات قائد الفريق الجاهزة نفسها
+  // (App.getRouteHandler) بدل تكرار الكود — نفس البيانات الحقيقية، نفس
+  // التحديث اللحظي، وأي إصلاح مستقبلي لتلك الصفحات ينعكس هنا تلقائيًا.
+  // لا شيء منها يُستدعى عبر location.hash، فحساب المالك يبقى "مقفول" على
+  // هذه الصفحة الواحدة كما هو مطلوب — الاستدعاء هنا مباشر لدالة الصفحة فقط.
   App.route('/attendance-dashboard', async () => {
     const container = el('div');
     container.appendChild(
@@ -22,6 +31,37 @@
     if (!App.state.user.isOwner) {
       return el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🚫']), 'هذه الصفحة مخصّصة لحساب المالك فقط.']);
     }
+
+    const embeddedCleanups = [];
+    // يضمّن صفحة قائد فريق جاهزة كقسم فرعي هنا — بدون أي تنقّل فعلي
+    // (location.hash ثابت طول الوقت)، ويجمع دالة التنظيف الخاصة بها حتى
+    // تُستدعى مع تنظيف هذه الصفحة نفسها فتتجنّب أي تسريب مستمعين/مؤقتات.
+    async function embed(pattern) {
+      const handler = App.getRouteHandler(pattern);
+      if (!handler) return el('div', { class: 'muted' }, [`تعذّر تحميل هذا القسم (${pattern}).`]);
+      try {
+        const sub = await handler();
+        if (sub && typeof sub.cleanup === 'function') embeddedCleanups.push(sub.cleanup);
+        return sub;
+      } catch (e) {
+        console.error('attendance-dashboard: embed failed', pattern, e);
+        return el('div', { class: 'error-text' }, [`تعذّر تحميل هذا القسم (${pattern}): ${e.message || ''}`]);
+      }
+    }
+    function sectionHeading(icon, title, sub) {
+      return el('div', { class: 'mt-16 mb-8' }, [
+        el('div', { style: 'font-weight:800;font-size:18px' }, [icon + ' ' + title]),
+        sub ? el('div', { class: 'muted', style: 'font-size:12.5px' }, [sub]) : null,
+      ]);
+    }
+    function subCard(node) {
+      return el('div', { class: 'mb-16' }, [node]);
+    }
+
+    // -------------------------------------------------------------------
+    // القسم ١: متابعة الفريق
+    // -------------------------------------------------------------------
+    container.appendChild(sectionHeading('📍', 'متابعة الفريق', 'كل حاجة بتحصل في الفريق اليوم، لحظة بلحظة.'));
 
     const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
     const dateInput = el('input', { type: 'date', value: todayStr, onchange: () => load() });
@@ -189,6 +229,50 @@
       }
     }
 
+    // "لوحة التحكم" و"مركز التحكم المباشر" الجاهزتين — نفس صفحات قائد
+    // الفريق، مضمّنتين هنا كما هما (نظرة عامة + تواجد الفريق + مبيعات
+    // اليوم + قمع اليوم + يحتاج انتباه + جدول الموظفين المباشر).
+    const dashboardWrap = el('div');
+    const commandCenterWrap = el('div');
+    container.appendChild(subCard(dashboardWrap));
+    container.appendChild(subCard(commandCenterWrap));
+
+    // -------------------------------------------------------------------
+    // القسم ٢: تحليلات الفريق
+    // -------------------------------------------------------------------
+    container.appendChild(sectionHeading('📈', 'تحليلات الفريق', 'تحليل تفصيلي لكل موظف على حدة — اليوم / آخر ٧ أيام / آخر ٣٠ يوم.'));
+    const analyticsWrap = el('div');
+    const leaderboardWrap = el('div');
+    container.appendChild(subCard(analyticsWrap));
+    container.appendChild(subCard(leaderboardWrap));
+
+    // -------------------------------------------------------------------
+    // القسم ٣: باقي الأقسام (عرض فقط — بدون أي صفحة إدخال بيانات أو تنفيذ
+    // إجراء، مثل استيراد العملاء أو توزيعهم أو إدارة الموظفين أو الإعدادات)
+    // -------------------------------------------------------------------
+    container.appendChild(sectionHeading('📋', 'باقي الأقسام', 'تقارير وسجل الأنشطة — عرض فقط.'));
+    const reportsWrap = el('div');
+    const activityWrap = el('div');
+    container.appendChild(subCard(reportsWrap));
+    container.appendChild(subCard(activityWrap));
+
+    async function loadEmbeddedSections() {
+      const [dashboardEl, commandCenterEl, analyticsEl, leaderboardEl, reportsEl, activityEl] = await Promise.all([
+        embed('/dashboard'),
+        embed('/command-center'),
+        embed('/analytics'),
+        embed('/leaderboard'),
+        embed('/reports'),
+        embed('/activity'),
+      ]);
+      dashboardWrap.innerHTML = ''; if (dashboardEl) dashboardWrap.appendChild(dashboardEl);
+      commandCenterWrap.innerHTML = ''; if (commandCenterEl) commandCenterWrap.appendChild(commandCenterEl);
+      analyticsWrap.innerHTML = ''; if (analyticsEl) analyticsWrap.appendChild(analyticsEl);
+      leaderboardWrap.innerHTML = ''; if (leaderboardEl) leaderboardWrap.appendChild(leaderboardEl);
+      reportsWrap.innerHTML = ''; if (reportsEl) reportsWrap.appendChild(reportsEl);
+      activityWrap.innerHTML = ''; if (activityEl) activityWrap.appendChild(activityEl);
+    }
+
     // تحديث لحظي: أي حدث حقيقي في الشركة (اتصال، ملاحظة، بصمة، عميل جديد،
     // صفقة، متابعة...) يوصل عن طريق نفس اتصال الـ WebSocket المستخدم في كل
     // الموقع، فنعيد تحميل الجدول فورًا — بدون أي "polling" أو طلبات زيادة
@@ -203,6 +287,7 @@
 
     await load();
     await loadTeamLeaders();
+    await loadEmbeddedSections();
     const tlInterval = setInterval(loadTeamLeaders, 2 * 60 * 1000);
     const offAny = App.on('rt:*', scheduleReload);
     container.cleanup = () => {
@@ -210,6 +295,7 @@
       clearInterval(tlInterval);
       if (tickInterval) clearInterval(tickInterval);
       clearTimeout(reloadTimer);
+      embeddedCleanups.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     };
     return container;
   }, { roles: ['team_leader'] });
