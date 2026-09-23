@@ -605,11 +605,6 @@ const NAV_TL = [
   ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
-// داش بورد واحدة بس لحساب المالك — كل حاجة عن الشركة في صفحة واحدة (بعد ما
-// كانت صفحتين منفصلتين، بناءً على طلبه صراحةً).
-const NAV_TL_OWNER_EXTRA = [
-  ['attendance-dashboard', '📊', 'كل حاجة عن الشركة'],
-];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
@@ -630,6 +625,12 @@ const NAV_EMPLOYEE = [
 function renderOwnerShell() {
   const user = App.state.user;
   const connBadge = renderConnBadge();
+  const soundToggle = renderSoundToggle();
+  // Pure read-only report modal (start-of-day / end-of-shift snapshots) —
+  // no action on any data, just viewing, so it belongs here same as it did
+  // in the old sidebar's topbar. renderAdminReportsButton() already checks
+  // isOwner internally and returns the button for this account.
+  const adminReportsBtn = renderAdminReportsButton();
   const topbar = el('div', { class: 'topbar' }, [
     el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
       el('img', { src: '/logo.png', alt: 'رحمة مول', style: 'height:28px' }),
@@ -637,6 +638,8 @@ function renderOwnerShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
+      soundToggle,
+      adminReportsBtn,
       el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
@@ -648,13 +651,13 @@ function renderOwnerShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [main]);
-  return { root, content, cleanup: () => connBadge.offEvt && connBadge.offEvt() };
+  const cleanups = [connBadge.offEvt, soundToggle.offEvt].filter(Boolean);
+  return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
 function renderShell() {
   const user = App.state.user;
-  let nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
-  if (user.role === 'team_leader' && user.isOwner) nav = [...nav, ...NAV_TL_OWNER_EXTRA];
+  const nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 

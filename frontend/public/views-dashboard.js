@@ -49,6 +49,7 @@
     }
     await loadKpis();
     const offRt = App.on('rt:*', () => loadKpis());
+    let offTeamListeners = [];
 
     if (user.role === 'team_leader') {
       container.appendChild(el('div', { class: 'section-title' }, ['نظرة على الفريق']));
@@ -72,9 +73,11 @@
         });
       }
       await loadTeam();
-      App.on('rt:EMPLOYEE_AVAILABILITY_CHANGED', loadTeam);
-      App.on('rt:CUSTOMER_STATUS_CHANGED', loadTeam);
-      App.on('rt:DISTRIBUTION_COMPLETED', loadTeam);
+      offTeamListeners = [
+        App.on('rt:EMPLOYEE_AVAILABILITY_CHANGED', loadTeam),
+        App.on('rt:CUSTOMER_STATUS_CHANGED', loadTeam),
+        App.on('rt:DISTRIBUTION_COMPLETED', loadTeam),
+      ];
 
       container.appendChild(el('div', { class: 'section-title' }, ['ملاحظات تشغيلية']));
       const insightsBox = el('div', { class: 'card card-pad' });
@@ -99,7 +102,7 @@
       else fw.appendChild(renderFollowupList(today));
     }
 
-    container.cleanup = () => offRt();
+    container.cleanup = () => { offRt(); offTeamListeners.forEach((off) => off()); };
     return container;
   });
 
