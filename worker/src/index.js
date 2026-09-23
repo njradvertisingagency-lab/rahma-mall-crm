@@ -31,6 +31,7 @@ import { sweepDnd } from './lib/dnd.js';
 import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday } from './lib/workhours.js';
 import { sweepOpsReports } from './lib/opsreports.js';
 import { sweepAutoReclaim } from './lib/reclaim.js';
+import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
 export { AttendanceStore } from './durable-objects/attendance-store.js';
@@ -253,5 +254,7 @@ export default {
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
+    ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
+    ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
   },
 };
