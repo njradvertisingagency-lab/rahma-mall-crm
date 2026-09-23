@@ -195,7 +195,7 @@ export async function getAttendanceDashboard(env, { date } = {}) {
       .prepare(
         `SELECT u.id AS user_id, u.display_name, u.role, u.is_owner, e.id AS employee_id, e.name, e.name_ar
          FROM users u LEFT JOIN employees e ON e.user_id = u.id
-         WHERE u.active = 1 AND u.role IN ('team_leader', 'employee')
+         WHERE u.active = 1 AND u.role IN ('team_leader', 'employee') AND u.is_owner = 0
          ORDER BY u.role DESC, e.name COLLATE NOCASE`
       )
       .all()
