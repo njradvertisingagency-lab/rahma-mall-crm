@@ -1,8 +1,8 @@
 // Dedicated check-in/check-out attendance — visible to and usable by every
-// authenticated account (employee AND team_leader, including Mr. Hany's own
-// admin account), separate from login/logout. Only /dashboard is gated to
-// the owner account (Mr. Hany) — everyone else gets 403 there, same pattern
-// as routes/opsreports.js.
+// authenticated account EXCEPT the owner (Mr. Hany doesn't clock in for his
+// own business; the frontend hides the button for his account), separate
+// from login/logout. Only /dashboard is gated to the owner account (Mr.
+// Hany) — everyone else gets 403 there, same pattern as routes/opsreports.js.
 import { Hono } from 'hono';
 import { requireAuth } from '../lib/auth.js';
 import { jsonError } from '../lib/db.js';
