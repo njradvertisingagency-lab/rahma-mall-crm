@@ -232,6 +232,10 @@ async function api(path, opts) {
   }
   const contentType = res.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await res.json().catch(() => ({})) : await res.text();
+  if (res.status === 403 && data && data.error && data.error.code === 'OUTSIDE_WORK_HOURS') {
+    showShiftClosedScreen(data.error);
+    throw new Error(data.error.message || 'النظام مغلق حاليًا');
+  }
   if (!res.ok) {
     const message = (data && data.error && data.error.message) || 'فشل الطلب';
     throw new Error(message);
@@ -242,6 +246,29 @@ async function api(path, opts) {
   if (data && data.stale === true) notifyStaleData();
   return data;
 }
+
+// النظام مغلق تمامًا خارج مواعيد العمل لغير التيم ليدر والمالك (يوفّر استهلاك
+// قاعدة البيانات). نعرض شاشة كاملة بدل أي محتوى — لا نحاول تحميل شيء آخر —
+// ونعيد تحميل الصفحة تلقائيًا كل دقيقة حتى تُفتح مع بداية الشيفت من تلقاء نفسها.
+let shiftClosedShown = false;
+function showShiftClosedScreen(err) {
+  if (shiftClosedShown) return;
+  shiftClosedShown = true;
+  const appEl = document.getElementById('app');
+  if (!appEl) return;
+  appEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;direction:rtl;font-family:inherit;';
+  wrap.innerHTML =
+    '<div style="max-width:420px">' +
+    '<div style="font-size:48px;margin-bottom:12px">🔒</div>' +
+    '<div style="font-size:20px;font-weight:700;margin-bottom:10px">النظام مغلق حاليًا</div>' +
+    '<div style="color:var(--muted,#666);line-height:1.8;font-size:15px">' + (err.message || '') + '</div>' +
+    '</div>';
+  appEl.appendChild(wrap);
+  setInterval(() => location.reload(), 60 * 1000);
+}
+App.showShiftClosedScreen = showShiftClosedScreen;
 
 let lastStaleNoticeAt = 0;
 function notifyStaleData() {

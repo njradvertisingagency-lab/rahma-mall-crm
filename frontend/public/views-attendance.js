@@ -44,35 +44,81 @@
           box.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🌙']), 'هذا اليوم عطلة رسمية.']));
         }
 
-        const checkedIn = data.people.filter((p) => p.checkInAt).length;
-        const lateToday = data.people.filter((p) => p.isLate).length;
-        const penalties = data.people.reduce((s, p) => s + p.penaltyCountThisMonth, 0);
-        summaryGrid.appendChild(kpi('حضروا اليوم', `${checkedIn}/${data.people.length}`, 'brand'));
-        summaryGrid.appendChild(kpi('متأخرون اليوم', lateToday, lateToday > 0 ? 'danger' : 'success'));
-        summaryGrid.appendChild(kpi('مخالفات هذا الشهر', penalties, penalties > 0 ? 'warning' : 'success'));
+        const t = data.team || {};
+        summaryGrid.appendChild(kpi('حضروا اليوم', `${t.checkedIn ?? 0}/${t.headcount ?? 0}`, 'brand'));
+        summaryGrid.appendChild(kpi('متأخرون اليوم', t.lateToday ?? 0, (t.lateToday || 0) > 0 ? 'danger' : 'success'));
+        summaryGrid.appendChild(kpi('لم يحضروا', t.absent ?? 0, (t.absent || 0) > 0 ? 'danger' : 'success'));
+        summaryGrid.appendChild(kpi('تواصل اليوم (مكالمات + واتساب)', (t.callsToday || 0) + (t.whatsappToday || 0), 'brand'));
+        summaryGrid.appendChild(kpi('عملاء تم إغلاقهم اليوم', t.closedToday ?? 0, (t.closedToday || 0) > 0 ? 'success' : 'warning'));
+        summaryGrid.appendChild(kpi('متابعات تمت اليوم', t.followupsDoneToday ?? 0, 'brand'));
+        summaryGrid.appendChild(kpi('⚠️ عملاء محتاجة ملاحظة', t.needsNoteTotal ?? 0, (t.needsNoteTotal || 0) > 0 ? 'danger' : 'success'));
+        summaryGrid.appendChild(kpi('⚠️ متابعات متأخرة', t.followupsOverdue ?? 0, (t.followupsOverdue || 0) > 0 ? 'danger' : 'success'));
+
+        if (t.topPerformer) {
+          box.appendChild(el('div', { class: 'card mb-16', style: 'padding:12px 16px' }, [
+            el('span', {}, ['🏆 الأعلى أداءً اليوم: ']),
+            el('strong', {}, [t.topPerformer]),
+          ]));
+        }
+
+        const workers = data.people.filter((p) => p.employeeId != null).sort((a, b) => (a.rank || 99) - (b.rank || 99));
+        const others = data.people.filter((p) => p.employeeId == null);
+
+        function cell(v, warnIf) {
+          const n = Number(v) || 0;
+          if (warnIf && n > 0) return el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, [String(n)]);
+          return String(n);
+        }
+
+        function personRow(p, showRank) {
+          return el('tr', p.needsNoteCount > 0 || p.followupsOverdue > 0 ? { class: 'row-needs-note' } : {}, [
+            el('td', {}, [showRank && p.rank ? `#${p.rank}` : '—']),
+            el('td', { style: 'font-weight:700' }, [p.isOwner ? '👑 ' : '', p.name]),
+            el('td', {}, [
+              !p.checkInAt
+                ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, ['لم يحضر'])
+                : p.isLate
+                ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, [`متأخر ${p.lateMinutes} د`])
+                : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد']),
+            ]),
+            el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
+            el('td', {}, [p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—')]),
+            el('td', {}, [p.checkInAt ? fmt.duration(p.hoursWorkedSeconds) : '—']),
+            el('td', {}, [cell(p.seenToday)]),
+            el('td', {}, [cell(p.callsToday)]),
+            el('td', {}, [cell(p.whatsappToday)]),
+            el('td', {}, [cell(p.notesToday)]),
+            el('td', {}, [cell(p.followupsDoneToday)]),
+            el('td', {}, [cell(p.closedToday)]),
+            el('td', {}, [cell(p.needsNoteCount, true)]),
+            el('td', {}, [cell(p.followupsOverdue, true)]),
+            el('td', {}, [cell(p.assignedTotal)]),
+            el('td', { style: 'font-weight:700' }, [String(p.activityScore ?? 0)]),
+            el('td', {}, [cell(p.lateCountThisMonth)]),
+            el('td', {}, [cell(p.penaltyCountThisMonth, true)]),
+          ]);
+        }
+
+        const headers = [
+          'الترتيب', 'الاسم', 'الحالة', 'الحضور', 'الانصراف', 'ساعات العمل',
+          'عملاء فتحهم', 'مكالمات', 'واتساب', 'ملاحظات', 'متابعات تمت', 'إغلاق',
+          '⚠️ محتاج ملاحظة', '⚠️ متابعات متأخرة', 'إجمالي عملائه', 'التقييم',
+          'تأخيرات الشهر', 'مخالفات الشهر',
+        ];
 
         box.appendChild(el('div', { class: 'table-wrap' }, [
           el('table', { class: 'data-table' }, [
-            el('thead', {}, [el('tr', {}, ['الاسم', 'الدور', 'الحضور', 'الانصراف', 'ساعات العمل', 'الحالة', 'مكالمات اليوم', 'مغلق اليوم', 'تأخيرات الشهر', 'مخالفات الشهر'].map((h) => el('th', {}, [h])))]),
-            el('tbody', {}, data.people.map((p) => el('tr', {}, [
-              el('td', { style: 'font-weight:700' }, [p.isOwner ? '👑 ' : '', p.name]),
-              el('td', {}, [p.role === 'team_leader' ? 'قائد الفريق' : 'موظف']),
-              el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
-              el('td', {}, [p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—')]),
-              el('td', {}, [p.checkInAt ? fmt.duration(p.hoursWorkedSeconds) : '—']),
-              el('td', {}, [
-                !p.checkInAt
-                  ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, ['لم يحضر'])
-                  : p.isLate
-                  ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning)' }, [`متأخر ${p.lateMinutes} د`])
-                  : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد']),
-              ]),
-              el('td', {}, [String(p.callsToday)]),
-              el('td', {}, [String(p.closedToday)]),
-              el('td', {}, [String(p.lateCountThisMonth)]),
-              el('td', {}, [p.penaltyCountThisMonth > 0 ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, [String(p.penaltyCountThisMonth)]) : '0']),
-            ]))),
+            el('thead', {}, [el('tr', {}, headers.map((h) => el('th', {}, [h])))]),
+            el('tbody', {}, [
+              ...workers.map((p) => personRow(p, true)),
+              ...others.map((p) => personRow(p, false)),
+            ]),
           ]),
+        ]));
+
+        box.appendChild(el('div', { class: 'muted mt-12', style: 'font-size:12px;line-height:1.9' }, [
+          'التقييم = (مكالمات + واتساب + ملاحظات) + (إغلاق×3 + متابعات تمت×2) − (محتاج ملاحظة + متابعات متأخرة)×2 − تأخير اليوم×2. ',
+          'رقم إرشادي للمقارنة بين الموظفين في نفس اليوم فقط — وليس أساسًا للخصم.',
         ]));
       } catch (e) {
         box.innerHTML = '';
