@@ -1048,7 +1048,7 @@ async function openAttendanceModal() {
       body.appendChild(el('div', { class: 'mb-12' }, [
         el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['وقت الحضور']), el('span', { style: 'font-weight:700' }, [a.checkedInAt ? fmtDateTime(a.checkedInAt) : '— لم يُسجَّل بعد —'])]),
         el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['وقت الانصراف']), el('span', { style: 'font-weight:700' }, [a.checkedOutAt ? fmtDateTime(a.checkedOutAt) : '—'])]),
-        a.checkedInAt ? el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['حالة الحضور']), a.isLate ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, [`متأخر ${a.lateMinutes} د`]) : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد'])]) : null,
+        a.checkedInAt ? el('div', { class: 'flex-between mb-8' }, [el('span', {}, ['حالة الحضور']), a.isLate ? el('span', { class: 'badge', style: 'background:var(--danger-soft);color:var(--danger)' }, [`متأخر ${fmtDuration(a.lateMinutes * 60)}`]) : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد'])]) : null,
         el('div', { class: 'flex-between' }, [el('span', {}, ['تأخيرات هذا الشهر']), el('span', { style: 'font-weight:700' }, [`${a.lateCountThisMonth} (متبقّي ${a.remainingLateAllowance})`])]),
       ]));
 
