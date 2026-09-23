@@ -31,6 +31,15 @@ const STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTE
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 const CLOSED_REASONS = ['Purchased', 'Not Interested', 'Wrong Number', 'Already Purchased', 'Price', 'Unavailable Product', 'Other'];
 
+// Arabic labels for lib/phone.js's normalizeEgyptPhone() `reason` codes — used
+// to build a readable 400 error message when a new customer's phone fails
+// validation (see POST '/' below).
+const PHONE_REASON_LABELS = {
+  EMPTY: 'الحقل فارغ',
+  INVALID_LENGTH: 'عدد الأرقام غير صحيح',
+  INVALID_PREFIX: 'بادئة الرقم غير معروفة',
+};
+
 function customerRowToJson(row) {
   return {
     id: row.id,
@@ -244,7 +253,19 @@ customerRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   const row = await db
     .prepare(
-      `SELECT c.*, e.name AS employee_name, wu.display_name AS whatsapp_contacted_by_name
+      // needs_note مطابقة تمامًا لنفس حساب قائمة العملاء (أعلى) — مطلوبة هنا
+      // أيضًا لأن صفحة التفاصيل هي التي تفرض الملاحظة الإلزامية قبل مغادرة
+      // الموظف للعميل (App.setNoteGuard في app.js).
+      `SELECT c.*, e.name AS employee_name, wu.display_name AS whatsapp_contacted_by_name,
+              EXISTS (
+                SELECT 1 FROM customer_seen cs
+                WHERE cs.customer_id = c.id
+                  AND cs.employee_id = c.assigned_employee_id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM customer_notes n
+                    WHERE n.customer_id = c.id AND n.created_at >= cs.seen_at
+                  )
+              ) AS needs_note
        FROM customers c
        LEFT JOIN employees e ON e.id = c.assigned_employee_id
        LEFT JOIN users wu ON wu.id = c.whatsapp_contacted_by
@@ -261,8 +282,24 @@ customerRoutes.get('/:id', async (c) => {
   // detail page by the employee it is currently assigned to. A list load
   // never counts. Team Leader views never mark it seen (they have no
   // employee_id / seen is an employee-engagement signal, not a TL one).
+  let needsNoteOverride;
   if (user.role === 'employee' && row.assigned_employee_id === user.employeeId) {
     await recordSeenIfNeeded(db, c.env, { customerId: id, employeeId: user.employeeId });
+    // row.needs_note above was computed BEFORE this seen record existed —
+    // recheck now so the very first open of a customer correctly requires a
+    // note immediately (the mandatory-note popup on the frontend depends on
+    // this being accurate on the very first load, not just after a refresh).
+    const nn = await db
+      .prepare(
+        `SELECT EXISTS (
+           SELECT 1 FROM customer_seen cs
+           WHERE cs.customer_id = ? AND cs.employee_id = ?
+             AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = ? AND n.created_at >= cs.seen_at)
+         ) AS needs_note`
+      )
+      .bind(id, user.employeeId, id)
+      .first();
+    needsNoteOverride = !!nn.needs_note;
   }
 
   const [notes, followups, statusHistory, assignments, callAttempts, branchVisits, purchases, products, seenHistory, sla, leadScore] = await Promise.all([
@@ -294,7 +331,15 @@ customerRoutes.get('/:id', async (c) => {
   const [dealStatus, lifetimeValue] = await Promise.all([computeDealStatus(db, id), getCustomerLifetimeValue(db, id)]);
 
   return c.json({
-    customer: { ...customerRowToJson(row), whatsappContactedByName: row.whatsapp_contacted_by_name || null, dealStatus, leadScore: leadScore.score, leadScoreReasons: leadScore.reasons, sla },
+    customer: {
+      ...customerRowToJson(row),
+      needsNote: needsNoteOverride !== undefined ? needsNoteOverride : !!row.needs_note,
+      whatsappContactedByName: row.whatsapp_contacted_by_name || null,
+      dealStatus,
+      leadScore: leadScore.score,
+      leadScoreReasons: leadScore.reasons,
+      sla,
+    },
     notes: notes.results,
     followups: followups.results,
     statusHistory: statusHistory.results,
@@ -567,7 +612,24 @@ customerRoutes.patch('/:id/status', async (c) => {
     await broadcast(c.env, 'CUSTOMER_CLOSED', { id, closedReason }, { scope: 'role', role: 'team_leader' });
   }
 
-  return c.json({ ok: true, status: toStatus });
+  // "لا يوجد رد" — بدل ما الموظف يفتكر يرجع يكلم العميل بنفسه، النظام يجدول
+  // إعادة اتصال تلقائية بعد ١٥ دقيقة (مطلب أستاذ هاني). مكتوبة هنا مباشرة —
+  // وليس عبر POST /followups العام — لأن ذلك المسار يرقّي الحالة تلقائيًا
+  // لـ"متابعة" وهو بالضبط ما لا نريده هنا (الحالة يجب أن تبقى "لا يوجد رد").
+  let autoFollowup = null;
+  if (toStatus === 'NO_ANSWER') {
+    const scheduledFor = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const res = await db
+      .prepare(`INSERT INTO followups (customer_id, employee_id, scheduled_for, reason, notes, created_by) VALUES (?, ?, ?, ?, NULL, ?) RETURNING id, created_at`)
+      .bind(id, existing.assigned_employee_id, scheduledFor, 'إعادة اتصال تلقائية — لا يوجد رد', user.id)
+      .first();
+    await db.prepare(`UPDATE customers SET next_follow_up_at = ? WHERE id = ?`).bind(scheduledFor, id).run();
+    await logActivity(db, { actor: user, action: 'FOLLOWUP_CREATED', entityType: 'customer', entityId: id, metadata: { followupId: res.id, scheduledFor, auto: true } });
+    await broadcast(c.env, 'FOLLOWUP_CREATED', { customerId: id, followupId: res.id, scheduledFor }, { scope: 'role', role: 'team_leader' });
+    autoFollowup = { id: res.id, scheduledFor };
+  }
+
+  return c.json({ ok: true, status: toStatus, autoFollowup });
 });
 
 customerRoutes.post('/:id/reopen', requireRole('team_leader'), async (c) => {

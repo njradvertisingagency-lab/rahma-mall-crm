@@ -96,22 +96,34 @@ salesRoutes.post('/customers/:id/branch-visits', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// DEAL DONE / PURCHASES — Team Leader only (spec: the Deal Done button is
-// shown only to users with permission to record a purchase; in this system
-// that permission belongs to the Team Leader role).
+// DEAL DONE / PURCHASES — أي موظف يقدر يسجّل "تمت الصفقة" لعميله هو (بطلب
+// أستاذ هاني: زر مباشر في حالة العميل، مش قاصر على قائد الفريق بعد النهاردة).
+// قائد الفريق يقدر يسجّلها لأي عميل ويغيّر النسب بحرية. الموظف مقيّد بعميله
+// فقط، ودائمًا منسوبة له هو تلقائيًا — لا يقدر ينسبها لموظف تاني عن طريق
+// الجسم المُرسَل (تحصين ضد انتحال مكافأة زميل).
 // ---------------------------------------------------------------------------
-salesRoutes.post('/customers/:id/purchases', requireRole('team_leader'), async (c) => {
+salesRoutes.post('/customers/:id/purchases', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = c.req.param('id');
   const body = await c.req.json().catch(() => ({}));
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!customer) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
+  if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
+  }
   if (!body.branchId) return jsonError(c, 400, 'الفرع مطلوب', 'MISSING_BRANCH');
   if (!Array.isArray(body.items) || body.items.length === 0) return jsonError(c, 400, 'مطلوب صنف واحد على الأقل', 'NO_ITEMS');
   for (const it of body.items) {
     if (!it.productName || !String(it.productName).trim()) return jsonError(c, 400, 'كل صنف يحتاج اسم منتج', 'MISSING_PRODUCT_NAME');
   }
+
+  const attributedEmployeeId =
+    user.role === 'employee'
+      ? user.employeeId
+      : body.attributedEmployeeId !== undefined
+      ? (body.attributedEmployeeId === null ? null : Number(body.attributedEmployeeId))
+      : customer.assigned_employee_id;
 
   try {
     const purchase = await createManualPurchase(db, c.env, {
@@ -123,7 +135,7 @@ salesRoutes.post('/customers/:id/purchases', requireRole('team_leader'), async (
       items: body.items,
       paymentMethod: body.paymentMethod || 'CASH',
       notes: body.notes,
-      attributedEmployeeId: body.attributedEmployeeId !== undefined ? (body.attributedEmployeeId === null ? null : Number(body.attributedEmployeeId)) : customer.assigned_employee_id,
+      attributedEmployeeId,
       createdBy: user.id,
     });
     return c.json({ purchase }, 201);
