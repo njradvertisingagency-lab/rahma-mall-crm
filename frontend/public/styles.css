@@ -162,6 +162,14 @@ button { font-family: inherit; }
 .dot.pulse { animation: pulse 1.4s infinite; }
 @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
 
+/* زر البصمة يضيء بحلقة حمراء متموّجة لو الموظف نسي يسجّل حضوره — عشان
+   يكون ملفتًا للنظر بدل ما يفضل لون أحمر ثابت ممكن محدّش يلاحظه. */
+.attendance-forgot-glow { animation: attendance-glow 1.4s ease-in-out infinite; }
+@keyframes attendance-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--danger-soft); }
+  50% { box-shadow: 0 0 0 7px var(--danger-soft); }
+}
+
 .content { padding: 22px; flex: 1; }
 .page-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .page-title { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
