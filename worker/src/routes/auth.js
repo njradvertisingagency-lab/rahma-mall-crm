@@ -4,6 +4,7 @@ import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from
 import { logActivity, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { recordLogin, recordLogout } from '../lib/presence.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
+import { getShiftGate } from '../lib/workhours.js';
 
 export const authRoutes = new Hono();
 
@@ -28,6 +29,16 @@ const EMPLOYEES_PUBLIC_CACHE_KEY = 'cache:employees_public';
 const EMPLOYEES_PUBLIC_CACHE_TTL_MS = 60 * 1000;
 
 authRoutes.get('/employees-public', async (c) => {
+  // Outside the shift, employee accounts are blocked from doing anything
+  // anyway (requireAuth's OUTSIDE_WORK_HOURS gate) — so there is no reason
+  // to even show their names on the login picker, and every reason not to:
+  // it makes the closure visible before anyone wastes a password attempt,
+  // and it skips D1/cache entirely (checked before any of that below).
+  const gate = getShiftGate({ wide: false });
+  if (!gate.open) {
+    return c.json({ employees: [], closed: true, shiftText: gate.shiftText, opensInText: gate.opensInText, isOffDay: !!gate.isOffDay });
+  }
+
   const cached = await sessGet(c.env, EMPLOYEES_PUBLIC_CACHE_KEY).catch(() => null);
   if (cached && Date.now() - cached.cachedAt < EMPLOYEES_PUBLIC_CACHE_TTL_MS) {
     return c.json({ employees: cached.employees });
