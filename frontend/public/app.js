@@ -478,13 +478,24 @@ App.refreshChatUnread = refreshChatUnread;
 // الموجّه (Router)
 // ---------------------------------------------------------------------------
 const ROUTES = [];
+// خريطة مساعِدة (patttern -> handler) — تتيح لصفحة استدعاء صفحة أخرى مباشرة
+// وتضمين نتيجتها كقسم فرعي، بدل تكرار نفس الكود. صفحة داش بورد المالك
+// الوحيدة تستخدمها لتضمين محتوى "لوحة التحكم" و"مركز التحكم" و"التحليلات"
+// و"لوحة الصدارة" و"التقارير" و"سجل الأنشطة" كأقسام داخل صفحته — بدون أي
+// تنقّل فعلي (location.hash لا يتغيّر)، فلا تأثير على التوجيه العادي لباقي
+// الحسابات ولا خطر حلقة إعادة توجيه.
+const ROUTE_HANDLERS = {};
+App.getRouteHandler = (pattern) => ROUTE_HANDLERS[pattern];
 // المعامل الثالث الاختياري: { roles: ['team_leader'] } يقصر الصفحة على هذه الأدوار.
 // هذا حماية إضافية من جهة الواجهة فقط — كل نقطة تعديل (وأغلب نقاط القراءة)
 // محمية أيضًا من جهة السيرفر بغض النظر عمّا تعرضه الواجهة. لكن بدون هذا الفحص
 // هنا، موظف يُعدّل الرابط يدويًا (مثلاً إلى #/distribute) سيظل يبني الصفحة
 // بالكامل وتُنفَّذ استدعاءات تحميل بياناتها (وبعضها غير محمي في القراءة أصلاً)
 // فيرى بيانات لا يجب أن يراها حتى لو فشل الإجراء الفعلي لاحقًا من السيرفر.
-App.route = (pattern, handler, opts) => ROUTES.push({ pattern, handler, roles: opts && opts.roles });
+App.route = (pattern, handler, opts) => {
+  ROUTES.push({ pattern, handler, roles: opts && opts.roles });
+  ROUTE_HANDLERS[pattern] = handler;
+};
 
 function matchRoute(hash) {
   const path = (hash.replace(/^#/, '') || '/dashboard').split('?')[0] || '/dashboard';
@@ -631,10 +642,14 @@ function renderOwnerShell() {
   // in the old sidebar's topbar. renderAdminReportsButton() already checks
   // isOwner internally and returns the button for this account.
   const adminReportsBtn = renderAdminReportsButton();
-  const topbar = el('div', { class: 'topbar' }, [
+  // مظهر مميز لحساب المالك — شريط علوي بتدرّج ذهبي وشارة "المالك"، حتى
+  // يكون واضحًا من أول لحظة إن هذا الحساب مختلف عن أي حساب موظف أو حتى
+  // قائد الفريق العادي (بناءً على طلبه صراحةً).
+  const topbar = el('div', { class: 'topbar', style: 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' }, [
     el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
       el('img', { src: '/logo.png', alt: 'رحمة مول', style: 'height:28px' }),
       el('div', { style: 'font-weight:800' }, ['رحمة مول']),
+      el('span', { class: 'badge', style: 'background:#d4a017;color:#fff;font-weight:800' }, ['👑 حساب المالك']),
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
@@ -650,7 +665,7 @@ function renderOwnerShell() {
   ]);
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
-  const root = el('div', { class: 'shell' }, [main]);
+  const root = el('div', { class: 'shell owner-shell' }, [main]);
   const cleanups = [connBadge.offEvt, soundToggle.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
