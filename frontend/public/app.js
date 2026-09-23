@@ -540,10 +540,18 @@ async function renderRoute() {
     location.hash = '#/dashboard';
     return;
   }
+  // حساب المالك (استاذ هاني) مالوش قائمة جانبية ولا صفحات تانية أصلاً —
+  // بيدخل على داش بورد واحدة كبيرة بس (زي الـ landing page) يتفرّج فيها على
+  // الفريق كله لايف، بدون أي إجراء يتخذه هو نفسه — القرارات والإجراءات
+  // شغل التيم ليدر. أي رابط تاني يتحول تلقائيًا لنفس الداش بورد.
+  if (App.state.user.isOwner && location.hash !== '#/attendance-dashboard') {
+    location.hash = '#/attendance-dashboard';
+    return;
+  }
   const match = matchRoute(location.hash);
   teardownPreviousRender();
   root.innerHTML = '';
-  const shell = renderShell();
+  const shell = App.state.user.isOwner ? renderOwnerShell() : renderShell();
   currentShellCleanup = shell.cleanup || null;
   root.appendChild(shell.root);
   const content = shell.content;
@@ -614,6 +622,34 @@ const NAV_EMPLOYEE = [
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
+
+// شاشة أستاذ هاني كاملة: مفيش شريط جانبي ولا أي زر ينقّل لصفحة تانية —
+// بس شعار الموقع، شارة الاتصال المباشر، وزرار تسجيل الخروج. القصد إنه
+// يفتح الموقع فيلاقي نفسه على الداش بورد على طول، من غير ما يقدر يعمل
+// أي حاجة تانية أو يضغط غلط على أي إجراء.
+function renderOwnerShell() {
+  const user = App.state.user;
+  const connBadge = renderConnBadge();
+  const topbar = el('div', { class: 'topbar' }, [
+    el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
+      el('img', { src: '/logo.png', alt: 'رحمة مول', style: 'height:28px' }),
+      el('div', { style: 'font-weight:800' }, ['رحمة مول']),
+    ]),
+    el('div', { class: 'topbar-actions' }, [
+      connBadge,
+      el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
+      el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
+        App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
+        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName])]),
+        el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
+      ]),
+    ]),
+  ]);
+  const content = el('div', { class: 'content' });
+  const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
+  const root = el('div', { class: 'shell' }, [main]);
+  return { root, content, cleanup: () => connBadge.offEvt && connBadge.offEvt() };
+}
 
 function renderShell() {
   const user = App.state.user;
