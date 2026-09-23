@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { requireAuth } from '../lib/auth.js';
 import { jsonError } from '../lib/db.js';
 import { getMyAttendanceStatus, recordCheckIn, recordCheckOut, getAttendanceDashboard } from '../lib/attendance.js';
+import { asList, asDelete } from '../lib/attendanceStore.js';
 
 export const attendanceRoutes = new Hono();
 attendanceRoutes.use('*', requireAuth);
@@ -45,4 +46,19 @@ attendanceRoutes.get('/dashboard', async (c) => {
   const date = c.req.query('date') || null;
   const dashboard = await getAttendanceDashboard(c.env, { date });
   return c.json(dashboard);
+});
+
+// ---------------------------------------------------------------------------
+// أداة صيانة لمرة واحدة (طلب أ/ هاني): مسح كل أرقام الحضور/الانصراف/التأخير/
+// العقوبات القديمة بالكامل لكل الموظفين، لأن الفترة اللي فاتت كانت تجربة
+// للنظام ولسه الموظفين ميعرفوش يستخدموه صح. بعد التنفيذ، يُفضّل حذف هذا
+// الراوت مرة أخرى (استخدام لمرة واحدة فقط) — لا يُستدعى من أي واجهة.
+// ---------------------------------------------------------------------------
+attendanceRoutes.post('/admin-wipe-all', async (c) => {
+  const user = c.get('user');
+  if (!user.isOwner) return jsonError(c, 403, 'هذه العملية مخصّصة لحساب المالك فقط', 'FORBIDDEN_OWNER_ONLY');
+  const [attEntries, penEntries] = await Promise.all([asList(c.env, 'att:'), asList(c.env, 'pen:')]);
+  for (const { key } of attEntries) await asDelete(c.env, key);
+  for (const { key } of penEntries) await asDelete(c.env, key);
+  return c.json({ ok: true, deletedAttendance: attEntries.length, deletedPenalties: penEntries.length });
 });
