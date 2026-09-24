@@ -252,20 +252,17 @@
     // الموقع، فنعيد تحميل الجدول فورًا — بدون أي "polling" أو طلبات زيادة
     // لما محدّش شغال. الـ debounce بسيط عشان لو حصلت أحداث كتير مع بعض
     // (استيراد عملاء مثلًا) نحمّل مرة واحدة مش عشرات المرات.
-    let reloadTimer = null;
     function scheduleReload() {
       if (dateInput.value !== todayStr) return; // العرض على يوم فات ميتغيرش لوحده
-      clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(load, 400);
+      load();
     }
 
     await load();
     await loadEmbeddedSections();
-    const offAny = App.on('rt:*', scheduleReload);
+    const offAny = App.onRealtime(scheduleReload, 8000);
     container.cleanup = () => {
       offAny && offAny();
       if (tickInterval) clearInterval(tickInterval);
-      clearTimeout(reloadTimer);
       embeddedCleanups.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
     };
     return container;

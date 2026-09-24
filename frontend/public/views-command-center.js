@@ -178,11 +178,7 @@
     }
 
     await load();
-    let reloadTimer = null;
-    const off = App.on('rt:*', () => {
-      clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(load, 600);
-    });
+    const off = App.onRealtime(() => load(), 5000);
     container.cleanup = () => { off(); clearTimeout(reloadTimer); };
     return container;
   }, { roles: ['team_leader'] });

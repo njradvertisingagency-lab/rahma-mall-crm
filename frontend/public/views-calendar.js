@@ -103,7 +103,7 @@
 
     await loadFollowups();
     render();
-    const off = App.on('rt:*', async () => { await loadFollowups(); render(); });
+    const off = App.onRealtime(async () => { await loadFollowups(); render(); }, 8000);
     container.cleanup = () => off();
     return container;
   });

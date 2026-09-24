@@ -309,7 +309,7 @@
       ]));
     }
     await load();
-    const off = App.on('rt:*', load);
+    const off = App.onRealtime(load, 5000);
     container.cleanup = () => off();
     return container;
   });
@@ -332,7 +332,7 @@
       }, [el('div', {}, [el('div', { style: 'font-weight:700' }, [n.title]), el('div', { class: 'muted', style: 'font-size:13px' }, [n.message]), el('div', { class: 'faint' }, [fmt.ago(n.created_at)])])]))));
     }
     await load();
-    const off = App.on('rt:*', load);
+    const off = App.onRealtime(load, 5000);
     container.cleanup = () => off();
     return container;
   });

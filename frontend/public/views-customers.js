@@ -341,7 +341,7 @@
     }
 
     await load();
-    const off = App.on('rt:*', () => load());
+    const off = App.onRealtime(() => load(), 5000);
     container.cleanup = () => off();
     return container;
   }
@@ -384,7 +384,7 @@
       ]));
     }
     await load();
-    const off = App.on('rt:*', load);
+    const off = App.onRealtime(load, 6000);
     container.cleanup = () => off();
     return container;
   });

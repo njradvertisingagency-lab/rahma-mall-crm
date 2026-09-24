@@ -15,7 +15,7 @@
     const header = el('div', { class: 'page-header' }, [
       el('div', {}, [
         el('div', { class: 'page-title' }, [user.role === 'team_leader' ? 'لوحة تحكم الفريق' : `أهلاً بك، ${user.displayName}`]),
-        el('div', { class: 'muted' }, [new Date().toLocaleDateString('ar-EG-u-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })]),
+        el('div', { class: 'muted' }, [new Date().toLocaleDateString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })]),
       ]),
     ]);
     container.appendChild(header);
@@ -48,7 +48,7 @@
       items.forEach(([label, value, accent, link]) => kpiGrid.appendChild(kpi(label, value, accent, link ? () => App.navigate(link) : null)));
     }
     await loadKpis();
-    const offRt = App.on('rt:*', () => loadKpis());
+    const offRt = App.onRealtime(() => loadKpis(), 5000);
     let offTeamListeners = [];
 
     if (user.role === 'team_leader') {

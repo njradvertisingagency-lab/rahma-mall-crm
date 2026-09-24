@@ -759,7 +759,7 @@
     }
 
     render();
-    const off = App.on('rt:*', async (evt) => { await load(); render(); });
+    const off = App.onRealtime(async () => { await load(); render(); }, 4000);
     container.cleanup = () => { off(); App.clearNoteGuard(); };
     return container;
   });

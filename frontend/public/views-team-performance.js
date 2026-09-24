@@ -138,19 +138,16 @@
       }
     }
 
-    let reloadTimer = null;
     function scheduleReload() {
       if (dateInput.value !== todayStr) return;
-      clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(load, 400);
+      load();
     }
 
     await load();
-    const offAny = App.on('rt:*', scheduleReload);
+    const offAny = App.onRealtime(scheduleReload, 8000);
     container.cleanup = () => {
       offAny && offAny();
       if (tickInterval) clearInterval(tickInterval);
-      clearTimeout(reloadTimer);
     };
     return container;
   }, { roles: ['team_leader'] });

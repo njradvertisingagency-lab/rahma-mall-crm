@@ -64,7 +64,7 @@
     }
 
     await load();
-    const off = App.on('rt:*', load);
+    const off = App.onRealtime(load, 5000);
     container.cleanup = () => off();
     return container;
   }, { roles: ['team_leader'] });

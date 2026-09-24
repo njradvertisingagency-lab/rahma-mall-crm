@@ -84,7 +84,7 @@
     }
 
     await load();
-    const off = App.on('rt:*', () => load());
+    const off = App.onRealtime(() => load(), 3000);
     container.cleanup = () => off();
     return container;
   });
