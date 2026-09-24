@@ -180,6 +180,78 @@
     return box;
   }
 
+  const EMPLOYMENT_STATUS_LABELS = { ACTIVE: 'نشط', ON_LEAVE: 'في إجازة', TERMINATED: 'منتهي الخدمة' };
+  function hrProfileModal(e, onDone) {
+    const body = el('div', {}, [el('div', { class: 'muted', style: 'text-align:center;padding:20px' }, ['جارِ التحميل…'])]);
+    const dlg = modal(`📋 ملف HR — ${e.name}`, body, []);
+    api('/employees/' + e.id + '/hr-profile').then(({ profile: p }) => {
+      const nationalId = el('input', { value: p.nationalId || '' });
+      const phone = el('input', { value: p.phone || '' });
+      const address = el('input', { value: p.address || '' });
+      const emergencyName = el('input', { value: p.emergencyContactName || '' });
+      const emergencyPhone = el('input', { value: p.emergencyContactPhone || '' });
+      const jobTitle = el('input', { value: p.jobTitle || '' });
+      const department = el('input', { value: p.department || '' });
+      const hireDate = el('input', { type: 'date', value: p.hireDate || '' });
+      const status = el('select', {}, EMPLOYMENT_STATUSES_ORDER.map((s) => el('option', { value: s, selected: s === p.employmentStatus || undefined }, [EMPLOYMENT_STATUS_LABELS[s]])));
+      const terminationDate = el('input', { type: 'date', value: p.terminationDate || '' });
+      const terminationReason = el('input', { value: p.terminationReason || '' });
+      const terminationWrap = el('div', { style: p.employmentStatus === 'TERMINATED' ? '' : 'display:none' }, [
+        el('div', { class: 'field' }, [el('label', {}, ['تاريخ انتهاء الخدمة']), terminationDate]),
+        el('div', { class: 'field' }, [el('label', {}, ['سبب انتهاء الخدمة']), terminationReason]),
+      ]);
+      status.addEventListener('change', () => { terminationWrap.style.display = status.value === 'TERMINATED' ? '' : 'none'; });
+      const notes = el('textarea', { rows: 3 }, [p.notes || '']);
+
+      body.innerHTML = '';
+      body.appendChild(el('div', {}, [
+        el('div', { class: 'field' }, [el('label', {}, ['الرقم القومي']), nationalId]),
+        el('div', { class: 'field' }, [el('label', {}, ['رقم الهاتف']), phone]),
+        el('div', { class: 'field' }, [el('label', {}, ['العنوان']), address]),
+        el('div', { class: 'field' }, [el('label', {}, ['جهة اتصال الطوارئ — الاسم']), emergencyName]),
+        el('div', { class: 'field' }, [el('label', {}, ['جهة اتصال الطوارئ — الهاتف']), emergencyPhone]),
+        el('div', { class: 'field' }, [el('label', {}, ['المسمى الوظيفي']), jobTitle]),
+        el('div', { class: 'field' }, [el('label', {}, ['القسم']), department]),
+        el('div', { class: 'field' }, [el('label', {}, ['تاريخ التعيين']), hireDate]),
+        el('div', { class: 'field' }, [el('label', {}, ['حالة التوظيف']), status]),
+        terminationWrap,
+        el('div', { class: 'field' }, [el('label', {}, ['ملاحظات']), notes]),
+        p.updatedAt ? el('div', { class: 'faint mt-8' }, ['آخر تحديث: ' + fmt.dateTime(p.updatedAt)]) : null,
+      ]));
+      dlg.el.querySelector('.modal-footer').append(
+        el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+        el('button', { class: 'btn btn-primary', onclick: async () => {
+          try {
+            await api('/employees/' + e.id + '/hr-profile', {
+              method: 'PUT',
+              body: {
+                nationalId: nationalId.value.trim(),
+                phone: phone.value.trim(),
+                address: address.value.trim(),
+                emergencyContactName: emergencyName.value.trim(),
+                emergencyContactPhone: emergencyPhone.value.trim(),
+                jobTitle: jobTitle.value.trim(),
+                department: department.value.trim(),
+                hireDate: hireDate.value,
+                employmentStatus: status.value,
+                terminationDate: terminationDate.value,
+                terminationReason: terminationReason.value.trim(),
+                notes: notes.value.trim(),
+              },
+            });
+            toast('تم حفظ ملف HR', 'success');
+            dlg.close();
+            if (onDone) onDone();
+          } catch (err) { toast(err.message, 'error'); }
+        } }, ['حفظ'])
+      );
+    }).catch((err) => {
+      body.innerHTML = '';
+      body.appendChild(el('div', { class: 'error-text' }, [err.message || 'تعذّر تحميل ملف HR']));
+    });
+  }
+  const EMPLOYMENT_STATUSES_ORDER = ['ACTIVE', 'ON_LEAVE', 'TERMINATED'];
+
   App.route('/employees', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
@@ -246,6 +318,7 @@
           el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
             ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'].map((a) => el('option', { value: a, selected: a === e.availability || undefined }, [AVAILABILITY_LABELS[a]]))),
         ]));
+        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => hrProfileModal(e, load) }, ['📋 ملف HR']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => setDailyGoalModal(e) }, ['🎯 تحديد هدف يومي']));
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
           const dataUrl = await App.pickAvatarImage();
