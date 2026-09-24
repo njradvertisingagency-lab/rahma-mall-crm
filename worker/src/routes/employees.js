@@ -437,3 +437,104 @@ employeeRoutes.delete('/:id/avatar', async (c) => {
   await logActivity(db, { actor: user, action: 'EMPLOYEE_AVATAR_REMOVED', entityType: 'employee', entityId: String(id) });
   return c.json({ ok: true });
 });
+
+// ---------------------------------------------------------------------------
+// ملف الموظف HR — المرحلة الأولى من قسم الموارد البشرية لقائد الفريق.
+// جدول منفصل (employee_hr_profiles) 1:1 مع employees؛ يُقرأ فقط عند فتح
+// الموظف بعينه من قائد الفريق (زر "ملف HR")، وليس ضمن قائمة الموظفين
+// العامة — نفس نمط أزرار "سجل المكافآت"/"نظام التحفيز" الموجودة أصلاً في
+// هذه الصفحة، عشان قائمة الموظفين تفضل خفيفة على D1.
+// ---------------------------------------------------------------------------
+const EMPLOYMENT_STATUSES = ['ACTIVE', 'ON_LEAVE', 'TERMINATED'];
+
+employeeRoutes.get('/:id/hr-profile', requireRole('team_leader'), async (c) => {
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const emp = await db.prepare(`SELECT id, name, created_at FROM employees WHERE id = ?`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+  const row = await db.prepare(`SELECT * FROM employee_hr_profiles WHERE employee_id = ?`).bind(id).first();
+  return c.json({
+    profile: {
+      employeeId: id,
+      nationalId: row?.national_id ?? '',
+      phone: row?.phone ?? '',
+      address: row?.address ?? '',
+      emergencyContactName: row?.emergency_contact_name ?? '',
+      emergencyContactPhone: row?.emergency_contact_phone ?? '',
+      jobTitle: row?.job_title ?? '',
+      department: row?.department ?? '',
+      employmentStatus: row?.employment_status ?? 'ACTIVE',
+      // لو لسه معملناش ملف HR للموظف ده، أقرب قيمة افتراضية منطقية لتاريخ
+      // التعيين هي تاريخ إنشاء حسابه أصلًا (employees.created_at).
+      hireDate: row?.hire_date ?? (emp.created_at ? emp.created_at.slice(0, 10) : ''),
+      terminationDate: row?.termination_date ?? '',
+      terminationReason: row?.termination_reason ?? '',
+      notes: row?.notes ?? '',
+      updatedAt: row?.updated_at ?? null,
+    },
+  });
+});
+
+employeeRoutes.put('/:id/hr-profile', requireRole('team_leader'), async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+
+  const emp = await db.prepare(`SELECT id FROM employees WHERE id = ?`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+
+  const employmentStatus = body.employmentStatus && EMPLOYMENT_STATUSES.includes(body.employmentStatus) ? body.employmentStatus : 'ACTIVE';
+  if (employmentStatus === 'TERMINATED' && !body.terminationDate) {
+    return jsonError(c, 400, 'تاريخ انتهاء الخدمة مطلوب عند تحديد الحالة "منتهي الخدمة"', 'MISSING_TERMINATION_DATE');
+  }
+
+  const clean = (v) => (v == null ? null : String(v).trim() || null);
+  await db
+    .prepare(
+      `INSERT INTO employee_hr_profiles
+         (employee_id, national_id, phone, address, emergency_contact_name, emergency_contact_phone,
+          job_title, department, employment_status, hire_date, termination_date, termination_reason, notes,
+          updated_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(employee_id) DO UPDATE SET
+         national_id = excluded.national_id,
+         phone = excluded.phone,
+         address = excluded.address,
+         emergency_contact_name = excluded.emergency_contact_name,
+         emergency_contact_phone = excluded.emergency_contact_phone,
+         job_title = excluded.job_title,
+         department = excluded.department,
+         employment_status = excluded.employment_status,
+         hire_date = excluded.hire_date,
+         termination_date = excluded.termination_date,
+         termination_reason = excluded.termination_reason,
+         notes = excluded.notes,
+         updated_by = excluded.updated_by,
+         updated_at = excluded.updated_at`
+    )
+    .bind(
+      id,
+      clean(body.nationalId),
+      clean(body.phone),
+      clean(body.address),
+      clean(body.emergencyContactName),
+      clean(body.emergencyContactPhone),
+      clean(body.jobTitle),
+      clean(body.department),
+      employmentStatus,
+      clean(body.hireDate),
+      clean(body.terminationDate),
+      clean(body.terminationReason),
+      clean(body.notes),
+      user.id,
+      nowIso()
+    )
+    .run();
+
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_HR_PROFILE_UPDATED', entityType: 'employee', entityId: String(id), metadata: { employmentStatus } });
+  // نطاق team_leader فقط — تحديث نادر (مش سطر بيتحدث كل شوية زي الحضور)،
+  // فمفيش داعي لأي throttling إضافي على الواجهة، ومفيش حاجة تتبث لكل الموظفين.
+  await broadcast(c.env, 'EMPLOYEE_HR_PROFILE_UPDATED', { employeeId: id }, { scope: 'role', role: 'team_leader' });
+  return c.json({ ok: true });
+});
