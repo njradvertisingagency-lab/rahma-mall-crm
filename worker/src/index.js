@@ -25,6 +25,10 @@ import { attendanceRoutes } from './routes/attendance.js';
 import { leaveRoutes } from './routes/leaves.js';
 import { evaluationRoutes } from './routes/evaluations.js';
 import { violationRoutes } from './routes/violations.js';
+import { trainingRoutes } from './routes/trainings.js';
+import { documentRoutes } from './routes/documents.js';
+import { benefitRoutes } from './routes/benefits.js';
+import { announcementRoutes } from './routes/announcements.js';
 import { rewardsRoutes } from './routes/rewards.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
@@ -107,6 +111,10 @@ api.route('/attendance', attendanceRoutes);
 api.route('/leaves', leaveRoutes);
 api.route('/evaluations', evaluationRoutes);
 api.route('/violations', violationRoutes);
+api.route('/trainings', trainingRoutes);
+api.route('/documents', documentRoutes);
+api.route('/benefits', benefitRoutes);
+api.route('/announcements', announcementRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
