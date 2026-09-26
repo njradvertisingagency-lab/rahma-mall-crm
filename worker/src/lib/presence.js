@@ -163,24 +163,57 @@ export async function sweepPresence(db, env) {
   return { idled: toIdle.results.length, offlined: toOffline.results.length };
 }
 
-/** Live presence snapshot for every employee, with "still accruing" time added on read (never written). */
+/**
+ * Live presence snapshot for every employee, with "still accruing" time added
+ * on read (never written).
+ *
+ * sweepPresence (see above) is the only thing that ever WRITES a stale
+ * ACTIVE/IDLE row back to IDLE/OFFLINE in the database, and it only runs on
+ * a cron tick during shift hours (deliberately, to save D1 read quota — see
+ * index.js). That means a row can sit frozen at online=1/ACTIVE in the
+ * database for hours (employee closes the laptop / loses connectivity
+ * without an explicit logout) until the next sweep tick catches it — and
+ * anyone opening Command Center in the meantime saw that employee as
+ * "نشط الآن"/"خامل" with "last seen: الآن", even though nothing has
+ * actually happened in hours. So we recompute the EFFECTIVE state here, at
+ * read time, from last_activity_at's real age against the same thresholds
+ * the sweep uses — self-correcting for anyone viewing the page right now,
+ * regardless of whether the periodic sweep has caught up in the database
+ * yet. This never writes to the database; the stored row is still fixed up
+ * for real the next time sweepPresence runs.
+ */
 export async function getEmployeePresenceMap(db) {
+  const thresholds = await getPresenceThresholds(db);
+  const idleCutoffMs = thresholds.idleAfterMinutes * 60000;
+  const offlineCutoffMs = thresholds.offlineAfterMinutesNoHeartbeat * 60000;
   const rows = await db.prepare(`SELECT * FROM employee_presence`).all();
   const now = Date.now();
   const map = {};
   for (const r of rows.results) {
-    const accruing = r.online && r.last_state_change_at ? Math.max(0, Math.round((now - new Date(r.last_state_change_at).getTime()) / 1000)) : 0;
+    const lastActivityMs = r.last_activity_at ? new Date(r.last_activity_at).getTime() : null;
+    const staleForMs = lastActivityMs !== null ? now - lastActivityMs : Infinity;
+
+    let online = !!r.online;
+    let activityState = r.activity_state;
+    if (online && staleForMs >= offlineCutoffMs) {
+      online = false;
+      activityState = 'OFFLINE';
+    } else if (online && activityState === 'ACTIVE' && staleForMs >= idleCutoffMs) {
+      activityState = 'IDLE';
+    }
+
+    const accruing = online && r.last_state_change_at ? Math.max(0, Math.round((now - new Date(r.last_state_change_at).getTime()) / 1000)) : 0;
     map[r.employee_id] = {
-      online: !!r.online,
-      activityState: r.activity_state,
+      online,
+      activityState,
       lastLoginAt: r.last_login_at,
       lastLogoutAt: r.last_logout_at,
       lastActivityAt: r.last_activity_at,
       currentSessionStartedAt: r.current_session_started_at,
-      currentSessionDurationSeconds: r.online && r.current_session_started_at ? Math.max(0, Math.round((now - new Date(r.current_session_started_at).getTime()) / 1000)) : 0,
-      idleForSeconds: r.online && r.activity_state === 'IDLE' ? accruing : 0,
-      totalActiveSeconds: r.total_active_seconds + (r.online && r.activity_state === 'ACTIVE' ? accruing : 0),
-      totalIdleSeconds: r.total_idle_seconds + (r.online && r.activity_state === 'IDLE' ? accruing : 0),
+      currentSessionDurationSeconds: online && r.current_session_started_at ? Math.max(0, Math.round((now - new Date(r.current_session_started_at).getTime()) / 1000)) : 0,
+      idleForSeconds: online && activityState === 'IDLE' ? accruing : 0,
+      totalActiveSeconds: r.total_active_seconds + (online && activityState === 'ACTIVE' ? accruing : 0),
+      totalIdleSeconds: r.total_idle_seconds + (online && activityState === 'IDLE' ? accruing : 0),
     };
   }
   return map;
