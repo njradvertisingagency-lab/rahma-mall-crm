@@ -160,18 +160,16 @@
         reassignCard.appendChild(el('div', { class: 'muted' }, ['لا توجد اقتراحات لإعادة التوزيع الآن.']));
         return;
       }
-      // حساب المالك لا يتخذ أي إجراء — القرار والتنفيذ شغل التيم ليدر فقط،
-      // فنعرض له نفس المعلومة بدون زر ينقّله لصفحة توزيع لا يُفترض أصلاً أن
-      // يفتحها (حسابه مقفول على هذه الداش بورد الوحيدة).
+      // حساب الأدمن (isOwner) بقى god-view كامل الصلاحيات — يشوف الزرار
+      // ويقدر ينفّذ زي أي حساب تاني (الباك إند بيسمح له أصلًا عبر تجاوز
+      // requireSalesLead لحسابات isOwner).
       suggestions.forEach((s) => {
         reassignCard.appendChild(el('div', { class: 'flex-between mb-8', style: 'padding:8px 10px;border-radius:8px;background:var(--surface-2)' }, [
           el('div', {}, [
             el('div', { style: 'font-weight:700' }, [s.employeeName]),
             el('div', { class: 'faint' }, [s.reasons.join(' · ') + ` — ${s.openAssignedCustomers} عميل مفتوح`]),
           ]),
-          App.state.user.isOwner
-            ? null
-            : el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/distribute') }, ['الذهاب إلى التوزيع']),
+          el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/distribute') }, ['الذهاب إلى التوزيع']),
         ]));
       });
       reassignCard.appendChild(el('div', { class: 'faint mt-8' }, ['اقتراحات فقط — أي إعادة توزيع تتطلب دائمًا موافقة يدوية من قائد الفريق.']));
