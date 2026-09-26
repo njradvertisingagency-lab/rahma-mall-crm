@@ -22,6 +22,7 @@ import { favoriteRoutes } from './routes/favorites.js';
 import { chatRoutes } from './routes/chat.js';
 import { opsReportRoutes } from './routes/opsreports.js';
 import { attendanceRoutes } from './routes/attendance.js';
+import { leaveRoutes } from './routes/leaves.js';
 import { rewardsRoutes } from './routes/rewards.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
@@ -101,6 +102,7 @@ api.route('/favorites', favoriteRoutes);
 api.route('/chat', chatRoutes);
 api.route('/ops-reports', opsReportRoutes);
 api.route('/attendance', attendanceRoutes);
+api.route('/leaves', leaveRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
