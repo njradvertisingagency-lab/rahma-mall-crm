@@ -253,10 +253,19 @@
   const EMPLOYMENT_STATUSES_ORDER = ['ACTIVE', 'ON_LEAVE', 'TERMINATED'];
 
   App.route('/employees', async () => {
+    // بعد فصل صلاحيات قائد الفريق عن الموارد البشرية: إدارة حساب الموظف نفسه
+    // (إنشاء، ملف HR، تعديل الاسم/اسم المستخدم، إعادة تعيين كلمة المرور،
+    // تفعيل/إيقاف الحساب) بقت مقتصرة على حساب HR فقط، وشغل المبيعات
+    // التشغيلي (المكافآت، التحفيز، الإتاحة، الهدف اليومي) بقي مقتصرًا على
+    // قائد الفريق الفعلي (المبيعات) فقط. تغيير الصورة الشخصية وعرض
+    // الإحصائيات يفضلوا مشتركين بين الاثنين.
+    const user = App.state.user;
+    const isHr = !!(user.isHr || user.isOwner);
+    const isSalesLead = user.role === 'team_leader' && !isHr;
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['الموظفين']),
-      el('button', { class: 'btn btn-primary btn-sm', onclick: () => addEmployeeModal(load) }, ['➕ إضافة موظف جديد']),
+      isHr ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => addEmployeeModal(load) }, ['➕ إضافة موظف جديد']) : null,
     ]));
     const grid = el('div', { class: 'kpi-grid' });
     container.appendChild(grid);
@@ -299,27 +308,33 @@
           rewardsLine.lastChild.style.fontWeight = '800';
           rewardsLine.lastChild.style.color = 'var(--success)';
         }).catch(() => { rewardsLine.lastChild.textContent = '—'; });
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
-          const data = await api('/rewards/employees/' + e.id);
-          modal(`سجل مكافآت — ${e.name}`, el('div', {}, [
-            el('div', { class: 'card-pad', style: 'text-align:center;margin-bottom:12px' }, [
-              el('div', { style: 'font-size:26px;font-weight:800;color:var(--success)' }, [`${data.balance} ج.م`]),
-              el('div', { class: 'muted' }, [`إجمالي ${data.salesCount} صفقة مكافأة`]),
-            ]),
-            renderRewardsHistory(data),
-          ]), []);
-        } }, ['🏆 سجل المكافآت']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
-          const m = await api('/rewards/motivation/employees/' + e.id);
-          modal(`🎯 نظام التحفيز — ${e.name}`, renderMotivationCard(m), []);
-        } }, ['🎯 نظام التحفيز']));
-        card.appendChild(el('div', { class: 'field mt-12' }, [
-          el('label', {}, ['الإتاحة']),
-          el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
-            ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'].map((a) => el('option', { value: a, selected: a === e.availability || undefined }, [AVAILABILITY_LABELS[a]]))),
-        ]));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => hrProfileModal(e, load) }, ['📋 ملف HR']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => setDailyGoalModal(e) }, ['🎯 تحديد هدف يومي']));
+        if (isSalesLead) {
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
+            const data = await api('/rewards/employees/' + e.id);
+            modal(`سجل مكافآت — ${e.name}`, el('div', {}, [
+              el('div', { class: 'card-pad', style: 'text-align:center;margin-bottom:12px' }, [
+                el('div', { style: 'font-size:26px;font-weight:800;color:var(--success)' }, [`${data.balance} ج.م`]),
+                el('div', { class: 'muted' }, [`إجمالي ${data.salesCount} صفقة مكافأة`]),
+              ]),
+              renderRewardsHistory(data),
+            ]), []);
+          } }, ['🏆 سجل المكافآت']));
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
+            const m = await api('/rewards/motivation/employees/' + e.id);
+            modal(`🎯 نظام التحفيز — ${e.name}`, renderMotivationCard(m), []);
+          } }, ['🎯 نظام التحفيز']));
+          card.appendChild(el('div', { class: 'field mt-12' }, [
+            el('label', {}, ['الإتاحة']),
+            el('select', { onchange: async (ev) => { await api('/employees/' + e.id, { method: 'PATCH', body: { availability: ev.target.value } }); toast('تم تحديث الإتاحة', 'success'); load(); } },
+              ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'].map((a) => el('option', { value: a, selected: a === e.availability || undefined }, [AVAILABILITY_LABELS[a]]))),
+          ]));
+        }
+        if (isHr) {
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => hrProfileModal(e, load) }, ['📋 ملف HR']));
+        }
+        if (isSalesLead) {
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => setDailyGoalModal(e) }, ['🎯 تحديد هدف يومي']));
+        }
         card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
           const dataUrl = await App.pickAvatarImage();
           if (!dataUrl) return;
@@ -329,10 +344,12 @@
             load();
           } catch (err) { toast(err.message, 'error'); }
         } }, ['📷 تغيير الصورة الشخصية']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editNameModal(e, load) }, ['✏️ تعديل اسم الموظف']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editUsernameModal(e, load) }, ['✏️ تعديل اسم المستخدم']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => resetPasswordModal(e) }, ['🔑 إعادة تعيين كلمة المرور']));
-        card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
+        if (isHr) {
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editNameModal(e, load) }, ['✏️ تعديل اسم الموظف']));
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => editUsernameModal(e, load) }, ['✏️ تعديل اسم المستخدم']));
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: () => resetPasswordModal(e) }, ['🔑 إعادة تعيين كلمة المرور']));
+          card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => { await api('/employees/' + e.id, { method: 'PATCH', body: { active: !e.active } }); load(); } }, [e.active === false ? 'تفعيل' : 'إيقاف']));
+        }
         grid.appendChild(card);
       });
     }

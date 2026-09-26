@@ -41,7 +41,7 @@
 
   App.route('/announcements', async () => {
     const user = App.state.user;
-    const isTL = user.role === 'team_leader';
+    const isTL = user.role === 'team_leader' && (user.isHr || user.isOwner);
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['📢 الإعلانات الداخلية']),

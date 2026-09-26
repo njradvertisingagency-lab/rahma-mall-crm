@@ -695,6 +695,9 @@ App.rerender = renderRoute;
 // ---------------------------------------------------------------------------
 // القالب العام للموقع (الشريط الجانبي والشريط العلوي)
 // ---------------------------------------------------------------------------
+// قائد الفريق الفعلي (المبيعات) — بعد فصل صلاحيات HR، القائمة دي بقت مقتصرة
+// على شغل المبيعات/CRM فقط، وبنودها السبعة الخاصة بالموارد البشرية اتنقلت
+// لقائمة NAV_HR المنفصلة تحت.
 const NAV_TL = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['command-center', '🎛️', 'مركز التحكم'],
@@ -704,13 +707,6 @@ const NAV_TL = [
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
-  ['leaves', '🗓️', 'الإجازات والغياب'],
-  ['evaluations', '📝', 'الأداء والتقييم'],
-  ['violations', '⚠️', 'المخالفات والإجراءات'],
-  ['trainings', '🎓', 'التدريب والتطوير'],
-  ['documents', '📁', 'المستندات والعقود'],
-  ['benefits', '💰', 'المزايا والمكافآت'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
   ['employees', '🧑‍💼', 'الموظفين'],
   ['followups', '⏰', 'المتابعات'],
   ['calendar', '🗓️', 'تقويم المتابعات'],
@@ -723,6 +719,24 @@ const NAV_TL = [
   ['notifications', '🔔', 'الإشعارات'],
   ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
+];
+
+// حساب الموارد البشرية (isHr=1) — نفس role='team_leader' في قاعدة البيانات،
+// لكن قائمة مختلفة تمامًا: كل شغل الموارد البشرية (الإجازات، التقييم،
+// المخالفات، التدريب، المستندات، المزايا، الإعلانات) + الموظفين كملف
+// أساسي، بدون أي وصول لشغل المبيعات/CRM (العملاء، التوزيع، التحليلات...).
+const NAV_HR = [
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['employees', '🧑‍💼', 'الموظفين'],
+  ['leaves', '🗓️', 'الإجازات والغياب'],
+  ['evaluations', '📝', 'الأداء والتقييم'],
+  ['violations', '⚠️', 'المخالفات والإجراءات'],
+  ['trainings', '🎓', 'التدريب والتطوير'],
+  ['documents', '📁', 'المستندات والعقود'],
+  ['benefits', '💰', 'المزايا والمكافآت'],
+  ['announcements', '📢', 'الإعلانات الداخلية'],
+  ['chat', '💬', 'الدردشة'],
+  ['notifications', '🔔', 'الإشعارات'],
 ];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
@@ -787,7 +801,7 @@ function renderOwnerShell() {
 
 function renderShell() {
   const user = App.state.user;
-  const nav = user.role === 'team_leader' ? NAV_TL : NAV_EMPLOYEE;
+  const nav = user.role === 'team_leader' ? (user.isHr ? NAV_HR : NAV_TL) : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 
@@ -838,7 +852,7 @@ function renderShell() {
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
-        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? 'قائد الفريق' : 'موظف'])]),
+        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? (user.isHr ? 'الموارد البشرية' : 'قائد الفريق') : 'موظف'])]),
         el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
       ]),
     ]),
