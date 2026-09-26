@@ -83,13 +83,71 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  position: relative;
 }
-.app-root { min-height: 100vh; }
+.app-root { min-height: 100vh; position: relative; z-index: 1; }
 a { color: inherit; }
 button { font-family: inherit; }
 .boot-loader { display: flex; align-items: center; justify-content: center; height: 100vh; }
 .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--brand); animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- خلفية سينيمائية حيّة (Ambient Living Background) ----------
+   طلب صاحب الشركة: الخلفية تحس إنها "حيّة" و"live" مش لون ثابت جامد. بدل أي
+   تغيير في البنية (index.html أو JS) — طبقتين متحركتين بخفوت شديد (blur كبير
+   + opacity منخفضة) خلف كل المحتوى تمامًا (z-index: -1)، فمفيش أي تأثير على
+   قابلية القراءة أو النقر (pointer-events: none) وتفضل واضحة فقط في الفراغات
+   بين البطاقات وخلفية صفحة الدخول. بتاخد ألوان الهوية نفسها (--brand-2,
+   --info, --success, --warning) فتناسب الوضع الفاتح والداكن تلقائيًا لأنها
+   متغيرات. تتوقف تمامًا لو المستخدم مفعّل "تقليل الحركة" من نظامه. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -15%;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(70px);
+  will-change: transform;
+}
+body::before {
+  background:
+    radial-gradient(circle at 18% 22%, var(--brand-2-soft) 0%, transparent 55%),
+    radial-gradient(circle at 82% 18%, var(--info-soft) 0%, transparent 50%);
+  opacity: 0.9;
+  animation: bgDrift1 34s ease-in-out infinite alternate;
+}
+body::after {
+  background:
+    radial-gradient(circle at 75% 82%, var(--success-soft) 0%, transparent 50%),
+    radial-gradient(circle at 12% 78%, var(--warning-soft) 0%, transparent 48%);
+  opacity: 0.85;
+  animation: bgDrift2 41s ease-in-out infinite alternate;
+}
+@keyframes bgDrift1 {
+  0% { transform: translate(-4%, -4%) scale(1) rotate(0deg); }
+  100% { transform: translate(5%, 7%) scale(1.18) rotate(6deg); }
+}
+@keyframes bgDrift2 {
+  0% { transform: translate(4%, 5%) scale(1.12) rotate(0deg); }
+  100% { transform: translate(-7%, -5%) scale(1) rotate(-5deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before, body::after { animation: none; }
+}
+
+/* ---------- انتقال سينيمائي بين الصفحات ----------
+   كل صفحة (نتيجة App.route) بتتلف في .page-anim وقت التركيب في app.js —
+   حركة دخول ناعمة (تلاشي + صعود خفيف + بلور يزول) بدل ظهور الصفحة فجأة،
+   بدون أي تغيير في منطق التوجيه نفسه ولا في مدة التحميل الفعلية. */
+.page-anim { animation: pageEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-anim { animation: none; }
+}
 
 /* ---------- شريط التمرير ---------- */
 * { scrollbar-width: thin; scrollbar-color: var(--text-faint) transparent; }

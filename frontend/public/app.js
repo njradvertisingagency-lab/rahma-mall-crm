@@ -660,7 +660,11 @@ async function renderRoute() {
       view = match ? await match.handler(match.params) : el('div', {}, ['الصفحة غير موجودة']);
     }
     content.innerHTML = '';
-    content.appendChild(view);
+    // .page-anim عنصر جديد تمامًا في كل تنقّل (زي content نفسها) — فحركة
+    // الدخول السينيمائية (تعريفها في styles.css) بتتشغّل تلقائيًا كل مرة
+    // بدون أي تعقيد إضافي أو مؤقّتات يدوية.
+    const pageWrap = el('div', { class: 'page-anim' }, [view]);
+    content.appendChild(pageWrap);
     currentViewCleanup = typeof view.cleanup === 'function' ? view.cleanup : null;
   } catch (err) {
     console.error(err);
@@ -1166,6 +1170,22 @@ function renderAttendanceButton() {
   return btn;
 }
 
+// رسالة ترحيب عند تسجيل الحضور بالبصمة — لطيفة ومعنوية ومحفزة، بلا أي لوم
+// أو إشارة للتأخير (ده موجود بوضوح في بيانات الحالة تحت لمن يحتاجها)، وبتتغيّر
+// عشوائيًا كل مرة عشان تفضل حقيقية ومش رتيبة زي رسالة نظام جامدة.
+const CHECK_IN_GREETINGS = [
+  '✅ تم تسجيل حضورك — يومك النهارده هيبقى مليان إنجاز يا بطل 🌟',
+  '✅ حضورك اتسجّل! يلا نبدأ بطاقة وحماس — إنت قد أي تحدي 💪',
+  '✅ أهلًا بيك من جديد! ربنا يوفقك في يوم شغل ناجح ومثمر ✨',
+  '✅ تم تسجيل الحضور بنجاح — ثقتنا فيك كبيرة، خليها سنة حلوة 🌸',
+  '✅ يومك بدأ رسميًا! كل عميل النهارده فرصة تفرق فيها 🚀',
+  '✅ حضورك اتسجّل — خد نفسك، ابتسم، وابدأ يومك بطاقة إيجابية 😊',
+  '✅ تم التسجيل بنجاح! إنت جزء مهم من نجاح الفريق النهارده وكل يوم 🙌',
+];
+function randomCheckInGreeting() {
+  return CHECK_IN_GREETINGS[Math.floor(Math.random() * CHECK_IN_GREETINGS.length)];
+}
+
 async function openAttendanceModal() {
   const body = el('div', {});
   const footer = el('div', { class: 'flex gap-8' });
@@ -1247,7 +1267,7 @@ async function openAttendanceModal() {
           checkOutBtn.disabled = true;
           try {
             await api('/attendance/check-in', { method: 'POST' });
-            await showTransientSuccess('✅ تم تسجيل الحضور بنجاح');
+            await showTransientSuccess(randomCheckInGreeting());
             await render();
           } catch (e) {
             toast(e.message || 'تعذّر تسجيل الحضور', 'error');
