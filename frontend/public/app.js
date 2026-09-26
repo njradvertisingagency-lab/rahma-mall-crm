@@ -588,7 +588,6 @@ function teardownPreviousRender() {
   }
 }
 
-let ownerLockToastReady = false; // يمنع ظهور التنبيه عند أول تحميل/إعادة توجيه تلقائية
 async function renderRoute() {
   const root = document.getElementById('app');
   // يُفحص عند كل تنقّل، مش بس أول تحميل — تعديل الرابط يدويًا (hashchange)
@@ -611,25 +610,14 @@ async function renderRoute() {
     location.hash = '#/dashboard';
     return;
   }
-  // حساب المالك (استاذ هاني) مالوش قائمة جانبية ولا صفحات تانية أصلاً —
-  // بيدخل على داش بورد واحدة كبيرة بس (زي الـ landing page) يتفرّج فيها على
-  // الفريق كله لايف، بدون أي إجراء يتخذه هو نفسه — القرارات والإجراءات
-  // شغل التيم ليدر. أي رابط تاني يتحول تلقائيًا لنفس الداش بورد.
-  if (App.state.user.isOwner && location.hash !== '#/attendance-dashboard') {
-    // قبل كده كنا بنرجّعه للداشبورد بصمت — فكان حساب المالك حاسس إن الأزرار
-    // "مش شغالة" لما يدوس على أي رابط جوه القسم المُضمَّن (تفاصيل عميل،
-    // "الذهاب إلى التوزيع"...): الصفحة كانت بتتحمّل من جديد بالكامل من غير
-    // أي تفسير، فحاسس إن حاجة اتكسرت. التنبيه هنا يوضّح إن ده تصرّف مقصود
-    // (حسابه للعرض فقط) مش عطل، من غير ما نغيّر قاعدة "صفحة واحدة بس".
-    if (ownerLockToastReady) toast('هذا الحساب للعرض فقط — التفاصيل والإجراءات من حساب قائد الفريق', 'info');
-    location.hash = '#/attendance-dashboard';
-    return;
-  }
-  ownerLockToastReady = true;
+  // حساب "admin" (👑 الرؤية الشاملة — is_owner=1) بقى حساب god-view كامل:
+  // كل شغل قائد الفريق (المبيعات) + كل شغل الموارد البشرية في مكان واحد،
+  // بدون أي قفل أو تحويل تلقائي لصفحة واحدة (كان ده سلوك الحساب القديم
+  // "استاذ هاني" اللي كان للعرض فقط — اتلغى تمامًا بناءً على طلب صريح).
   const match = matchRoute(location.hash);
   teardownPreviousRender();
   root.innerHTML = '';
-  const shell = App.state.user.isOwner ? renderOwnerShell() : renderShell();
+  const shell = renderShell();
   currentShellCleanup = shell.cleanup || null;
   root.appendChild(shell.root);
   const content = shell.content;
@@ -738,6 +726,40 @@ const NAV_HR = [
   ['chat', '💬', 'الدردشة'],
   ['notifications', '🔔', 'الإشعارات'],
 ];
+
+// حساب "admin" (👑 الرؤية الشاملة، is_owner=1) — god-view كامل للشركة:
+// كل بنود المبيعات/CRM (NAV_TL) + كل بنود الموارد البشرية (NAV_HR) في
+// قائمة واحدة مدمجة، بدون أي قفل. هذا هو حساب المالك الفعلي بعد التحديث —
+// وصول تشغيلي كامل، مش عرض فقط زي الحساب القديم.
+const NAV_ADMIN = [
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['command-center', '🎛️', 'مركز التحكم'],
+  ['customers', '👥', 'العملاء'],
+  ['favorites', '⭐', 'المفضلة'],
+  ['import', '📥', 'استيراد عملاء'],
+  ['distribute', '🔀', 'توزيع العملاء'],
+  ['today-leads', '📞', 'أرقام اليوم'],
+  ['team-performance', '🏅', 'أداء الفريق'],
+  ['employees', '🧑‍💼', 'الموظفين'],
+  ['leaves', '🗓️', 'الإجازات والغياب'],
+  ['evaluations', '📝', 'الأداء والتقييم'],
+  ['violations', '⚠️', 'المخالفات والإجراءات'],
+  ['trainings', '🎓', 'التدريب والتطوير'],
+  ['documents', '📁', 'المستندات والعقود'],
+  ['benefits', '💰', 'المزايا والمكافآت'],
+  ['announcements', '📢', 'الإعلانات الداخلية'],
+  ['followups', '⏰', 'المتابعات'],
+  ['calendar', '🗓️', 'تقويم المتابعات'],
+  ['complaints', '🚩', 'الشكاوى'],
+  ['chat', '💬', 'الدردشة'],
+  ['analytics', '📈', 'التحليلات'],
+  ['leaderboard', '🏆', 'لوحة الصدارة'],
+  ['reports', '🧾', 'التقارير'],
+  ['activity', '🕒', 'سجل الأنشطة'],
+  ['notifications', '🔔', 'الإشعارات'],
+  ['ai', '🤖', 'المساعد الذكي'],
+  ['settings', '⚙️', 'الإعدادات'],
+];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
@@ -801,17 +823,21 @@ function renderOwnerShell() {
 
 function renderShell() {
   const user = App.state.user;
-  const nav = user.role === 'team_leader' ? (user.isHr ? NAV_HR : NAV_TL) : NAV_EMPLOYEE;
+  const isAdmin = !!user.isOwner; // حساب "admin" — الرؤية الشاملة (god-view)
+  const nav = user.role === 'team_leader' ? (isAdmin ? NAV_ADMIN : (user.isHr ? NAV_HR : NAV_TL)) : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 
-  const sidebar = el('div', { class: 'sidebar', id: 'sidebar' }, [
+  // مظهر مميز (ذهبي) لحساب الأدمن فقط — عشان يبان من أول لحظة إنه حساب
+  // مختلف تمامًا عن أي حساب تاني، مش بس شارة زي القديم، لكن الشريط الجانبي
+  // والعلوي كمان يتلوّنوا بتدرّج ذهبي خفيف.
+  const sidebar = el('div', { class: 'sidebar' + (isAdmin ? ' sidebar-admin' : ''), id: 'sidebar', style: isAdmin ? 'background:linear-gradient(180deg,var(--surface-2),rgba(212,160,23,0.08));border-inline-end:2px solid #d4a017' : '' }, [
     el('div', { class: 'sidebar-brand' }, [
       el('div', { class: 'brand-row' }, [
         el('div', { class: 'brand-mark' }, [el('img', { src: '/logo.png', alt: 'رحمة مول' })]),
         el('div', {}, [
           el('div', { class: 'logo' }, ['رحمة مول']),
-          el('div', { class: 'sub' }, ['نظام إدارة فريق المبيعات']),
+          el('div', { class: 'sub' }, [isAdmin ? '👑 لوحة تحكم الأدمن — رؤية شاملة' : 'نظام إدارة فريق المبيعات']),
         ]),
       ]),
     ]),
@@ -835,8 +861,9 @@ function renderShell() {
   const soundToggle = renderSoundToggle();
   const adminReportsBtn = renderAdminReportsButton();
   const attendanceBtn = renderAttendanceButton();
-  const topbar = el('div', { class: 'topbar' }, [
+  const topbar = el('div', { class: 'topbar', style: isAdmin ? 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' : '' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
+    isAdmin ? el('span', { class: 'badge', style: 'background:#d4a017;color:#fff;font-weight:800' }, ['👑 Admin']) : null,
     el('div', { class: 'search' }, [
       el('input', {
         placeholder: 'ابحث بالهاتف، الكود، الاسم، الحملة…', onkeydown: (e) => {
@@ -852,7 +879,7 @@ function renderShell() {
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
-        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [user.role === 'team_leader' ? (user.isHr ? 'الموارد البشرية' : 'قائد الفريق') : 'موظف'])]),
+        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName]), el('div', { class: 'faint' }, [isAdmin ? '👑 المالك — رؤية شاملة' : (user.role === 'team_leader' ? (user.isHr ? 'الموارد البشرية' : 'قائد الفريق') : 'موظف')])]),
         el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
       ]),
     ]),
@@ -1070,9 +1097,9 @@ async function refreshAttendanceStatus() {
 App.refreshAttendanceStatus = refreshAttendanceStatus;
 
 function renderAttendanceButton() {
-  // Mr. Hany (the owner) doesn't clock in/out — he runs the business, he
-  // doesn't punch a card for it. Hidden for his account only; every other
-  // account (including the regular Team Leader) still uses it.
+  // حساب الأدمن (isOwner) — الرؤية الشاملة للشركة — لا يسجّل حضورًا هو
+  // نفسه، زي أي مالك/تنفيذي. مخفي لحسابه فقط؛ أي حساب تاني (بما فيه قائد
+  // الفريق وHR) لسه بيستخدمها عادي.
   if (!App.state.user || App.state.user.isOwner) return null;
   // كانت مجرد أيقونة ساعة 🕒 صغيرة بين باقي أيقونات الشريط العلوي — ونفس
   // الأيقونة مستخدمة في الشريط الجانبي لصفحة "سجل الأنشطة" أصلًا، فمش واضح

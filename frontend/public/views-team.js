@@ -260,8 +260,10 @@
     // قائد الفريق الفعلي (المبيعات) فقط. تغيير الصورة الشخصية وعرض
     // الإحصائيات يفضلوا مشتركين بين الاثنين.
     const user = App.state.user;
+    // حساب الأدمن (isOwner) عنده god-view كامل: يشوف زراير الـ HR والمبيعات
+    // مع بعض، مش واحد بس زي حسابي HR/قائد الفريق العاديين.
     const isHr = !!(user.isHr || user.isOwner);
-    const isSalesLead = user.role === 'team_leader' && !isHr;
+    const isSalesLead = !!user.isOwner || (user.role === 'team_leader' && !user.isHr);
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['الموظفين']),
