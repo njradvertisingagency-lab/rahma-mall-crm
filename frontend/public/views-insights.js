@@ -109,7 +109,7 @@
     }
     await load();
     return container;
-  }, { roles: ['team_leader'] });
+  }, { roles: ['team_leader'], denyIfPlainHr: true });
 
   App.route('/my-performance', async () => {
     const container = el('div');
@@ -276,7 +276,7 @@
     }
     render();
     return container;
-  }, { roles: ['team_leader'] });
+  }, { roles: ['team_leader'], denyIfPlainHr: true });
 
   App.route('/reports', async () => {
     const container = el('div');
@@ -317,7 +317,7 @@
       ])
     )));
     return container;
-  }, { roles: ['team_leader'] });
+  }, { roles: ['team_leader'], denyIfPlainHr: true });
 
   // ملحوظة: صفحة "أداء قائد الفريق" المنفصلة اتدمجت جوه /attendance-dashboard
   // (views-attendance.js) — بناءً على طلب المالك بداش بورد واحدة بس تجمع كل
@@ -376,5 +376,5 @@
     }
 
     return container;
-  }, { roles: ['team_leader'] });
+  }, { roles: ['team_leader'], denyIfPlainHr: true });
 })();

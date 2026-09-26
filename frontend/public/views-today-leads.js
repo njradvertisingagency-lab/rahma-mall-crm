@@ -67,5 +67,5 @@
     const off = App.onRealtime(load, 5000);
     container.cleanup = () => off();
     return container;
-  }, { roles: ['team_leader'] });
+  }, { roles: ['team_leader'], denyIfPlainHr: true });
 })();

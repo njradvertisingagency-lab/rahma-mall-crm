@@ -69,5 +69,5 @@
     const off = App.on('rt:ANNOUNCEMENT_POSTED', load);
     container.cleanup = () => { off(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

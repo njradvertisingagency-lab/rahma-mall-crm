@@ -207,5 +207,5 @@
     const off2 = App.on('rt:LEAVE_DECIDED', load);
     container.cleanup = () => { off1(); off2(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

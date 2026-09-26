@@ -109,5 +109,5 @@
     await load();
     container.cleanup = () => {};
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

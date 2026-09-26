@@ -158,5 +158,5 @@
     const off2 = App.on('rt:EVALUATION_ACKNOWLEDGED', load);
     container.cleanup = () => { off(); off2(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

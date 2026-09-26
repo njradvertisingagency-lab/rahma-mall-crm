@@ -545,14 +545,27 @@ const ROUTES = [];
 // الحسابات ولا خطر حلقة إعادة توجيه.
 const ROUTE_HANDLERS = {};
 App.getRouteHandler = (pattern) => ROUTE_HANDLERS[pattern];
-// المعامل الثالث الاختياري: { roles: ['team_leader'] } يقصر الصفحة على هذه الأدوار.
+// المعامل الثالث الاختياري:
+//   { roles: ['team_leader'] } يقصر الصفحة على هذه الأدوار.
+//   { denyIfPlainSalesLead: true } يمنع قائد الفريق العادي (المبيعات، مش HR
+//     ومش الأدمن) من فتح صفحة خاصة بالموارد البشرية — الصفحة لسه مفتوحة
+//     للموظف (يشوف بياناته هو) ولحساب HR/الأدمن.
+//   { denyIfPlainHr: true } عكسها: يمنع حساب HR العادي من فتح صفحة خاصة
+//     بقائد الفريق (المبيعات).
 // هذا حماية إضافية من جهة الواجهة فقط — كل نقطة تعديل (وأغلب نقاط القراءة)
 // محمية أيضًا من جهة السيرفر بغض النظر عمّا تعرضه الواجهة. لكن بدون هذا الفحص
-// هنا، موظف يُعدّل الرابط يدويًا (مثلاً إلى #/distribute) سيظل يبني الصفحة
-// بالكامل وتُنفَّذ استدعاءات تحميل بياناتها (وبعضها غير محمي في القراءة أصلاً)
-// فيرى بيانات لا يجب أن يراها حتى لو فشل الإجراء الفعلي لاحقًا من السيرفر.
+// هنا، حساب يُعدّل الرابط يدويًا (مثلاً إلى #/distribute أو #/leaves) سيظل
+// يبني الصفحة بالكامل وتُنفَّذ استدعاءات تحميل بياناتها (وبعضها غير محمي في
+// القراءة أصلاً) فيرى بيانات أو صفحة مكسورة لا يجب أن يراها، بدل رسالة واضحة
+// إنها خاصة بحساب تاني.
 App.route = (pattern, handler, opts) => {
-  ROUTES.push({ pattern, handler, roles: opts && opts.roles });
+  ROUTES.push({
+    pattern,
+    handler,
+    roles: opts && opts.roles,
+    denyIfPlainSalesLead: opts && opts.denyIfPlainSalesLead,
+    denyIfPlainHr: opts && opts.denyIfPlainHr,
+  });
   ROUTE_HANDLERS[pattern] = handler;
 };
 
@@ -565,7 +578,7 @@ function matchRoute(hash) {
     if (m) {
       const params = {};
       keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1])));
-      return { handler: r.handler, params, roles: r.roles };
+      return { handler: r.handler, params, roles: r.roles, denyIfPlainSalesLead: r.denyIfPlainSalesLead, denyIfPlainHr: r.denyIfPlainHr };
     }
   }
   return null;
@@ -624,11 +637,24 @@ async function renderRoute() {
   content.innerHTML = '<div class="boot-loader" style="height:200px"><div class="spinner"></div></div>';
   try {
     let view;
-    if (match && match.roles && !match.roles.includes(App.state.user.role)) {
+    const curUser = App.state.user;
+    // قائد فريق عادي (مبيعات فقط) — مش HR ومش الأدمن.
+    const isPlainSalesLead = curUser.role === 'team_leader' && !curUser.isHr && !curUser.isOwner;
+    // حساب HR عادي — مش الأدمن.
+    const isPlainHr = curUser.role === 'team_leader' && curUser.isHr && !curUser.isOwner;
+    let denyMessage = null;
+    if (match && match.roles && !match.roles.includes(curUser.role)) {
+      denyMessage = 'ليس لديك صلاحية لعرض هذه الصفحة.';
+    } else if (match && match.denyIfPlainSalesLead && isPlainSalesLead) {
+      denyMessage = 'هذه الصفحة خاصة بحساب الموارد البشرية — ليس لديك صلاحية لعرضها.';
+    } else if (match && match.denyIfPlainHr && isPlainHr) {
+      denyMessage = 'هذه الصفحة خاصة بحساب قائد الفريق — ليس لديك صلاحية لعرضها.';
+    }
+    if (denyMessage) {
       view = el('div', { class: 'empty-state' }, [
         el('div', { class: 'icon' }, ['🚫']),
         el('div', { style: 'font-weight:700;margin-bottom:4px' }, ['غير مصرح بالدخول']),
-        el('div', { class: 'muted' }, ['ليس لديك صلاحية لعرض هذه الصفحة.']),
+        el('div', { class: 'muted' }, [denyMessage]),
       ]);
     } else {
       view = match ? await match.handler(match.params) : el('div', {}, ['الصفحة غير موجودة']);

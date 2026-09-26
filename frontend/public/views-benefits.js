@@ -103,5 +103,5 @@
     const off = App.on('rt:BENEFIT_LOGGED', load);
     container.cleanup = () => { off(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

@@ -135,5 +135,5 @@
     const off = App.on('rt:TRAINING_ADDED', load);
     container.cleanup = () => { off(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();
