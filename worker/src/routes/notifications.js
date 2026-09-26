@@ -15,8 +15,11 @@ notificationRoutes.get('/', async (c) => {
   // Fired on every dashboard load (topbar bell) — if D1 is over quota, fail
   // honestly instead of a raw 500 taking the bell/dashboard down.
   try {
+    // سجل الإشعارات يعرض آخر ١٠ فقط بناءً على طلب صاحب الشركة — عداد غير
+    // المقروء (unreadCount تحت) يبقى محسوبًا على كل الإشعارات فعليًا، مش
+    // مقيّدًا بالعشرة دول، حتى يفضل الجرس دقيقًا حتى لو فيه غير مقروء أقدم.
     const rows = await db
-      .prepare(`SELECT * FROM notifications WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT 100`)
+      .prepare(`SELECT * FROM notifications WHERE ${conds.join(' AND ')} ORDER BY created_at DESC LIMIT 10`)
       .bind(...binds)
       .all();
     const unreadCount = await db.prepare(`SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0`).bind(user.id).first();
