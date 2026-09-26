@@ -29,18 +29,23 @@ export async function computeEmployeeCounters(db, employeeId) {
       .prepare(
         `SELECT
            COUNT(*) AS total,
-           SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
-           SUM(CASE WHEN status = 'OVERDUE' OR (status = 'UPCOMING' AND scheduled_for < datetime('now')) THEN 1 ELSE 0 END) AS overdue
-         FROM followups WHERE employee_id = ?`
+           SUM(CASE WHEN f.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
+           SUM(CASE WHEN f.status = 'OVERDUE' OR (f.status = 'UPCOMING' AND f.scheduled_for < datetime('now')) THEN 1 ELSE 0 END) AS overdue
+         FROM followups f
+         JOIN customers c ON c.id = f.customer_id
+         WHERE f.employee_id = ? AND c.archived = 0`
       )
       .bind(employeeId)
       .first(),
     db
       .prepare(
+        // c.archived = 0 حتى لا يظل متوسط زمن الاستجابة (وبالتالي جزء من
+        // نقاط الأداء) متأثرًا بسجل عملاء قدامى تمت أرشفتهم — بمجرد أرشفة
+        // عميل، رحلته القديمة تخرج من حساب النقاط الحالية تمامًا.
         `SELECT AVG((julianday(h.changed_at) - julianday(c.assigned_at)) * 24 * 60) AS avg_minutes
          FROM customer_status_history h
          JOIN customers c ON c.id = h.customer_id
-         WHERE c.assigned_employee_id = ? AND h.from_status = 'NEW' AND c.assigned_at IS NOT NULL`
+         WHERE c.assigned_employee_id = ? AND h.from_status = 'NEW' AND c.assigned_at IS NOT NULL AND c.archived = 0`
       )
       .bind(employeeId)
       .first(),
@@ -173,7 +178,7 @@ export async function computeBadges(db) {
       .prepare(
         `SELECT AVG((julianday(h.changed_at) - julianday(c.assigned_at)) * 24 * 60) AS avg_minutes, COUNT(*) AS n
          FROM customer_status_history h JOIN customers c ON c.id = h.customer_id
-         WHERE c.assigned_employee_id = ? AND h.from_status = 'NEW' AND c.assigned_at IS NOT NULL AND h.changed_at >= ?`
+         WHERE c.assigned_employee_id = ? AND h.from_status = 'NEW' AND c.assigned_at IS NOT NULL AND h.changed_at >= ? AND c.archived = 0`
       )
       .bind(emp.id, weekStart)
       .first();
@@ -186,7 +191,7 @@ export async function computeBadges(db) {
   let topCloser = null;
   for (const emp of employees) {
     const row = await db
-      .prepare(`SELECT COUNT(*) AS n FROM customer_status_history h JOIN customers c ON c.id = h.customer_id WHERE c.assigned_employee_id = ? AND h.to_status = 'CLOSED' AND h.changed_at >= ?`)
+      .prepare(`SELECT COUNT(*) AS n FROM customer_status_history h JOIN customers c ON c.id = h.customer_id WHERE c.assigned_employee_id = ? AND h.to_status = 'CLOSED' AND h.changed_at >= ? AND c.archived = 0`)
       .bind(emp.id, monthStart)
       .first();
     if (row.n > 0 && (!topCloser || row.n > topCloser.count)) topCloser = { emp, count: row.n };
@@ -196,7 +201,11 @@ export async function computeBadges(db) {
   let followupChampion = null;
   for (const emp of employees) {
     const row = await db
-      .prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS done FROM followups WHERE employee_id = ? AND created_at >= ?`)
+      .prepare(
+        `SELECT COUNT(*) AS total, SUM(CASE WHEN f.status = 'COMPLETED' THEN 1 ELSE 0 END) AS done
+         FROM followups f JOIN customers c ON c.id = f.customer_id
+         WHERE f.employee_id = ? AND f.created_at >= ? AND c.archived = 0`
+      )
       .bind(emp.id, weekStart)
       .first();
     if (row.total >= 3) {
