@@ -1,6 +1,0 @@
-node_modules/
-.wrangler/
-pages-upload/
-test-upload/
-*.log
-.DS_Store
