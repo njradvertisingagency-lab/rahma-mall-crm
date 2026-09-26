@@ -712,27 +712,26 @@ App.rerender = renderRoute;
 // قائد الفريق الفعلي (المبيعات) — بعد فصل صلاحيات HR، القائمة دي بقت مقتصرة
 // على شغل المبيعات/CRM فقط، وبنودها السبعة الخاصة بالموارد البشرية اتنقلت
 // لقائمة NAV_HR المنفصلة تحت.
+// قائمة قائد الفريق العادي (المبيعات) — القائمة الحصرية اللي حددها صاحب
+// الشركة بالظبط: مفيهاش مركز التحكم، الدردشة، التقارير، سجل الأنشطة،
+// المساعد الذكي، الإعدادات، المتابعات، ولا تقويم المتابعات — دي بقت حصرًا
+// لحساب الـ HR/الأدمن (NAV_ADMIN). "الإجازات والغياب" اتضافت هنا كبند
+// مشترك (يشوفه TL وHR الاتنين)، لكن التيم ليدر العادي يشوفها بس من غير ما
+// يقدر يوافق/يرفض على طلبات الإجازة (شوف views-leaves.js).
 const NAV_TL = [
   ['dashboard', '📊', 'لوحة التحكم'],
-  ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
   ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
+  ['leaves', '🗓️', 'الإجازات والغياب'],
   ['employees', '🧑‍💼', 'الموظفين'],
-  ['followups', '⏰', 'المتابعات'],
-  ['calendar', '🗓️', 'تقويم المتابعات'],
   ['complaints', '🚩', 'الشكاوى'],
-  ['chat', '💬', 'الدردشة'],
   ['analytics', '📈', 'التحليلات'],
   ['leaderboard', '🏆', 'لوحة الصدارة'],
-  ['reports', '🧾', 'التقارير'],
-  ['activity', '🕒', 'سجل الأنشطة'],
   ['notifications', '🔔', 'الإشعارات'],
-  ['ai', '🤖', 'المساعد الذكي'],
-  ['settings', '⚙️', 'الإعدادات'],
 ];
 
 // حساب الموارد البشرية (isHr=1) — نفس role='team_leader' في قاعدة البيانات،
@@ -850,7 +849,10 @@ function renderOwnerShell() {
 function renderShell() {
   const user = App.state.user;
   const isAdmin = !!user.isOwner; // حساب "admin" — الرؤية الشاملة (god-view)
-  const nav = user.role === 'team_leader' ? (isAdmin ? NAV_ADMIN : (user.isHr ? NAV_HR : NAV_TL)) : NAV_EMPLOYEE;
+  // الـ HR أعلى من قائد الفريق في الهرم: يشوف كل حاجة (مبيعات + HR)، فقائمته
+  // بقت زي قائمة الأدمن بالظبط (بدون المظهر الذهبي المميز اللي يفضل لحساب
+  // الأدمن/المالك فقط). قائد الفريق العادي لسه يشوف مبيعاته بس.
+  const nav = user.role === 'team_leader' ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL) : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 

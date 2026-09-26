@@ -103,5 +103,5 @@
     const off = App.on('rt:CHAT_MESSAGE', loadThreads);
     container.cleanup = () => { off(); if (currentCleanup) currentCleanup(); };
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

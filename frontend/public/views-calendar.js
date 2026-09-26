@@ -106,5 +106,5 @@
     const off = App.onRealtime(async () => { await loadFollowups(); render(); }, 8000);
     container.cleanup = () => off();
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 })();

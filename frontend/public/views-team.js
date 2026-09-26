@@ -260,10 +260,10 @@
     // قائد الفريق الفعلي (المبيعات) فقط. تغيير الصورة الشخصية وعرض
     // الإحصائيات يفضلوا مشتركين بين الاثنين.
     const user = App.state.user;
-    // حساب الأدمن (isOwner) عنده god-view كامل: يشوف زراير الـ HR والمبيعات
-    // مع بعض، مش واحد بس زي حسابي HR/قائد الفريق العاديين.
+    // الـ HR أعلى من قائد الفريق: يشوف زراير الـ HR والمبيعات مع بعض (زي
+    // الأدمن بالظبط). قائد الفريق العادي يشوف زراير مبيعاته بس.
     const isHr = !!(user.isHr || user.isOwner);
-    const isSalesLead = !!user.isOwner || (user.role === 'team_leader' && !user.isHr);
+    const isSalesLead = user.role === 'team_leader';
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['الموظفين']),
@@ -404,7 +404,7 @@
     const off = App.onRealtime(load, 5000);
     container.cleanup = () => off();
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 
   App.route('/notifications', async () => {
     const container = el('div');
@@ -444,7 +444,7 @@
       el('div', { class: 'timeline-text' }, [`${a.actor_name || 'النظام'} (${ROLE_LABELS[a.actor_role] || a.actor_role || '—'}) — ${ACTION_LABELS[a.action] || a.action.replace(/_/g, ' ').toLowerCase()}${a.entity_id ? ' · ' + a.entity_id : ''}`]),
     ]))));
     return container;
-  });
+  }, { denyIfPlainSalesLead: true });
 
   App.route('/profile', async () => {
     const user = App.state.user;

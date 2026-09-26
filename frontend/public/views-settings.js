@@ -194,5 +194,5 @@
     container.appendChild(waCard);
 
     return container;
-  }, { roles: ['team_leader'], denyIfPlainHr: true });
+  }, { roles: ['team_leader'], denyIfPlainSalesLead: true });
 })();

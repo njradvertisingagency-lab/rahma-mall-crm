@@ -110,12 +110,12 @@
     }
   }
 
-  function balanceModal(employee) {
+  function balanceModal(employee, canManage) {
     const body = el('div', {}, [el('div', { class: 'muted', style: 'text-align:center;padding:16px' }, ['جارِ التحميل…'])]);
     const dlg = modal('🗓️ رصيد الإجازة السنوية — ' + employee.name, body, []);
     api('/leaves/balance/' + employee.id).then(({ balance: b }) => {
-      const allocationInput = el('input', { type: 'number', min: '0', value: b.allocation });
-      const carriedInput = el('input', { type: 'number', min: '0', value: b.carriedOver });
+      const allocationInput = el('input', { type: 'number', min: '0', value: b.allocation, disabled: !canManage });
+      const carriedInput = el('input', { type: 'number', min: '0', value: b.carriedOver, disabled: !canManage });
       body.innerHTML = '';
       body.appendChild(el('div', {}, [
         el('div', { class: 'card-pad', style: 'text-align:center;margin-bottom:12px' }, [
@@ -125,9 +125,11 @@
         el('div', { class: 'field' }, [el('label', {}, ['الرصيد السنوي المخصص']), allocationInput]),
         el('div', { class: 'field' }, [el('label', {}, ['أيام مرحّلة من عام سابق']), carriedInput]),
       ]));
-      dlg.el.querySelector('.modal-footer').append(
-        el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق']),
-        el('button', { class: 'btn btn-primary', onclick: async () => {
+      const footerButtons = [el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إغلاق'])];
+      // تعديل الرصيد يفضل حصريًا لـ HR/المالك — قائد الفريق العادي يشوف الرصيد
+      // بس من غير ما يقدر يعدّله (زي بالظبط موضوع الموافقة/الرفض).
+      if (canManage) {
+        footerButtons.push(el('button', { class: 'btn btn-primary', onclick: async () => {
           try {
             await api('/leaves/balance/' + employee.id, {
               method: 'PATCH',
@@ -136,8 +138,9 @@
             toast('تم تحديث الرصيد', 'success');
             dlg.close();
           } catch (err) { toast(err.message, 'error'); }
-        } }, ['حفظ'])
-      );
+        } }, ['حفظ']));
+      }
+      dlg.el.querySelector('.modal-footer').append(...footerButtons);
     }).catch((err) => {
       body.innerHTML = '';
       body.appendChild(el('div', { class: 'error-text' }, [err.message || 'تعذّر تحميل الرصيد']));
@@ -146,7 +149,13 @@
 
   App.route('/leaves', async () => {
     const user = App.state.user;
-    const isTL = user.role === 'team_leader' && (user.isHr || user.isOwner);
+    // من "HR أعلى من قائد الفريق": التيم ليدر العادي بقى يشوف نفس شاشة كل
+    // الموظفين (isTL القديم) زي الـ HR بالظبط — الفرق الوحيد إنه مش يقدر
+    // يوافق/يرفض على طلبات الإجازة (موافقة الرصيد النهائية تبقى لـ HR/المالك
+    // فقط). كل حاجة تانية (تقديم طلب لموظف، الاطلاع على الرصيد، إلغاء طلب)
+    // متاحة لأي حساب team_leader زي ما كانت بالظبط.
+    const isTL = user.role === 'team_leader';
+    const canManage = !!(user.isHr || user.isOwner);
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['🗓️ ' + (isTL ? 'الإجازات والغياب' : 'إجازاتي')]),
@@ -184,7 +193,7 @@
           el('thead', {}, [el('tr', {}, [...(isTL ? ['الموظف'] : []), 'النوع', 'من', 'إلى', 'الأيام', 'السبب', 'الحالة', 'ملاحظة القرار', ''].map((h) => el('th', {}, [h])))]),
           el('tbody', {}, requests.map((r) => el('tr', {}, [
             ...(isTL ? [el('td', {}, [
-              el('a', { href: '#', onclick: (e) => { e.preventDefault(); balanceModal({ id: r.employeeId, name: r.employeeNameAr || r.employeeName }); } }, [r.employeeNameAr || r.employeeName]),
+              el('a', { href: '#', onclick: (e) => { e.preventDefault(); balanceModal({ id: r.employeeId, name: r.employeeNameAr || r.employeeName }, canManage); } }, [r.employeeNameAr || r.employeeName]),
             ])] : []),
             el('td', {}, [LEAVE_TYPE_LABELS[r.leaveType] || r.leaveType]),
             el('td', {}, [fmt.date(r.startDate)]),
@@ -194,8 +203,8 @@
             el('td', {}, [statusBadge(r.status)]),
             el('td', { class: 'faint' }, [r.decisionNote || '—']),
             el('td', { class: 'flex gap-8' }, [
-              isTL && r.status === 'PENDING' ? el('button', { class: 'btn btn-sm btn-success', onclick: () => approveRequest(r.id, load) }, ['✓ موافقة']) : null,
-              isTL && r.status === 'PENDING' ? el('button', { class: 'btn btn-sm btn-danger', onclick: () => rejectModal(r.id, load) }, ['✕ رفض']) : null,
+              canManage && r.status === 'PENDING' ? el('button', { class: 'btn btn-sm btn-success', onclick: () => approveRequest(r.id, load) }, ['✓ موافقة']) : null,
+              canManage && r.status === 'PENDING' ? el('button', { class: 'btn btn-sm btn-danger', onclick: () => rejectModal(r.id, load) }, ['✕ رفض']) : null,
               (r.status === 'PENDING' && (isTL || user.employeeId === r.employeeId)) ? el('button', { class: 'btn btn-sm btn-outline', onclick: async () => { if (confirm('تأكيد إلغاء الطلب؟')) { try { await api('/leaves/' + r.id + '/cancel', { method: 'POST' }); load(); } catch (err) { toast(err.message, 'error'); } } } }, ['إلغاء']) : null,
             ]),
           ]))),
@@ -207,5 +216,5 @@
     const off2 = App.on('rt:LEAVE_DECIDED', load);
     container.cleanup = () => { off1(); off2(); };
     return container;
-  }, { denyIfPlainSalesLead: true });
+  }, { roles: ['team_leader', 'employee'] });
 })();
