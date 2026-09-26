@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { jsonError, nowIso, logActivity, broadcast } from '../lib/db.js';
 import {
   createBranchVisit,
@@ -47,7 +47,7 @@ salesRoutes.get('/branches', async (c) => {
   return c.json({ branches: rows.results });
 });
 
-salesRoutes.post('/branches', requireRole('team_leader'), async (c) => {
+salesRoutes.post('/branches', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
   const name = String(body.name || '').trim();
@@ -165,7 +165,7 @@ salesRoutes.get('/purchases/:purchaseId', async (c) => {
   return c.json({ purchase });
 });
 
-salesRoutes.patch('/purchases/:purchaseId', requireRole('team_leader'), async (c) => {
+salesRoutes.patch('/purchases/:purchaseId', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const purchaseId = Number(c.req.param('purchaseId'));
@@ -178,7 +178,7 @@ salesRoutes.patch('/purchases/:purchaseId', requireRole('team_leader'), async (c
   }
 });
 
-salesRoutes.post('/purchases/:purchaseId/cancel', requireRole('team_leader'), async (c) => {
+salesRoutes.post('/purchases/:purchaseId/cancel', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const purchaseId = Number(c.req.param('purchaseId'));
@@ -191,7 +191,7 @@ salesRoutes.post('/purchases/:purchaseId/cancel', requireRole('team_leader'), as
   }
 });
 
-salesRoutes.post('/purchases/:purchaseId/refunds', requireRole('team_leader'), async (c) => {
+salesRoutes.post('/purchases/:purchaseId/refunds', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const purchaseId = Number(c.req.param('purchaseId'));
@@ -209,7 +209,7 @@ salesRoutes.post('/purchases/:purchaseId/refunds', requireRole('team_leader'), a
   }
 });
 
-salesRoutes.post('/purchases/:purchaseId/attribution', requireRole('team_leader'), async (c) => {
+salesRoutes.post('/purchases/:purchaseId/attribution', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const purchaseId = Number(c.req.param('purchaseId'));

@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { answerQuestion, generateDailySummary, generateOperationalInsights } from '../lib/ai.js';
 import { jsonError, logActivity } from '../lib/db.js';
 
 export const aiRoutes = new Hono();
-aiRoutes.use('*', requireAuth, requireRole('team_leader'));
+aiRoutes.use('*', requireAuth, requireSalesLead);
 
 aiRoutes.post('/ask', async (c) => {
   const db = c.env.DB;

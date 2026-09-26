@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
 import { parsePastedNumbers, parseCsvToRecords, parseXlsxToRecords, buildImportPreview } from '../lib/import.js';
@@ -354,7 +354,7 @@ customerRoutes.get('/:id', async (c) => {
   });
 });
 
-customerRoutes.post('/', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -383,7 +383,7 @@ customerRoutes.post('/', requireRole('team_leader'), async (c) => {
 // ---------------------------------------------------------------------------
 // IMPORT
 // ---------------------------------------------------------------------------
-customerRoutes.post('/import/preview', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const contentType = c.req.header('content-type') || '';
   let records;
@@ -443,7 +443,7 @@ customerRoutes.post('/import/preview', requireRole('team_leader'), async (c) => 
   return c.json({ token, summary: preview.summary, rows: preview.rows.slice(0, 500) });
 });
 
-customerRoutes.post('/import/commit', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/import/commit', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -632,7 +632,7 @@ customerRoutes.patch('/:id/status', async (c) => {
   return c.json({ ok: true, status: toStatus, autoFollowup });
 });
 
-customerRoutes.post('/:id/reopen', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/:id/reopen', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = c.req.param('id');
@@ -768,7 +768,7 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
 // VIP FLAG (Team Leader only — routes VIP customers to the best employees or
 // gets them personally followed up on by the Team Leader)
 // ---------------------------------------------------------------------------
-customerRoutes.post('/:id/vip', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/:id/vip', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = c.req.param('id');
@@ -785,7 +785,7 @@ customerRoutes.post('/:id/vip', requireRole('team_leader'), async (c) => {
 // ---------------------------------------------------------------------------
 // ARCHIVE / RESTORE
 // ---------------------------------------------------------------------------
-customerRoutes.post('/:id/archive', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/:id/archive', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.prepare(`UPDATE customers SET archived = 1, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
@@ -794,7 +794,7 @@ customerRoutes.post('/:id/archive', requireRole('team_leader'), async (c) => {
   return c.json({ ok: true });
 });
 
-customerRoutes.post('/:id/restore', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/:id/restore', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const id = c.req.param('id');
   await db.prepare(`UPDATE customers SET archived = 0, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
@@ -806,7 +806,7 @@ customerRoutes.post('/:id/restore', requireRole('team_leader'), async (c) => {
 // ---------------------------------------------------------------------------
 // BULK ACTIONS (Team Leader only)
 // ---------------------------------------------------------------------------
-customerRoutes.post('/bulk', requireRole('team_leader'), async (c) => {
+customerRoutes.post('/bulk', requireSalesLead, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));

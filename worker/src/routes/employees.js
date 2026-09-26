@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR, requireSalesLead } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore, getPerformanceHistory, computeBadges } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
@@ -15,7 +15,7 @@ const AVAILABILITY = ['AVAILABLE', 'BUSY', 'ON_BREAK', 'UNAVAILABLE'];
 // Create a new employee account (user + employee profile in one step). Team
 // Leader only — this is how new team members get onboarded without needing
 // direct database access.
-employeeRoutes.post('/', requireRole('team_leader'), async (c) => {
+employeeRoutes.post('/', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -59,7 +59,7 @@ employeeRoutes.post('/', requireRole('team_leader'), async (c) => {
 });
 
 // Change an employee's username. Team Leader only.
-employeeRoutes.patch('/:id/username', requireRole('team_leader'), async (c) => {
+employeeRoutes.patch('/:id/username', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -86,7 +86,7 @@ employeeRoutes.patch('/:id/username', requireRole('team_leader'), async (c) => {
 // reports), employees.avatar_initial (derived from the new name, unless a
 // real photo is already set), and users.display_name (topbar, activity log
 // actor names, chat).
-employeeRoutes.patch('/:id/name', requireRole('team_leader'), async (c) => {
+employeeRoutes.patch('/:id/name', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -109,7 +109,7 @@ employeeRoutes.patch('/:id/name', requireRole('team_leader'), async (c) => {
 // Reset a forgotten password on the employee's behalf. Team Leader only —
 // no need to know the old password, this is exactly the "employee forgot
 // their password" recovery path.
-employeeRoutes.post('/:id/reset-password', requireRole('team_leader'), async (c) => {
+employeeRoutes.post('/:id/reset-password', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -379,7 +379,7 @@ employeeRoutes.get('/:id/daily-goal', async (c) => {
 });
 
 // Setting a daily goal is a Team Leader action.
-employeeRoutes.post('/:id/daily-goal', requireRole('team_leader'), async (c) => {
+employeeRoutes.post('/:id/daily-goal', requireSalesLead, async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({}));
@@ -447,7 +447,7 @@ employeeRoutes.delete('/:id/avatar', async (c) => {
 // ---------------------------------------------------------------------------
 const EMPLOYMENT_STATUSES = ['ACTIVE', 'ON_LEAVE', 'TERMINATED'];
 
-employeeRoutes.get('/:id/hr-profile', requireRole('team_leader'), async (c) => {
+employeeRoutes.get('/:id/hr-profile', requireHR, async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const emp = await db.prepare(`SELECT id, name, created_at FROM employees WHERE id = ?`).bind(id).first();
@@ -475,7 +475,7 @@ employeeRoutes.get('/:id/hr-profile', requireRole('team_leader'), async (c) => {
   });
 });
 
-employeeRoutes.put('/:id/hr-profile', requireRole('team_leader'), async (c) => {
+employeeRoutes.put('/:id/hr-profile', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

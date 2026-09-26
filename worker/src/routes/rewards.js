@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { jsonError } from '../lib/db.js';
 import { getEmployeeRewardsSummary, getRewardsSettings } from '../lib/rewards.js';
 import { getEmployeeMotivationSummary } from '../lib/motivation.js';
@@ -18,7 +18,7 @@ rewardsRoutes.get('/me', async (c) => {
 
 // قائد الفريق (والمالك، بنفس دور team_leader) يرى محفظة أي موظف — للمتابعة
 // والشفافية، وليس للتعديل اليدوي (لا يوجد مسار لتعديل الرصيد يدويًا هنا).
-rewardsRoutes.get('/employees/:id', requireRole('team_leader'), async (c) => {
+rewardsRoutes.get('/employees/:id', requireSalesLead, async (c) => {
   const id = Number(c.req.param('id'));
   const summary = await getEmployeeRewardsSummary(c.env.DB, id);
   return c.json(summary);
@@ -32,7 +32,7 @@ rewardsRoutes.get('/motivation/me', async (c) => {
   return c.json(summary);
 });
 
-rewardsRoutes.get('/motivation/employees/:id', requireRole('team_leader'), async (c) => {
+rewardsRoutes.get('/motivation/employees/:id', requireSalesLead, async (c) => {
   const id = Number(c.req.param('id'));
   const summary = await getEmployeeMotivationSummary(c.env.DB, id);
   return c.json(summary);

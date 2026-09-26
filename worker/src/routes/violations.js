@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 
 export const violationRoutes = new Hono();
@@ -80,7 +80,7 @@ violationRoutes.get('/:id', async (c) => {
 });
 
 // تسجيل مخالفة جديدة — قائد الفريق فقط.
-violationRoutes.post('/', requireRole('team_leader'), async (c) => {
+violationRoutes.post('/', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -116,7 +116,7 @@ violationRoutes.post('/', requireRole('team_leader'), async (c) => {
 });
 
 // تعديل مخالفة — قائد الفريق فقط، وطالما لسه لم يُقر بها الموظف.
-violationRoutes.patch('/:id', requireRole('team_leader'), async (c) => {
+violationRoutes.patch('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -166,7 +166,7 @@ violationRoutes.post('/:id/acknowledge', async (c) => {
 });
 
 // إغلاق/حل المخالفة نهائيًا — قائد الفريق فقط.
-violationRoutes.post('/:id/resolve', requireRole('team_leader'), async (c) => {
+violationRoutes.post('/:id/resolve', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

@@ -2,7 +2,7 @@
 // complaint can be tracked and rated on its own (rate per employee), rather
 // than being buried among ordinary notes.
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 
 export const complaintRoutes = new Hono();
@@ -78,7 +78,7 @@ complaintRoutes.get('/', async (c) => {
 });
 
 // Complaint rate per employee — complaints ÷ assigned customers, Team Leader view only.
-complaintRoutes.get('/stats', requireRole('team_leader'), async (c) => {
+complaintRoutes.get('/stats', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const employees = await db.prepare(`SELECT id, name FROM employees WHERE active = 1`).all();
   const stats = [];
@@ -99,7 +99,7 @@ complaintRoutes.get('/stats', requireRole('team_leader'), async (c) => {
   return c.json({ stats });
 });
 
-complaintRoutes.delete('/:id', requireRole('team_leader'), async (c) => {
+complaintRoutes.delete('/:id', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const existing = await db.prepare(`SELECT id FROM complaints WHERE id = ?`).bind(id).first();

@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso } from '../lib/db.js';
 
 export const settingsRoutes = new Hono();
-settingsRoutes.use('*', requireAuth, requireRole('team_leader'));
+settingsRoutes.use('*', requireAuth, requireSalesLead);
 
 const KEYS = ['performance_weights', 'distribution_defaults', 'notification_prefs', 'whatsapp_template', 'sla_rules', 'lead_score_weights', 'presence_thresholds', 'sales_settings', 'rewards_settings', 'motivation_settings'];
 

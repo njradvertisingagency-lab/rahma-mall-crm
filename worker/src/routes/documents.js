@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso } from '../lib/db.js';
 
 export const documentRoutes = new Hono();
@@ -51,7 +51,7 @@ documentRoutes.get('/', async (c) => {
 
 // إضافة مستند/عقد جديد — قائد الفريق فقط. الرابط رابط خارجي (Google Drive
 // مثلاً) — النظام لا يخزن أي ملفات فعلية، فقط بيانات وصفية + رابط.
-documentRoutes.post('/', requireRole('team_leader'), async (c) => {
+documentRoutes.post('/', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -88,7 +88,7 @@ documentRoutes.post('/', requireRole('team_leader'), async (c) => {
 });
 
 // تعديل مستند — قائد الفريق فقط.
-documentRoutes.patch('/:id', requireRole('team_leader'), async (c) => {
+documentRoutes.patch('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -117,7 +117,7 @@ documentRoutes.patch('/:id', requireRole('team_leader'), async (c) => {
 });
 
 // حذف مستند — قائد الفريق فقط.
-documentRoutes.delete('/:id', requireRole('team_leader'), async (c) => {
+documentRoutes.delete('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

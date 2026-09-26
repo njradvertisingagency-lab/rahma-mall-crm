@@ -168,7 +168,20 @@ authRoutes.post('/login', async (c) => {
     }
   }
 
-  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId });
+  // حساب HR منفصل عن قائد الفريق (المبيعات) لكنه يحمل نفس role='team_leader' في
+  // قاعدة البيانات (انظر التعليق في lib/auth.js). العلم مخزّن في جدول منفصل
+  // user_role_flags بدل عمود على users نفسها، لتفادي ALTER TABLE الممنوع.
+  let isHr = false;
+  if (user.role === 'team_leader') {
+    try {
+      const flagRow = await db.prepare(`SELECT is_hr FROM user_role_flags WHERE user_id = ?`).bind(user.id).first();
+      isHr = !!flagRow?.is_hr;
+    } catch (err) {
+      console.error('login: could not load HR flag (non-fatal)', err);
+    }
+  }
+
+  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId, isHr });
   setSessionCookie(c, token, remember);
 
   await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent }).catch((err) =>
@@ -192,6 +205,7 @@ authRoutes.post('/login', async (c) => {
       availability,
       avatarUrl,
       isOwner: !!user.is_owner,
+      isHr,
       mustChangePassword: !!user.must_change_password,
     },
   });

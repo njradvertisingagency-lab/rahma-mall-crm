@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { getCommandCenterSnapshot, getNeedsAttentionQueue } from '../lib/commandcenter.js';
 import { getEmployeePresenceMap } from '../lib/presence.js';
 import { computeAllEmployeeStats } from '../lib/performance.js';
@@ -7,7 +7,7 @@ import { getSeenSummaryByEmployee, getNotSeenCustomers } from '../lib/seen.js';
 import { getReassignmentSuggestions } from '../lib/workqueue.js';
 
 export const commandCenterRoutes = new Hono();
-commandCenterRoutes.use('*', requireAuth, requireRole('team_leader'));
+commandCenterRoutes.use('*', requireAuth, requireSalesLead);
 
 // One aggregate snapshot: team presence, today's sales, today's funnel, and
 // the severity-ranked Needs Attention queue. Everything here is a live query

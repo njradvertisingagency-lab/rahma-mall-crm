@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { jsonError, backgroundWrite } from '../lib/db.js';
 import { computeFunnel } from '../lib/funnel.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
@@ -203,7 +203,7 @@ analyticsRoutes.get('/charts', async (c) => {
 // ---------------------------------------------------------------------------
 // SALES ANALYTICS (Team-Leader-only, like /charts' cross-employee data)
 // ---------------------------------------------------------------------------
-analyticsRoutes.get('/sales', requireRole('team_leader'), async (c) => {
+analyticsRoutes.get('/sales', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const q = c.req.query();
   const { from, to } = rangeToDates(q.range || 'today', q.from, q.to);
@@ -233,7 +233,7 @@ analyticsRoutes.get('/sales', requireRole('team_leader'), async (c) => {
   return c.json({ range: { from, to }, sales, funnel });
 });
 
-analyticsRoutes.get('/sales/employees', requireRole('team_leader'), async (c) => {
+analyticsRoutes.get('/sales/employees', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const q = c.req.query();
   const { from, to } = rangeToDates(q.range || '30d', q.from, q.to);
@@ -267,7 +267,7 @@ analyticsRoutes.get('/sales/employees', requireRole('team_leader'), async (c) =>
   return c.json({ range: { from, to }, employees: results });
 });
 
-analyticsRoutes.get('/sales/branches', requireRole('team_leader'), async (c) => {
+analyticsRoutes.get('/sales/branches', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const q = c.req.query();
   const { from, to } = rangeToDates(q.range || '30d', q.from, q.to);
@@ -291,7 +291,7 @@ analyticsRoutes.get('/sales/branches', requireRole('team_leader'), async (c) => 
   return c.json({ range: { from, to }, branches: results });
 });
 
-analyticsRoutes.get('/sales/campaigns', requireRole('team_leader'), async (c) => {
+analyticsRoutes.get('/sales/campaigns', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const q = c.req.query();
   const { from, to } = rangeToDates(q.range || '30d', q.from, q.to);
@@ -319,7 +319,7 @@ analyticsRoutes.get('/sales/campaigns', requireRole('team_leader'), async (c) =>
   return c.json({ range: { from, to }, campaigns: results });
 });
 
-analyticsRoutes.get('/sales/products', requireRole('team_leader'), async (c) => {
+analyticsRoutes.get('/sales/products', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const q = c.req.query();
   const { from, to } = rangeToDates(q.range || '30d', q.from, q.to);

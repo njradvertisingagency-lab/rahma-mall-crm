@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 
 export const evaluationRoutes = new Hono();
@@ -91,7 +91,7 @@ evaluationRoutes.get('/:id', async (c) => {
 });
 
 // إنشاء تقييم دوري جديد لموظف — قائد الفريق فقط.
-evaluationRoutes.post('/', requireRole('team_leader'), async (c) => {
+evaluationRoutes.post('/', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -142,7 +142,7 @@ evaluationRoutes.post('/', requireRole('team_leader'), async (c) => {
 });
 
 // تعديل تقييم — قائد الفريق فقط، وطالما لسه ما اطّلعش عليه الموظف (لم يُقر بعد).
-evaluationRoutes.patch('/:id', requireRole('team_leader'), async (c) => {
+evaluationRoutes.patch('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

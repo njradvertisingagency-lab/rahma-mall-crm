@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 
 export const benefitRoutes = new Hono();
@@ -58,7 +58,7 @@ benefitRoutes.get('/', async (c) => {
 
 // تسجيل مكافأة/خصم/سلفة جديدة — قائد الفريق فقط. المبلغ يُدخل يدويًا من
 // قائد الفريق نفسه ولا يُحسب أو يُقترح تلقائيًا.
-benefitRoutes.post('/', requireRole('team_leader'), async (c) => {
+benefitRoutes.post('/', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -89,7 +89,7 @@ benefitRoutes.post('/', requireRole('team_leader'), async (c) => {
 });
 
 // اعتماد الحركة — قائد الفريق فقط.
-benefitRoutes.post('/:id/approve', requireRole('team_leader'), async (c) => {
+benefitRoutes.post('/:id/approve', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -101,7 +101,7 @@ benefitRoutes.post('/:id/approve', requireRole('team_leader'), async (c) => {
   return c.json({ ok: true });
 });
 
-benefitRoutes.post('/:id/reject', requireRole('team_leader'), async (c) => {
+benefitRoutes.post('/:id/reject', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -114,7 +114,7 @@ benefitRoutes.post('/:id/reject', requireRole('team_leader'), async (c) => {
 });
 
 // تسجيل الصرف الفعلي — قائد الفريق فقط، بعد الاعتماد.
-benefitRoutes.post('/:id/mark-paid', requireRole('team_leader'), async (c) => {
+benefitRoutes.post('/:id/mark-paid', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

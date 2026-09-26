@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireHR } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
 import { getCairoNow } from '../lib/workhours.js';
 
@@ -93,7 +93,7 @@ leaveRoutes.get('/balance/:employeeId', async (c) => {
 });
 
 // تعديل الرصيد السنوي المخصص/المرحّل لموظف — قائد الفريق فقط.
-leaveRoutes.patch('/balance/:employeeId', requireRole('team_leader'), async (c) => {
+leaveRoutes.patch('/balance/:employeeId', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const employeeId = Number(c.req.param('employeeId'));
@@ -176,7 +176,7 @@ leaveRoutes.post('/', async (c) => {
 
 // الموافقة على طلب — قائد الفريق فقط. لو إجازة سنوية وهتتجاوز الرصيد المتاح
 // يرجع خطأ يطلب تأكيد صريح (force=true) بدل ما يوافق تلقائيًا على تجاوز الرصيد.
-leaveRoutes.post('/:id/approve', requireRole('team_leader'), async (c) => {
+leaveRoutes.post('/:id/approve', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -203,7 +203,7 @@ leaveRoutes.post('/:id/approve', requireRole('team_leader'), async (c) => {
   return c.json({ ok: true });
 });
 
-leaveRoutes.post('/:id/reject', requireRole('team_leader'), async (c) => {
+leaveRoutes.post('/:id/reject', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));

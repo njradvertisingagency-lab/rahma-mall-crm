@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { nextDistributionLabel, logActivity, createNotification, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 
 export const distributionRoutes = new Hono();
-distributionRoutes.use('*', requireAuth, requireRole('team_leader'));
+distributionRoutes.use('*', requireAuth, requireSalesLead);
 
 async function getEligibleEmployees(db, requestedIds, onlyAvailable) {
   let list;
@@ -219,7 +219,7 @@ distributionRoutes.post('/', async (c) => {
 // REASSIGNMENT (mounted separately at /api/reassignments — see index.js)
 // ---------------------------------------------------------------------------
 export const reassignmentRoutes = new Hono();
-reassignmentRoutes.use('*', requireAuth, requireRole('team_leader'));
+reassignmentRoutes.use('*', requireAuth, requireSalesLead);
 
 reassignmentRoutes.post('/', async (c) => {
   const user = c.get('user');
