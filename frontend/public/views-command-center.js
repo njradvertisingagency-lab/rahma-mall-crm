@@ -134,11 +134,19 @@
           el('tbody', {}, rows.map((e) => {
             const seen = seenByEmp[e.id];
             const lastSeenAt = e.presence?.lastActivityAt || e.presence?.lastLoginAt || null;
+            // "الآن" لازم تعتمد على حداثة آخر نشاط فعلي، مش بس على علم online —
+            // السيرفر بيصحّح online/activityState وقت القراءة نفسها (شوف
+            // presence.js) لو الموظف متجمّد online من غير نشاط حقيقي، لكن حتى
+            // بعد التصحيح ده لسه ممكن يكون آخر نشاط قبل دقيقة-دقيقتين وهو لسه
+            // ACTIVE — نعرض "الآن" بس لو فعلاً أقل من دقيقة، وإلا نعرض
+            // "منذ كذا" الحقيقي حتى لو الحالة لسه نشط/خامل.
+            const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : null;
+            const isReallyNow = e.presence?.online && lastSeenMs !== null && (Date.now() - lastSeenMs) < 60000;
             return el('tr', {}, [
               el('td', { style: 'font-weight:700' }, [e.nameAr ? `${e.name} (${e.nameAr})` : e.name]),
               el('td', {}, [badges.presence(e.presence)]),
               el('td', { class: e.presence?.online ? '' : 'muted', title: lastSeenAt ? fmt.dateTime(lastSeenAt) : '' }, [
-                e.presence?.online ? 'الآن' : (lastSeenAt ? fmt.ago(lastSeenAt) : 'لم يسجّل دخول بعد'),
+                isReallyNow ? 'الآن' : (lastSeenAt ? fmt.ago(lastSeenAt) : 'لم يسجّل دخول بعد'),
               ]),
               el('td', {}, [badges.availability(e.availability)]),
               el('td', {}, [String(e.assigned)]),
@@ -179,5 +187,5 @@
     const off = App.onRealtime(() => load(), 5000);
     container.cleanup = () => { off(); clearTimeout(reloadTimer); };
     return container;
-  }, { roles: ['team_leader'], denyIfPlainSalesLead: true });
+  }, { roles: ['team_leader'] });
 })();
