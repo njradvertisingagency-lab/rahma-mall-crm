@@ -20,7 +20,7 @@ const REMEMBER_SESSION_DAYS = 30;
 // effect on their NEXT login, not instantly — routes/employees.js's
 // password-reset flow already force-revokes sessions for a user, which
 // covers the one place in the app that needed instant effect.
-export async function createSession(env, user, { remember = false, userAgent = '', employeeId = null } = {}) {
+export async function createSession(env, user, { remember = false, userAgent = '', employeeId = null, isHr = false } = {}) {
   const token = randomToken(32);
   const ms = remember ? REMEMBER_SESSION_DAYS * 24 * 3600 * 1000 : SHORT_SESSION_HOURS * 3600 * 1000;
   const expiresAt = new Date(Date.now() + ms).toISOString();
@@ -32,6 +32,7 @@ export async function createSession(env, user, { remember = false, userAgent = '
     role: user.role,
     displayName: user.display_name,
     isOwner: !!user.is_owner,
+    isHr: !!isHr,
     active: !!user.active,
     employeeId,
     userAgent: String(userAgent).slice(0, 200),
@@ -125,6 +126,7 @@ export async function requireAuth(c, next) {
     displayName: session.displayName,
     employeeId: session.employeeId ?? null,
     isOwner: !!session.isOwner,
+    isHr: !!session.isHr,
     token,
   });
   await next();
@@ -136,6 +138,32 @@ export function requireRole(...roles) {
     if (!user || !roles.includes(user.role)) return jsonError(c, 403, 'غير مصرح لهذا الدور', 'FORBIDDEN_ROLE');
     await next();
   };
+}
+
+// حساب HR منفصل تمامًا عن قائد الفريق (المبيعات): نفس role='team_leader' في
+// قاعدة البيانات (لتجنّب تعديل CHECK constraint على العمود، وهو ممنوع)، لكن
+// مفصول عمليًا عبر علم isHr المأخوذ من جدول user_role_flags وقت تسجيل
+// الدخول. هذا الحارس يفتح مسارات HR (الإجازات، التقييم، المخالفات، التدريب،
+// المستندات، المزايا، الإعلانات، وملفات HR للموظفين) لحساب HR فقط — قائد
+// الفريق العادي (المبيعات) لم يعد له وصول لها، وحساب المالك (isOwner) يبقى
+// مستثنى لأنه يملك رؤية كاملة على أي حال.
+export function requireHR(c, next) {
+  const user = c.get('user');
+  if (!user || user.role !== 'team_leader' || (!user.isHr && !user.isOwner)) {
+    return jsonError(c, 403, 'هذا الإجراء مخصص لحساب الموارد البشرية', 'FORBIDDEN_HR_ONLY');
+  }
+  return next();
+}
+
+// عكس requireHR: مسارات المبيعات/CRM (العملاء، التوزيع، المبيعات، الشكاوى،
+// مركز التحكم، التحليلات، التقارير، الإعدادات...) مفتوحة لقائد الفريق
+// الفعلي فقط، ومحجوبة عن حساب HR تحديدًا. حساب المالك يبقى مستثنى أيضًا.
+export function requireSalesLead(c, next) {
+  const user = c.get('user');
+  if (!user || user.role !== 'team_leader' || (user.isHr && !user.isOwner)) {
+    return jsonError(c, 403, 'هذا الإجراء مخصص لقائد الفريق', 'FORBIDDEN_SALES_LEAD_ONLY');
+  }
+  return next();
 }
 
 /** Lightweight CSRF defense-in-depth for a same-origin JSON API behind SameSite=Lax cookies. */
