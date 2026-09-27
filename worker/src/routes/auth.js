@@ -29,12 +29,14 @@ const EMPLOYEES_PUBLIC_CACHE_KEY = 'cache:employees_public';
 const EMPLOYEES_PUBLIC_CACHE_TTL_MS = 60 * 1000;
 
 authRoutes.get('/employees-public', async (c) => {
-  // Outside the shift, employee accounts are blocked from doing anything
-  // anyway (requireAuth's OUTSIDE_WORK_HOURS gate) — so there is no reason
-  // to even show their names on the login picker, and every reason not to:
-  // it makes the closure visible before anyone wastes a password attempt,
-  // and it skips D1/cache entirely (checked before any of that below).
-  const gate = getShiftGate({ wide: false });
+  // Uses the WIDE (9am-8pm) window, same as check-in/check-out and
+  // /auth/me in requireAuth — an employee whose session already expired
+  // between 6 and 8pm still needs to be able to log back in for the one
+  // thing they're allowed to do that late: tap "check out". Narrowing this
+  // to the plain 10-6 shift would show "النظام مغلق" and block them from
+  // ever reaching the login form at all, even though the attendance
+  // endpoints themselves already accept a checkout until 8pm.
+  const gate = getShiftGate({ wide: true });
   if (!gate.open) {
     return c.json({ employees: [], closed: true, shiftText: gate.shiftText, opensInText: gate.opensInText, isOffDay: !!gate.isOffDay });
   }

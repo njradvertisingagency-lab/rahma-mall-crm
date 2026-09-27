@@ -34,8 +34,16 @@ attendanceRoutes.post('/check-in', async (c) => {
 attendanceRoutes.post('/check-out', async (c) => {
   const user = c.get('user');
   if (user.isOwner) return jsonError(c, 403, 'حساب المالك لا يسجل حضورًا', 'FORBIDDEN_OWNER_ATTENDANCE');
-  const result = await recordCheckOut(c.env, user);
-  if (result.error) return jsonError(c, 409, result.message, result.error);
+  const body = await c.req.json().catch(() => ({}));
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+  const result = await recordCheckOut(c.env, user, { reason });
+  if (result.error) {
+    // انصراف مبكر بلا سبب — طلب صاحب الشركة صراحةً: أي انصراف قبل نهاية
+    // الشيفت لازم يترفق بسبب يوصل له وللـHR ولقائد الفريق، فيترفض هنا بـ400
+    // (خطأ إدخال، مش تعارض حالة زي "already checked out" اللي بترجع 409).
+    const status = result.error === 'REASON_REQUIRED' ? 400 : 409;
+    return jsonError(c, status, result.message, result.error);
+  }
   return c.json(result);
 });
 
