@@ -279,7 +279,12 @@ async function api(path, opts) {
   const contentType = res.headers.get('content-type') || '';
   const data = contentType.includes('application/json') ? await res.json().catch(() => ({})) : await res.text();
   if (res.status === 403 && data && data.error && data.error.code === 'OUTSIDE_WORK_HOURS') {
-    showShiftClosedScreen(data.error);
+    // نداءات الخلفية الصامتة (إشعارات/دردشة غير مقروءة/نبضة تواجد) بتتنفّذ
+    // تلقائيًا مع كل فتح للتطبيق ومُلفوفة أصلًا بـ try/catch بتتجاهل أي خطأ
+    // منها بصمت — فمفيش أي داعي (ولا صح) إن فشلها يمسح الشاشة كلها بشاشة
+    // "النظام مغلق" الكاملة. الشاشة الكاملة دي تفضل فقط لما يكون طلب تحميل
+    // محتوى صفحة فعلية هو اللي اتمنع (opts.background غير مُمرَّرة).
+    if (!opts.background) showShiftClosedScreen(data.error);
     throw new Error(data.error.message || 'النظام مغلق حاليًا');
   }
   if (!res.ok) {
@@ -515,7 +520,7 @@ App.on('rt:MOTIVATION_MILESTONE', (p) => {
 async function refreshNotifications() {
   if (!App.state.user) return;
   try {
-    const data = await api('/notifications');
+    const data = await api('/notifications', { background: true });
     App.state.notifications = data.notifications;
     App.state.unreadCount = data.unreadCount;
     App.emit('notifications-updated');
@@ -526,7 +531,7 @@ App.refreshNotifications = refreshNotifications;
 async function refreshChatUnread() {
   if (!App.state.user) return;
   try {
-    const data = await api('/chat/unread-count');
+    const data = await api('/chat/unread-count', { background: true });
     App.state.chatUnread = data.unread;
     App.emit('chat-unread-updated');
   } catch {}
@@ -1012,7 +1017,7 @@ async function sendPresenceHeartbeatIfActive() {
   if (!App.state.user || !App.state.user.employeeId) return; // فقط الموظفون لديهم صف حضور — قائد الفريق ليس له
   if (document.visibilityState !== 'visible') return;
   if (Date.now() - lastUserActivityAt > 2 * 60 * 1000) return; // خامل فعليًا — نترك الخادم يتكفّل بذلك تلقائيًا
-  try { await api('/presence/heartbeat', { method: 'POST' }); } catch {}
+  try { await api('/presence/heartbeat', { method: 'POST', background: true }); } catch {}
 }
 App.startPresenceHeartbeat = function () {
   if (presenceHeartbeatStarted) return;
@@ -1215,15 +1220,29 @@ async function openAttendanceModal() {
       el('div', { style: 'font-weight:700;margin-bottom:6px' }, ['تسجيل انصراف مبكر']),
       el('div', { class: 'muted' }, [`لسه الدوام ما خلصش (حتى ${a.shiftEndText}) — متأكد إنك عاوز تسجّل انصراف دلوقتي؟`]),
     ]));
-    const confirmBtn = el('button', { class: 'btn', style: 'background:var(--danger);color:#fff;border:none;font-weight:800', onclick: () => doCheckout(confirmBtn) }, ['تأكيد الانصراف المبكر']);
+    // سبب الانصراف المبكر مطلوب — هيوصل تلقائيًا لأستاذ هاني والـHR وقائد
+    // الفريق (طلب صاحب الشركة صراحةً)، فمفيش تسجيل انصراف مبكر من غيره.
+    const reasonBox = el('textarea', { rows: 3, placeholder: 'اكتب سبب الانصراف المبكر هنا (مطلوب)…', style: 'width:100%' });
+    body.appendChild(el('div', { class: 'field', style: 'margin-top:10px;text-align:right' }, [
+      el('label', {}, ['سبب الانصراف المبكر']),
+      reasonBox,
+    ]));
+    const confirmBtn = el('button', { class: 'btn', style: 'background:var(--danger);color:#fff;border:none;font-weight:800', onclick: () => doCheckout(confirmBtn, reasonBox.value.trim()) }, ['تأكيد الانصراف المبكر']);
     footer.appendChild(confirmBtn);
     footer.appendChild(el('button', { class: 'btn btn-outline', onclick: () => render() }, ['رجوع']));
   }
 
-  async function doCheckout(btn) {
+  async function doCheckout(btn, reason) {
+    // "reason" being passed at all (even as an empty string) means this came
+    // from the early-checkout confirmation dialog, where it's required —
+    // the plain on-time checkout button never passes a second argument.
+    if (arguments.length > 1 && !reason) {
+      toast('برجاء كتابة سبب الانصراف المبكر', 'error');
+      return;
+    }
     if (btn) btn.disabled = true;
     try {
-      await api('/attendance/check-out', { method: 'POST' });
+      await api('/attendance/check-out', { method: 'POST', body: reason ? { reason } : {} });
       await showTransientSuccess('✅ تم تسجيل الانصراف بنجاح');
       await render();
     } catch (e) {
