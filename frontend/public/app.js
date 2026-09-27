@@ -298,11 +298,30 @@ async function api(path, opts) {
   return data;
 }
 
-// النظام مغلق تمامًا خارج مواعيد العمل لغير التيم ليدر والمالك (يوفّر استهلاك
-// قاعدة البيانات). نعرض شاشة كاملة بدل أي محتوى — لا نحاول تحميل شيء آخر —
-// ونعيد تحميل الصفحة تلقائيًا كل دقيقة حتى تُفتح مع بداية الشيفت من تلقاء نفسها.
+// النظام مغلق خارج مواعيد العمل لغير التيم ليدر والمالك (يوفّر استهلاك قاعدة
+// البيانات). الأصل كان بيمسح #app بالكامل — الشريط الجانبي والعلوي والمحتوى
+// مع بعض — لكن ده كان معناه إن أي طلب بيانات عادي لصفحة (مثل إحصائيات
+// الداشبورد) يفشل بعد الساعة 6 فيقفل الشاشة كلها، بما فيها زر "البصمة" في
+// الشريط العلوي نفسه — رغم إن الانصراف لسه مسموح فعليًا لحد 8 مساءً. الحل:
+// لو القالب العام (renderShell) اتعرض بالفعل ومنطقة المحتوى (activeContentEl)
+// موجودة، امسح منطقة المحتوى بس واترك الشريط العلوي/الجانبي شغالين — الموظف
+// يقدر يضغط "البصمة" عادي حتى لو محتوى الصفحة نفسها مقفول. الشاشة الكاملة
+// القديمة (بإعادة تحميل تلقائية كل دقيقة) تفضل موجودة كحل احتياطي فقط لو
+// حصل الرفض قبل ما أي قالب يتعرض أصلًا (مثلاً فشل /auth/me أثناء الإقلاع).
+let activeContentEl = null;
 let shiftClosedShown = false;
 function showShiftClosedScreen(err) {
+  if (activeContentEl && document.contains(activeContentEl)) {
+    activeContentEl.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:60px 24px;text-align:center;direction:rtl;font-family:inherit;';
+    wrap.innerHTML =
+      '<div style="font-size:44px;margin-bottom:12px">🔒</div>' +
+      '<div style="font-size:18px;font-weight:700;margin-bottom:8px">هذه الصفحة غير متاحة الآن</div>' +
+      '<div style="color:var(--muted,#666);line-height:1.8;font-size:14px;max-width:420px;margin:0 auto">' + (err.message || '') + '</div>';
+    activeContentEl.appendChild(wrap);
+    return;
+  }
   if (shiftClosedShown) return;
   shiftClosedShown = true;
   const appEl = document.getElementById('app');
@@ -616,6 +635,10 @@ async function renderRoute() {
   }
   if (!App.state.user) {
     teardownPreviousRender();
+    // مفيش قالب عام (شريط علوي/جانبي) في شاشة تسجيل الدخول — أي رفض
+    // OUTSIDE_WORK_HOURS هنا (مثلاً من /auth/employees-public) يرجع للشاشة
+    // الكاملة الاحتياطية بدل منطقة محتوى مش موجودة أصلًا.
+    activeContentEl = null;
     if (location.hash !== '#/login') {
       location.hash = '#/login';
       return;
@@ -639,6 +662,11 @@ async function renderRoute() {
   currentShellCleanup = shell.cleanup || null;
   root.appendChild(shell.root);
   const content = shell.content;
+  // القالب العام (الشريط العلوي بزر "البصمة" والشريط الجانبي) اتعرض بالفعل —
+  // من هنا فصاعدًا أي رفض OUTSIDE_WORK_HOURS من تحميل بيانات الصفحة يُعرض
+  // داخل منطقة المحتوى فقط (انظر showShiftClosedScreen)، ويفضل زر البصمة
+  // شغالًا حتى لو محتوى الصفحة نفسها مقفول خارج ساعات العمل.
+  activeContentEl = content;
   content.innerHTML = '<div class="boot-loader" style="height:200px"><div class="spinner"></div></div>';
   try {
     let view;
