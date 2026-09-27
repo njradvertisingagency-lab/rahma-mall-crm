@@ -92,10 +92,25 @@ export async function requireAuth(c, next) {
   //
   // Refused here, before any query runs, so a closed system costs nothing at
   // all against the daily database quota. Check-in/check-out get a wider
-  // window so arriving a few minutes early is still recordable.
+  // window so arriving a few minutes early — or checking out a couple of
+  // hours late — is still recordable.
+  //
+  // /auth/me and /auth/logout MUST share that same wide window: the SPA
+  // calls /auth/me on every single page load/reload (app.js's boot()) to
+  // check "am I logged in" before anything else, and app.js treats an
+  // OUTSIDE_WORK_HOURS response from ANY call — including this bootstrap
+  // one — as a hard, full-screen "النظام مغلق" lock with no way out (see
+  // showShiftClosedScreen). Before this fix, an employee simply reopening
+  // or refreshing the app after 6pm (even with a perfectly valid session)
+  // hit that lock on /auth/me BEFORE ever seeing the attendance button —
+  // so the wide check-in/check-out window on /api/attendance/* alone never
+  // actually helped anyone, because they could never reach it. Real
+  // incident: employees tried to check out around 6:30pm and got a
+  // "the system isn't working" screen.
   if (session.role === 'employee' && !session.isOwner) {
     const isAttendance = c.req.path.startsWith('/api/attendance');
-    const gate = getShiftGate({ wide: isAttendance });
+    const isSessionSelf = c.req.path === '/api/auth/me' || c.req.path === '/api/auth/logout';
+    const gate = getShiftGate({ wide: isAttendance || isSessionSelf });
     if (!gate.open) {
       return c.json(
         {

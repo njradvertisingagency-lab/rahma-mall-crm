@@ -168,7 +168,7 @@ export async function recordCheckIn(env, user) {
   return { checkedInAt: now, isLate, lateMinutes, penalty };
 }
 
-export async function recordCheckOut(env, user) {
+export async function recordCheckOut(env, user, { reason = '' } = {}) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
   const existing = await asGet(env, key);
@@ -179,11 +179,46 @@ export async function recordCheckOut(env, user) {
     return { error: 'ALREADY_CHECKED_OUT', message: 'تم تسجيل انصرافك بالفعل اليوم' };
   }
 
+  // انصراف قبل نهاية الشيفت الفعلية (المُعدّة في الإعدادات) — طلب صاحب
+  // الشركة صراحةً: أي انصراف مبكر لحساب موظف (مش قائد فريق/HR/المالك) لازم
+  // يترفق بسبب مكتوب، ويوصل السبب ده لأستاذ هاني وللـHR ولقائد الفريق —
+  // نفس مجموعة الحسابات (role='team_leader') اللي بتستقبل تنبيه الحضور
+  // المتأخر أصلًا في recordCheckIn تحت.
+  const isEarly = !status.isHolidayToday && status.minutesSinceMidnight < status.endMin;
+  if (user.role === 'employee' && isEarly && !reason) {
+    return { error: 'REASON_REQUIRED', message: 'برجاء كتابة سبب الانصراف المبكر' };
+  }
+
   const now = nowIso();
-  await asPut(env, key, { ...existing, checkOutAt: now, updatedAt: now });
+  await asPut(env, key, { ...existing, checkOutAt: now, earlyCheckoutReason: isEarly ? reason || null : null, updatedAt: now });
   await broadcast(env, 'ATTENDANCE_CHECKED_OUT', { userId: user.id, checkedOutAt: now }, { scope: 'role', role: 'team_leader' });
-  await safeLog(env.DB, { actor: user, action: 'ATTENDANCE_CHECK_OUT', entityType: 'user', entityId: String(user.id) });
-  return { checkedOutAt: now };
+  await safeLog(env.DB, { actor: user, action: 'ATTENDANCE_CHECK_OUT', entityType: 'user', entityId: String(user.id), metadata: isEarly ? { early: true, reason } : undefined });
+
+  if (isEarly && reason) {
+    const label = user.displayName || user.username;
+    const message = `${label} سجّل انصرافًا مبكرًا اليوم (قبل ${formatHourAr(status.settings.endHour, status.settings.endMinute)}) — السبب: ${reason}`;
+    let leaders = [];
+    try {
+      leaders = (await env.DB.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all()).results;
+    } catch (err) {
+      console.error('attendance: could not load team_leader accounts to notify about early checkout (best-effort, non-fatal)', err);
+    }
+    for (const tl of leaders) {
+      await safeNotify(env.DB, {
+        userId: tl.id,
+        type: 'EARLY_CHECKOUT',
+        title: '🚪 انصراف مبكر',
+        message,
+        entityType: 'user',
+        entityId: String(user.id),
+      });
+    }
+    if (leaders.length > 0) {
+      await broadcast(env, 'EARLY_CHECKOUT', { userId: user.id, reason }, { scope: 'role', role: 'team_leader' });
+    }
+  }
+
+  return { checkedOutAt: now, isEarly };
 }
 
 /** Fewest late check-ins this month for a user — used by lib/reclaim.js's "best teammate" ranking. */
