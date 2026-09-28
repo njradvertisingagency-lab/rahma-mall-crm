@@ -320,6 +320,32 @@ table.data-table tr:hover td { background: var(--surface-2); }
 .badge-on_break { background: var(--gray-soft); color: var(--gray); }
 .badge-unavailable { background: var(--danger-soft); color: var(--danger); }
 
+/* ---------- شبكة أمان عامة لأي حقل خام ---------- */
+/* كتير من صناديق الإدخال السريعة في الكود (زي صندوق كتابة رسالة الدردشة،
+   وعشرات النماذج المنبثقة في أنحاء الموقع) بتُنشأ كـ <input>/<textarea> خام
+   من غير كلاس `field` اللي بيدّيها لون خلفية/نص صريح تحت. من غير القاعدة دي،
+   الحقل ده بيعتمد بالكامل على تنسيق المتصفح الافتراضي: الخلفية بتفضل بيضاء
+   دايمًا (background مش خاصية تتوارث، والمتصفح مش بيطبّق تلقائيًا ألوان
+   الوضع الداكن على عناصر النموذج في كل الحالات)، بينما لون الخط بييجي أبيض
+   عن طريق الوراثة العادية من `body { color: var(--text) }` في الوضع الداكن —
+   فيطلع خط أبيض على خلفية بيضاء، بالظبط زي ما حصل فعليًا في حقل الدردشة.
+   القاعدة دي بتثبّت خلفية/لون/حدود كل حقل خام بشكل صريح بدل ما يفضل معتمد
+   على سلوك المتصفح، وهي أعمّ تحديدًا (element selector) من `.field input`
+   تحت فمفيش أي تعارض معاها. لم نلمس العرض (width) أو الحشو (padding) هنا
+   عمدًا حتى لا نغيّر شكل عشرات الحقول التانية اللي بتعتمد على حجمها
+   الافتراضي أو على أنماط inline مضبوطة لها بالفعل. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+textarea,
+select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--brand-2); }
+
 /* ---------- النماذج ---------- */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; }
