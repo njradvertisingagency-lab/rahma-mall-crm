@@ -4,7 +4,6 @@ import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from
 import { logActivity, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { recordLogin, recordLogout } from '../lib/presence.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
-import { getShiftGate } from '../lib/workhours.js';
 
 export const authRoutes = new Hono();
 
@@ -29,18 +28,11 @@ const EMPLOYEES_PUBLIC_CACHE_KEY = 'cache:employees_public';
 const EMPLOYEES_PUBLIC_CACHE_TTL_MS = 60 * 1000;
 
 authRoutes.get('/employees-public', async (c) => {
-  // Uses the WIDE (9am-8pm) window, same as check-in/check-out and
-  // /auth/me in requireAuth — an employee whose session already expired
-  // between 6 and 8pm still needs to be able to log back in for the one
-  // thing they're allowed to do that late: tap "check out". Narrowing this
-  // to the plain 10-6 shift would show "النظام مغلق" and block them from
-  // ever reaching the login form at all, even though the attendance
-  // endpoints themselves already accept a checkout until 8pm.
-  const gate = getShiftGate({ wide: true });
-  if (!gate.open) {
-    return c.json({ employees: [], closed: true, shiftText: gate.shiftText, opensInText: gate.opensInText, isOffDay: !!gate.isOffDay });
-  }
-
+  // كانت هنا بوابة زمنية (9ص-8م) بترجع القائمة فاضية "مغلق" برّه الوقت ده —
+  // اتشالت بالكامل: صاحب الشركة عايز النظام متاح لتسجيل الدخول في أي وقت،
+  // من غير أي قفل. القيد الوحيد المتبقي فعليًا هو منع تسجيل الحضور نفسه قبل
+  // معاد بداية الشيفت (انظر recordCheckIn) — ده إجراء منفصل تمامًا عن مجرد
+  // فتح الصفحة وتسجيل الدخول.
   const cached = await sessGet(c.env, EMPLOYEES_PUBLIC_CACHE_KEY).catch(() => null);
   if (cached && Date.now() - cached.cachedAt < EMPLOYEES_PUBLIC_CACHE_TTL_MS) {
     return c.json({ employees: cached.employees });

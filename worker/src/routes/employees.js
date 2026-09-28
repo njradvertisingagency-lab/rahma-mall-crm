@@ -239,7 +239,10 @@ employeeRoutes.get('/team-leader-performance', async (c) => {
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'DEAL_DONE_CREATED'`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action IN ('EMPLOYEE_CREATED','EMPLOYEE_USERNAME_CHANGED','EMPLOYEE_PASSWORD_RESET')`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE created_by = ?`).bind(tl.id).first(),
-      db.prepare(`SELECT COUNT(*) AS n FROM chat_messages WHERE sender_user_id = ?`).bind(tl.id).first(),
+      // مجموع النظام القديم (موظف <-> قائد الفريق) + النظام الجديد (دردشة شخص
+      // لشخص، dm_messages) — عشان الرقم يفضل مستمر تاريخيًا بدل ما يترجع للصفر
+      // فجأة لأي قائد فريق كان نشط قبل التحويل.
+      db.prepare(`SELECT (SELECT COUNT(*) FROM chat_messages WHERE sender_user_id = ?1) + (SELECT COUNT(*) FROM dm_messages WHERE sender_id = ?1) AS n`).bind(tl.id).first(),
       db.prepare(`SELECT created_at FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN' ORDER BY created_at DESC LIMIT 1`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN'`).bind(tl.id).first(),
     ]);

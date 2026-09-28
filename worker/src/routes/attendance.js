@@ -27,7 +27,11 @@ attendanceRoutes.post('/check-in', async (c) => {
   // which would otherwise create a phantom record nobody can ever see.
   if (user.isOwner) return jsonError(c, 403, 'حساب المالك لا يسجل حضورًا', 'FORBIDDEN_OWNER_ATTENDANCE');
   const result = await recordCheckIn(c.env, user);
-  if (result.error) return jsonError(c, 409, result.message, result.error);
+  if (result.error) {
+    // TOO_EARLY رفض توقيت (زي REASON_REQUIRED) مش تعارض حالة، فيرجع 400.
+    const status = result.error === 'TOO_EARLY' ? 400 : 409;
+    return jsonError(c, status, result.message, result.error);
+  }
   return c.json(result);
 });
 
