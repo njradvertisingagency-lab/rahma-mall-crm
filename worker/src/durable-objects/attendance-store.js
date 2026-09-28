@@ -45,6 +45,51 @@ export class AttendanceStore {
       await this.state.storage.delete(body.key);
       return Response.json({ ok: true });
     }
+    // /checkin و/checkout: الفحص (هل الحضور/الانصراف مسجّل بالفعل؟) والكتابة
+    // بيحصلوا هنا مع بعض جوه نفس استدعاء fetch() واحد للـ Durable Object،
+    // بدل ما يبقوا نداءين منفصلين (get من lib/attendance.js ثم قرار ثم put)
+    // زي ما كانوا قبل كده. الفرق مش شكلي: كل طلب وارد لنفس الـ Durable Object
+    // بيتنفّذ لحد ما يخلص بالكامل (بما فيه عمليات storage.get/put بتاعته) قبل
+    // ما يبدأ الطلب اللي بعده — الضمان المعروف بـ input/output gates. يعني
+    // لو موظف ضغط زرار الحضور مرتين بسرعة (دبل-كليك أو إعادة محاولة من نت
+    // بطيء)، الطلب التاني هيلاقي التسجيل اللي عمله الطلب الأول موجود بالفعل
+    // ويترفض بـ ok:false — بدل ما الاتنين يقروا "لسه مفيش تسجيل" في نفس
+    // اللحظة (زي ما كان يحصل لما القراءة والكتابة كانوا نداءين منفصلين من
+    // الـ Worker) ويتسجّلوا الاتنين، فيتبعت تنبيه تأخير/خصم مكرر بالغلط.
+    if (url.pathname === '/checkin') {
+      const { key, userId, workDate, isLate, lateMinutes, now } = body;
+      const existing = await this.state.storage.get(key);
+      if (existing?.checkInAt) {
+        return Response.json({ ok: false, record: existing });
+      }
+      const record = {
+        userId,
+        workDate,
+        checkInAt: now,
+        checkOutAt: existing?.checkOutAt || null,
+        isLate,
+        lateMinutes,
+        updatedAt: now,
+      };
+      await this.state.storage.put(key, record);
+      return Response.json({ ok: true, record });
+    }
+    if (url.pathname === '/checkout') {
+      const { key, now, isEarly, reason, reasonRequired } = body;
+      const existing = await this.state.storage.get(key);
+      if (!existing?.checkInAt) {
+        return Response.json({ ok: false, reason: 'NOT_CHECKED_IN' });
+      }
+      if (existing.checkOutAt) {
+        return Response.json({ ok: false, reason: 'ALREADY_CHECKED_OUT' });
+      }
+      if (reasonRequired) {
+        return Response.json({ ok: false, reason: 'REASON_REQUIRED' });
+      }
+      const record = { ...existing, checkOutAt: now, earlyCheckoutReason: isEarly ? (reason || null) : null, updatedAt: now };
+      await this.state.storage.put(key, record);
+      return Response.json({ ok: true, record });
+    }
     return new Response('غير موجود', { status: 404 });
   }
 }
