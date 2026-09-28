@@ -219,7 +219,13 @@ export async function computeBadges(db) {
   for (const emp of employees) {
     const [assignedRow, complaintsRow] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE assigned_employee_id = ? AND archived = 0`).bind(emp.id).first(),
-      db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE employee_id = ? AND created_at >= ?`).bind(emp.id, monthStart).first(),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM complaints
+           WHERE employee_id = ? AND created_at >= ? AND NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'complaint' AND sd.entity_id = complaints.id)`
+        )
+        .bind(emp.id, monthStart)
+        .first(),
     ]);
     if (assignedRow.n > 0 && complaintsRow.n === 0) zeroComplaints.push(emp);
   }

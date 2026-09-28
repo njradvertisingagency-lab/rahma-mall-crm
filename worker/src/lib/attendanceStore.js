@@ -34,3 +34,14 @@ export async function asList(env, prefix) {
 export async function asDelete(env, key) {
   await call(env, '/delete', { key });
 }
+
+// الفحص + الكتابة الذرّيّة لتسجيل حضور/انصراف — انظر التعليق فوق endpoint
+// /checkin و/checkout في durable-objects/attendance-store.js لسبب وجودهم
+// كعملية واحدة بدل get ثم put منفصلين.
+export async function asCheckIn(env, key, payload) {
+  return call(env, '/checkin', { key, ...payload });
+}
+
+export async function asCheckOut(env, key, payload) {
+  return call(env, '/checkout', { key, ...payload });
+}

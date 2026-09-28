@@ -16,7 +16,7 @@
 // side-effect hiccupped" philosophy as broadcast() in lib/db.js.
 import { nowIso, createNotification, broadcast, logActivity } from './db.js';
 import { getWorkHoursStatus } from './workhours.js';
-import { asGet, asPut, asList } from './attendanceStore.js';
+import { asGet, asPut, asList, asCheckIn, asCheckOut } from './attendanceStore.js';
 
 export const MONTHLY_LATE_ALLOWANCE = 3;
 
@@ -99,10 +99,6 @@ export async function getMyAttendanceStatus(env, userId) {
 export async function recordCheckIn(env, user) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
-  const existing = await asGet(env, key);
-  if (existing?.checkInAt) {
-    return { error: 'ALREADY_CHECKED_IN', message: 'تم تسجيل حضورك بالفعل اليوم' };
-  }
 
   // ما ينفعش حد يسجّل حضور قبل معاد بداية الشيفت خالص (طلب صريح من صاحب
   // الشركة) — ولو بدقيقة واحدة. هذا عكس تمامًا لسياسة الانصراف (مفتوح تمامًا
@@ -119,15 +115,16 @@ export async function recordCheckIn(env, user) {
   const isLate = !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
   const lateMinutes = isLate ? status.minutesSinceMidnight - status.startMin : 0;
 
-  await asPut(env, key, {
-    userId: user.id,
-    workDate: status.dateStr,
-    checkInAt: now,
-    checkOutAt: existing?.checkOutAt || null,
-    isLate,
-    lateMinutes,
-    updatedAt: now,
-  });
+  // الفحص ("هل مسجّل بالفعل؟") والكتابة بيحصلوا معًا ذرّيًّا جوه الـ Durable
+  // Object نفسه (asCheckIn) بدل قراءة (asGet) هنا ثم كتابة (asPut) منفصلة —
+  // الشكل القديم كان فيه سباق حقيقي: دبل-كليك أو إعادة محاولة على نت بطيء
+  // يقدر يخلّي طلبين يقروا "لسه مفيش تسجيل" في نفس اللحظة قبل ما أي واحد
+  // فيهم يكتب، فيتسجّل تنبيه/خصم التأخير مرتين لنفس الحضور. انظر التعليق في
+  // durable-objects/attendance-store.js لتفاصيل الضمان.
+  const result = await asCheckIn(env, key, { userId: user.id, workDate: status.dateStr, isLate, lateMinutes, now });
+  if (!result.ok) {
+    return { error: 'ALREADY_CHECKED_IN', message: 'تم تسجيل حضورك بالفعل اليوم' };
+  }
 
   await broadcast(env, 'ATTENDANCE_CHECKED_IN', { userId: user.id, checkedInAt: now, isLate }, { scope: 'role', role: 'team_leader' });
   await safeLog(env.DB, { actor: user, action: 'ATTENDANCE_CHECK_IN', entityType: 'user', entityId: String(user.id), metadata: { isLate, lateMinutes } });
@@ -182,26 +179,28 @@ export async function recordCheckIn(env, user) {
 export async function recordCheckOut(env, user, { reason = '' } = {}) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
-  const existing = await asGet(env, key);
-  if (!existing?.checkInAt) {
-    return { error: 'NOT_CHECKED_IN', message: 'لم تسجّل حضورك اليوم بعد' };
-  }
-  if (existing.checkOutAt) {
-    return { error: 'ALREADY_CHECKED_OUT', message: 'تم تسجيل انصرافك بالفعل اليوم' };
-  }
 
   // انصراف قبل نهاية الشيفت الفعلية (المُعدّة في الإعدادات) — طلب صاحب
   // الشركة صراحةً: أي انصراف مبكر لحساب موظف (مش قائد فريق/HR/المالك) لازم
   // يترفق بسبب مكتوب، ويوصل السبب ده لأستاذ هاني وللـHR ولقائد الفريق —
   // نفس مجموعة الحسابات (role='team_leader') اللي بتستقبل تنبيه الحضور
-  // المتأخر أصلًا في recordCheckIn تحت.
+  // المتأخر أصلًا في recordCheckIn فوق.
   const isEarly = !status.isHolidayToday && status.minutesSinceMidnight < status.endMin;
-  if (user.role === 'employee' && isEarly && !reason) {
-    return { error: 'REASON_REQUIRED', message: 'برجاء كتابة سبب الانصراف المبكر' };
+  const reasonRequired = user.role === 'employee' && isEarly && !reason;
+  const now = nowIso();
+
+  // نفس مبدأ recordCheckIn: كل الفحوصات (مسجّل حضور؟ مسجّل انصراف بالفعل؟
+  // محتاج سبب؟) والكتابة بيحصلوا معًا ذرّيًّا جوه الـ Durable Object نفسه
+  // (asCheckOut) بدل قراءة وكتابة منفصلتين من هنا — يمنع نفس سباق الدبل-كليك
+  // اللي كان يقدر يبعت تنبيه انصراف مبكر مكرر.
+  const result = await asCheckOut(env, key, { now, isEarly, reason: reason || null, reasonRequired });
+  if (!result.ok) {
+    if (result.reason === 'NOT_CHECKED_IN') return { error: 'NOT_CHECKED_IN', message: 'لم تسجّل حضورك اليوم بعد' };
+    if (result.reason === 'ALREADY_CHECKED_OUT') return { error: 'ALREADY_CHECKED_OUT', message: 'تم تسجيل انصرافك بالفعل اليوم' };
+    if (result.reason === 'REASON_REQUIRED') return { error: 'REASON_REQUIRED', message: 'برجاء كتابة سبب الانصراف المبكر' };
+    return { error: 'UNKNOWN', message: 'حدث خطأ غير متوقع، حاول مرة أخرى' };
   }
 
-  const now = nowIso();
-  await asPut(env, key, { ...existing, checkOutAt: now, earlyCheckoutReason: isEarly ? reason || null : null, updatedAt: now });
   await broadcast(env, 'ATTENDANCE_CHECKED_OUT', { userId: user.id, checkedOutAt: now }, { scope: 'role', role: 'team_leader' });
   await safeLog(env.DB, { actor: user, action: 'ATTENDANCE_CHECK_OUT', entityType: 'user', entityId: String(user.id), metadata: isEarly ? { early: true, reason } : undefined });
 
