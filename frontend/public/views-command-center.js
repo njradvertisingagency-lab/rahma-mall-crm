@@ -185,7 +185,12 @@
 
     await load();
     const off = App.onRealtime(() => load(), 5000);
-    container.cleanup = () => { off(); clearTimeout(reloadTimer); };
+    // ملحوظة: كان هنا استدعاء `clearTimeout(reloadTimer)` لمتغيّر لم يُعرَّف
+    // أصلًا في هذا الملف (بقايا كود قديم) — كان يرمي ReferenceError في كل مرة
+    // يُغادر فيها المستخدم صفحة مركز التحكم (يُلتقط ويُتجاهل بصمت، فلا يكسر
+    // الواجهة، لكنه يُسجَّل كخطأ في الكونسول بلا داعٍ). إلغاء الاشتراك الفعلي
+    // في التحديث اللحظي يتم بالكامل عبر `off()` وحده.
+    container.cleanup = () => { off(); };
     return container;
   }, { roles: ['team_leader'] });
 })();
