@@ -104,6 +104,17 @@ export async function recordCheckIn(env, user) {
     return { error: 'ALREADY_CHECKED_IN', message: 'تم تسجيل حضورك بالفعل اليوم' };
   }
 
+  // ما ينفعش حد يسجّل حضور قبل معاد بداية الشيفت خالص (طلب صريح من صاحب
+  // الشركة) — ولو بدقيقة واحدة. هذا عكس تمامًا لسياسة الانصراف (مفتوح تمامًا
+  // بعد نهاية الشيفت، بلا أي قفل) — الصبح ممنوع الحضور بدري، والمساء مسموح
+  // الانصراف في أي وقت. أيام العطلة مستثناة أصلًا فمفيش شيفت يُمنع الوصول له.
+  if (!status.isHolidayToday && status.minutesSinceMidnight < status.startMin) {
+    return {
+      error: 'TOO_EARLY',
+      message: `لسه معاد الحضور ما جاش — الدوام يبدأ الساعة ${formatHourAr(status.settings.startHour, status.settings.startMinute)}`,
+    };
+  }
+
   const now = nowIso();
   const isLate = !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
   const lateMinutes = isLate ? status.minutesSinceMidnight - status.startMin : 0;

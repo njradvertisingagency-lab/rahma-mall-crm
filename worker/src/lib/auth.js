@@ -2,7 +2,6 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomToken } from './passwords.js';
 import { nowIso, jsonError, backgroundWrite } from './db.js';
 import { sessGet, sessPut, sessDelete } from './sessionStore.js';
-import { getShiftGate } from './workhours.js';
 
 export const SESSION_COOKIE = 'rm_session';
 const SHORT_SESSION_HOURS = 12;
@@ -87,48 +86,13 @@ export async function requireAuth(c, next) {
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
-  // Outside the shift the system is closed to employees. The Team Leader and
-  // the owner account are exempt — they run the business at any hour.
-  //
-  // Refused here, before any query runs, so a closed system costs nothing at
-  // all against the daily database quota. Check-in/check-out get a wider
-  // window so arriving a few minutes early — or checking out a couple of
-  // hours late — is still recordable.
-  //
-  // /auth/me and /auth/logout MUST share that same wide window: the SPA
-  // calls /auth/me on every single page load/reload (app.js's boot()) to
-  // check "am I logged in" before anything else, and app.js treats an
-  // OUTSIDE_WORK_HOURS response from ANY call — including this bootstrap
-  // one — as a hard, full-screen "النظام مغلق" lock with no way out (see
-  // showShiftClosedScreen). Before this fix, an employee simply reopening
-  // or refreshing the app after 6pm (even with a perfectly valid session)
-  // hit that lock on /auth/me BEFORE ever seeing the attendance button —
-  // so the wide check-in/check-out window on /api/attendance/* alone never
-  // actually helped anyone, because they could never reach it. Real
-  // incident: employees tried to check out around 6:30pm and got a
-  // "the system isn't working" screen.
-  if (session.role === 'employee' && !session.isOwner) {
-    const isAttendance = c.req.path.startsWith('/api/attendance');
-    const isSessionSelf = c.req.path === '/api/auth/me' || c.req.path === '/api/auth/logout';
-    const gate = getShiftGate({ wide: isAttendance || isSessionSelf });
-    if (!gate.open) {
-      return c.json(
-        {
-          error: {
-            message: gate.isOffDay
-              ? `النظام مغلق اليوم (${gate.weekdayAr}) — مواعيد العمل ${gate.shiftText}. يفتح بعد ${gate.opensInText}.`
-              : `النظام خارج مواعيد العمل الآن — مواعيد العمل ${gate.shiftText}. يفتح بعد ${gate.opensInText}.`,
-            code: 'OUTSIDE_WORK_HOURS',
-            shiftText: gate.shiftText,
-            opensInText: gate.opensInText,
-            minutesUntilOpen: gate.minutesUntilOpen,
-            isOffDay: !!gate.isOffDay,
-          },
-        },
-        403
-      );
-    }
-  }
+  // ملحوظة: كان هنا حارس "النظام مغلق خارج ساعات العمل" (10-6 لغير قائد
+  // الفريق/المالك) بيقفل كل الـ API لحساب الموظف بره الشيفت — اتشال بالكامل
+  // (وكذلك من /auth/employees-public) بناءً على طلب صريح من صاحب الشركة:
+  // الموظفين يحتاجوا يستخدموا الدردشة وباقي النظام في أي وقت، والانصراف
+  // بالذات ميتقفلش أبدًا. القيد الزمني الوحيد المتبقي هو منع الحضور نفسه قبل
+  // معاد بداية الشيفت (انظر recordCheckIn في lib/attendance.js) — إجراء محلي
+  // على نقطة تسجيل الحضور فقط، مش بوابة عامة على كل الطلبات.
 
   // Touching lastSeenAt is bookkeeping. It runs on EVERY authenticated
   // request, so if it could throw it would take the whole app down with it.
