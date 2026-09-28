@@ -20,8 +20,13 @@ function rowToAnnouncement(r) {
 // كل الموظفين وقائد الفريق يشوفوا كل الإعلانات — لوحة إعلانات داخلية واحدة.
 announcementRoutes.get('/', async (c) => {
   const db = c.env.DB;
+  // الإعلانات المحذوفة (soft delete — انظر migration 0021) مستبعدة دائمًا.
   const rows = await db
-    .prepare(`SELECT * FROM hr_announcements ORDER BY pinned DESC, created_at DESC LIMIT 100`)
+    .prepare(
+      `SELECT a.* FROM hr_announcements a
+       WHERE NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'announcement' AND sd.entity_id = a.id)
+       ORDER BY a.pinned DESC, a.created_at DESC LIMIT 100`
+    )
     .all();
   return c.json({ announcements: rows.results.map(rowToAnnouncement) });
 });
@@ -53,7 +58,10 @@ announcementRoutes.patch('/:id', requireHR, async (c) => {
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({}));
 
-  const row = await db.prepare(`SELECT * FROM hr_announcements WHERE id = ?`).bind(id).first();
+  const row = await db
+    .prepare(`SELECT a.* FROM hr_announcements a WHERE a.id = ? AND NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'announcement' AND sd.entity_id = a.id)`)
+    .bind(id)
+    .first();
   if (!row) return jsonError(c, 404, 'الإعلان غير موجود', 'NOT_FOUND');
 
   const title = body.title !== undefined ? String(body.title).trim() : row.title;
@@ -67,14 +75,17 @@ announcementRoutes.patch('/:id', requireHR, async (c) => {
   return c.json({ ok: true });
 });
 
-// حذف إعلان — قائد الفريق فقط.
+// حذف "منطقي" (soft delete) لا فعلي — انظر migration 0021.
 announcementRoutes.delete('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const row = await db.prepare(`SELECT * FROM hr_announcements WHERE id = ?`).bind(id).first();
   if (!row) return jsonError(c, 404, 'الإعلان غير موجود', 'NOT_FOUND');
-  await db.prepare(`DELETE FROM hr_announcements WHERE id = ?`).bind(id).run();
+  await db
+    .prepare(`INSERT INTO soft_deletes (entity_type, entity_id, deleted_at, deleted_by) VALUES ('announcement', ?, ?, ?) ON CONFLICT(entity_type, entity_id) DO NOTHING`)
+    .bind(id, nowIso(), user.id)
+    .run();
   await logActivity(db, { actor: user, action: 'ANNOUNCEMENT_DELETED', entityType: 'announcement', entityId: String(id), metadata: { title: row.title } });
   return c.json({ ok: true });
 });

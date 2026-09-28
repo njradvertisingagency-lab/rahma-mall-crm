@@ -36,7 +36,9 @@ complaintRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const q = c.req.query();
-  const conds = [];
+  // الشكاوى المحذوفة (soft delete عبر جدول soft_deletes — انظر تعليق
+  // migration 0021) بتتستبعد من القائمة العادية دائمًا.
+  const conds = ["NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'complaint' AND sd.entity_id = co.id)"];
   const binds = [];
   if (user.role === 'employee') {
     conds.push('co.employee_id = ?');
@@ -85,7 +87,13 @@ complaintRoutes.get('/stats', requireSalesLead, async (c) => {
   for (const emp of employees.results) {
     const [assignedRow, complaintsRow] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE assigned_employee_id = ? AND archived = 0`).bind(emp.id).first(),
-      db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE employee_id = ?`).bind(emp.id).first(),
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM complaints
+           WHERE employee_id = ? AND NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'complaint' AND sd.entity_id = complaints.id)`
+        )
+        .bind(emp.id)
+        .first(),
     ]);
     stats.push({
       employeeId: emp.id,
@@ -99,12 +107,20 @@ complaintRoutes.get('/stats', requireSalesLead, async (c) => {
   return c.json({ stats });
 });
 
+// حذف "منطقي" (soft delete) لا فعلي — الشركة تمنع حذف البيانات نهائيًا.
+// الصف نفسه يبقى كما هو في جدول complaints، ويُستبعد فقط من كل قوائم/عدّادات
+// الشكاوى العادية عبر تسجيله في جدول soft_deletes (انظر migration 0021).
+// استرجاعه لاحقًا مجرد حذف صفه من soft_deletes، لا إعادة إدخال بيانات.
 complaintRoutes.delete('/:id', requireSalesLead, async (c) => {
   const db = c.env.DB;
+  const user = c.get('user');
   const id = Number(c.req.param('id'));
   const existing = await db.prepare(`SELECT id FROM complaints WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'الشكوى غير موجودة', 'NOT_FOUND');
-  await db.prepare(`DELETE FROM complaints WHERE id = ?`).bind(id).run();
-  await logActivity(c.env.DB, { actor: c.get('user'), action: 'COMPLAINT_DELETED', entityType: 'complaint', entityId: String(id) });
+  await db
+    .prepare(`INSERT INTO soft_deletes (entity_type, entity_id, deleted_at, deleted_by) VALUES ('complaint', ?, ?, ?) ON CONFLICT(entity_type, entity_id) DO NOTHING`)
+    .bind(id, nowIso(), user.id)
+    .run();
+  await logActivity(db, { actor: user, action: 'COMPLAINT_DELETED', entityType: 'complaint', entityId: String(id) });
   return c.json({ ok: true });
 });

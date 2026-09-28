@@ -28,7 +28,8 @@ function rowToDocument(r) {
 documentRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  const conds = [];
+  // المستندات المحذوفة (soft delete — انظر migration 0021) مستبعدة دائمًا.
+  const conds = ["NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'employee_document' AND sd.entity_id = d.id)"];
   const binds = [];
   if (user.role === 'employee') {
     conds.push('d.employee_id = ?');
@@ -94,7 +95,10 @@ documentRoutes.patch('/:id', requireHR, async (c) => {
   const id = Number(c.req.param('id'));
   const body = await c.req.json().catch(() => ({}));
 
-  const row = await db.prepare(`SELECT * FROM employee_documents WHERE id = ?`).bind(id).first();
+  const row = await db
+    .prepare(`SELECT d.* FROM employee_documents d WHERE d.id = ? AND NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'employee_document' AND sd.entity_id = d.id)`)
+    .bind(id)
+    .first();
   if (!row) return jsonError(c, 404, 'المستند غير موجود', 'NOT_FOUND');
 
   const title = body.title !== undefined ? String(body.title).trim() : row.title;
@@ -116,14 +120,19 @@ documentRoutes.patch('/:id', requireHR, async (c) => {
   return c.json({ ok: true });
 });
 
-// حذف مستند — قائد الفريق فقط.
+// حذف "منطقي" (soft delete) لا فعلي — عقود وهويات الموظفين بيانات حساسة
+// وممنوع فقدانها نهائيًا. الصف يبقى موجودًا في employee_documents ويُستبعد
+// فقط من القوائم (انظر migration 0021)، فيمكن استرجاعه لاحقًا عند الحاجة.
 documentRoutes.delete('/:id', requireHR, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const row = await db.prepare(`SELECT * FROM employee_documents WHERE id = ?`).bind(id).first();
   if (!row) return jsonError(c, 404, 'المستند غير موجود', 'NOT_FOUND');
-  await db.prepare(`DELETE FROM employee_documents WHERE id = ?`).bind(id).run();
+  await db
+    .prepare(`INSERT INTO soft_deletes (entity_type, entity_id, deleted_at, deleted_by) VALUES ('employee_document', ?, ?, ?) ON CONFLICT(entity_type, entity_id) DO NOTHING`)
+    .bind(id, nowIso(), user.id)
+    .run();
   await logActivity(db, { actor: user, action: 'DOCUMENT_DELETED', entityType: 'employee', entityId: String(row.employee_id), metadata: { documentId: id, title: row.title } });
   return c.json({ ok: true });
 });
