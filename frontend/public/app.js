@@ -766,11 +766,12 @@ const NAV_TL = [
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
   ['leaves', '🗓️', 'الإجازات والغياب'],
-  ['employees', '🧑‍💼', 'الموظفين'],
+  ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['complaints', '🚩', 'الشكاوى'],
   ['chat', '💬', 'الدردشة'],
   ['analytics', '📈', 'التحليلات'],
   ['leaderboard', '🏆', 'لوحة الصدارة'],
+  ['file-movements', '📂', 'حركة الملفات'],
   ['notifications', '🔔', 'الإشعارات'],
 ];
 
@@ -780,7 +781,7 @@ const NAV_TL = [
 // أساسي، بدون أي وصول لشغل المبيعات/CRM (العملاء، التوزيع، التحليلات...).
 const NAV_HR = [
   ['dashboard', '📊', 'لوحة التحكم'],
-  ['employees', '🧑‍💼', 'الموظفين'],
+  ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['leaves', '🗓️', 'الإجازات والغياب'],
   ['evaluations', '📝', 'الأداء والتقييم'],
   ['violations', '⚠️', 'المخالفات والإجراءات'],
@@ -789,6 +790,7 @@ const NAV_HR = [
   ['benefits', '💰', 'المزايا والمكافآت'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
   ['chat', '💬', 'الدردشة'],
+  ['file-movements', '📂', 'حركة الملفات'],
   ['notifications', '🔔', 'الإشعارات'],
 ];
 
@@ -805,7 +807,7 @@ const NAV_ADMIN = [
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
-  ['employees', '🧑‍💼', 'الموظفين'],
+  ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['leaves', '🗓️', 'الإجازات والغياب'],
   ['evaluations', '📝', 'الأداء والتقييم'],
   ['violations', '⚠️', 'المخالفات والإجراءات'],
@@ -813,6 +815,8 @@ const NAV_ADMIN = [
   ['documents', '📁', 'المستندات والعقود'],
   ['benefits', '💰', 'المزايا والمكافآت'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
+  ['accounting-files', '🗃️', 'الحسابات — الملفات'],
+  ['file-movements', '📂', 'حركة الملفات'],
   ['followups', '⏰', 'المتابعات'],
   ['calendar', '🗓️', 'تقويم المتابعات'],
   ['complaints', '🚩', 'الشكاوى'],
@@ -825,6 +829,20 @@ const NAV_ADMIN = [
   ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
+// موظفو الحسابات (department='accounting') — قائمة خاصة بقسم الحسابات فقط:
+// الداشبورد + ملفات العملاء + حركة الملفات + البصمة/الحضور + الإجازات
+// + الإشعارات + الملف الشخصي. لا يوجد وصول لأي شيء في المبيعات/CRM.
+const NAV_ACCOUNTING = [
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['accounting-files', '🗃️', 'ملفات العملاء'],
+  ['file-movements', '📂', 'حركة الملفات'],
+  ['leaves', '🗓️', 'إجازاتي'],
+  ['announcements', '📢', 'الإعلانات الداخلية'],
+  ['chat', '💬', 'الدردشة'],
+  ['notifications', '🔔', 'الإشعارات'],
+  ['profile', '🙍', 'الملف الشخصي'],
+];
+
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
@@ -892,7 +910,9 @@ function renderShell() {
   // الـ HR أعلى من قائد الفريق في الهرم: يشوف كل حاجة (مبيعات + HR)، فقائمته
   // بقت زي قائمة الأدمن بالظبط (بدون المظهر الذهبي المميز اللي يفضل لحساب
   // الأدمن/المالك فقط). قائد الفريق العادي لسه يشوف مبيعاته بس.
-  const nav = user.role === 'team_leader' ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL) : NAV_EMPLOYEE;
+  const nav = user.role === 'team_leader'
+    ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL)
+    : (user.department === 'accounting' ? NAV_ACCOUNTING : NAV_EMPLOYEE);
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 
