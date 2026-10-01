@@ -175,7 +175,19 @@ authRoutes.post('/login', async (c) => {
     }
   }
 
-  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId, isHr });
+  // القسم الوظيفي — حاليًا "customer_service" (الافتراضي) أو "accounting".
+  // مخزّن في جدول employee_department المنفصل (لتفادي ALTER TABLE الممنوع).
+  let department = 'customer_service';
+  if (employeeId) {
+    try {
+      const deptRow = await db.prepare(`SELECT department FROM employee_department WHERE employee_id = ?`).bind(employeeId).first();
+      if (deptRow) department = deptRow.department;
+    } catch (err) {
+      console.error('login: could not load department (non-fatal)', err);
+    }
+  }
+
+  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId, isHr, department });
   setSessionCookie(c, token, remember);
 
   await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent }).catch((err) =>
@@ -200,6 +212,7 @@ authRoutes.post('/login', async (c) => {
       avatarUrl,
       isOwner: !!user.is_owner,
       isHr,
+      department,
       mustChangePassword: !!user.must_change_password,
     },
   });
