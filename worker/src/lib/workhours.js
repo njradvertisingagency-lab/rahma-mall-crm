@@ -89,12 +89,20 @@ export function getCairoDayBoundsUtc(dateStr) {
   return { dayStartIso: new Date(dayStartUtcMs).toISOString(), dayEndIso: new Date(dayEndUtcMs).toISOString() };
 }
 
+// دقايق الفتح العام للنظام قبل بداية الشيفت الرسمي — طلب صريح من صاحب
+// الشركة: الموظف يقدر يستخدم النظام عادي (يشوف الداشبورد، يرد على الشات...)
+// من الساعة 9:30 (نص ساعة قبل الشيفت اللي بيبدأ 10)، لكن تسجيل الحضور نفسه
+// (البصمة) فاضل ممنوع قبل معاد الشيفت بالظبط (انظر recordCheckIn في
+// lib/attendance.js) — دي بوابتين مختلفتين تمامًا وبميعادين مختلفين عمدًا.
+const GENERAL_OPEN_BUFFER_MINUTES = 30;
+
 export async function getWorkHoursStatus(db) {
   const settings = await getWorkHoursSettings(db);
   const { dateStr, minutesSinceMidnight } = getCairoNow();
   const startMin = toMinutes(settings.startHour, settings.startMinute);
   const endMin = toMinutes(settings.endHour, settings.endMinute);
   const lateCutoff = startMin + settings.lateAfterMinutes;
+  const generalOpenMin = Math.max(0, startMin - GENERAL_OPEN_BUFFER_MINUTES);
   const holidayWeekdays = Array.isArray(settings.holidayWeekdays) ? settings.holidayWeekdays : DEFAULT_WORK_HOURS.holidayWeekdays;
   const isHolidayToday = holidayWeekdays.includes(getCairoWeekday());
   return {
@@ -104,11 +112,17 @@ export async function getWorkHoursStatus(db) {
     startMin,
     endMin,
     lateCutoff,
+    generalOpenMin,
     isHolidayToday,
     // A holiday is never "work hours", whatever the clock says — Thursday/
     // Friday (by default) count as a full day off for everyone.
     isWorkHoursNow: !isHolidayToday && minutesSinceMidnight >= startMin && minutesSinceMidnight < endMin,
     isPastLateCutoff: !isHolidayToday && minutesSinceMidnight >= lateCutoff,
+    // بوابة الاستخدام العام للنظام (requireAuth) — تفتح الساعة (بداية الشيفت
+    // - 30 دقيقة) ولا تقفل أبدًا مساءً (طلب صريح: الموظف يستخدم النظام في أي
+    // وقت بعد الفتح، والانصراف بالذات ميتقفلش خالص). في أيام العطلة النظام
+    // مفتوح طول اليوم أصلًا لعدم وجود شيفت يُقاس عليه.
+    isSystemOpenNow: isHolidayToday || minutesSinceMidnight >= generalOpenMin,
   };
 }
 

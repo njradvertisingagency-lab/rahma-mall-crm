@@ -20,6 +20,15 @@ import { asGet, asPut, asList, asCheckIn, asCheckOut } from './attendanceStore.j
 
 export const MONTHLY_LATE_ALLOWANCE = 3;
 
+// إقفال ثابت لتسجيل الحضور/الانصراف (البصمة) نفسها الساعة 8 مساءً — طلب صريح
+// من صاحب الشركة، ومنفصل تمامًا عن معاد نهاية الشيفت الرسمي (settings.endHour،
+// افتراضيًا 6م) اللي لسه بيُستخدم زي ما هو لحساب "انصراف مبكر" ومطالبة الموظف
+// بسبب مكتوب. يعني: الشيفت الرسمي بيخلص 6، لكن يقدر الموظف يسجّل حضور أو
+// انصراف (بسبب، لو قبل 6) لحد الساعة 8 بالظبط — بعدها البصمة نفسها بتتقفل
+// تمامًا لليوم دا لحد الحضور يبدأ تاني الساعة الشيفت. رقم ثابت عن قصد (مش من
+// الإعدادات) لأن صاحب الشركة حدده كرقم صريح مستقل عن شيفت العمل.
+const ATTENDANCE_CLOSE_MIN = 20 * 60;
+
 function monthOf(dateStr) {
   return dateStr.slice(0, 7);
 }
@@ -111,6 +120,12 @@ export async function recordCheckIn(env, user) {
     };
   }
 
+  // إقفال البصمة نفسها الساعة 8 مساءً (ثابت، مستقل عن نهاية الشيفت الرسمي —
+  // انظر تعليق ATTENDANCE_CLOSE_MIN فوق).
+  if (status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+    return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الحضور لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
+  }
+
   const now = nowIso();
   const isLate = !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
   const lateMinutes = isLate ? status.minutesSinceMidnight - status.startMin : 0;
@@ -188,6 +203,12 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
   const isEarly = !status.isHolidayToday && status.minutesSinceMidnight < status.endMin;
   const reasonRequired = user.role === 'employee' && isEarly && !reason;
   const now = nowIso();
+
+  // نفس إقفال الـ8 مساءً الثابت بتاع الحضور، مطبّق على الانصراف كمان — طلب
+  // صريح: "البصمة تقفل الساعة 8 مساءً" يشمل تسجيل الحضور والانصراف معًا.
+  if (status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+    return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الانصراف لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
+  }
 
   // نفس مبدأ recordCheckIn: كل الفحوصات (مسجّل حضور؟ مسجّل انصراف بالفعل؟
   // محتاج سبب؟) والكتابة بيحصلوا معًا ذرّيًّا جوه الـ Durable Object نفسه
