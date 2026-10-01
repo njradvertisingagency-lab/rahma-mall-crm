@@ -30,6 +30,7 @@ import { documentRoutes } from './routes/documents.js';
 import { benefitRoutes } from './routes/benefits.js';
 import { announcementRoutes } from './routes/announcements.js';
 import { rewardsRoutes } from './routes/rewards.js';
+import { accountingRoutes } from './routes/accounting.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
 import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
@@ -115,6 +116,7 @@ api.route('/trainings', trainingRoutes);
 api.route('/documents', documentRoutes);
 api.route('/benefits', benefitRoutes);
 api.route('/announcements', announcementRoutes);
+api.route('/accounting', accountingRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
