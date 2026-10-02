@@ -42,8 +42,11 @@ authRoutes.get('/employees-public', async (c) => {
   try {
     const rows = await db
       .prepare(
-        `SELECT u.username, e.name, e.name_ar, e.avatar_initial, e.avatar_data_url
-         FROM employees e JOIN users u ON u.id = e.user_id
+        `SELECT u.username, e.name, e.name_ar, e.avatar_initial, e.avatar_data_url,
+                COALESCE(ed.department, 'customer_service') AS department
+         FROM employees e
+         JOIN users u ON u.id = e.user_id
+         LEFT JOIN employee_department ed ON ed.employee_id = e.id
          WHERE e.active = 1 AND u.active = 1
          ORDER BY e.name COLLATE NOCASE`
       )
