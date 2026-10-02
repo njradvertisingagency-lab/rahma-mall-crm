@@ -378,6 +378,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
 .login-brand .title { font-size: 13.5px; font-weight: 600; color: var(--text-muted); margin-top: 6px; }
 .login-brand .subtitle { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
 .login-cards { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 520px; }
+.login-cards.login-cards-3 { max-width: 780px; }
 .login-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 30px 24px; width: 240px;
   text-align: center; cursor: pointer; box-shadow: var(--shadow-xs); transition: 0.15s;

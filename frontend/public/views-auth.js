@@ -5,8 +5,10 @@
   App.views.login = async function () {
     const container = el('div', { class: 'login-screen' });
     let screen = 'pick';
-    let employees = [];
+    let allEmployees = [];
+    let filteredEmployees = [];
     let selectedEmployee = null;
+    let activeDept = null; // 'customer_service' or 'accounting'
     let employeesClosedInfo = null; // { shiftText, opensInText, isOffDay } when outside work hours
 
     async function render() {
@@ -21,22 +23,28 @@
 
       if (screen === 'pick') {
         container.appendChild(
-          el('div', { class: 'login-cards' }, [
+          el('div', { class: 'login-cards login-cards-3' }, [
             el('div', { class: 'login-card', onclick: () => { screen = 'tl-form'; render(); } }, [
               el('div', { class: 'icon' }, ['🧑‍💼']),
-              el('div', { class: 'label' }, ['قائد الفريق']),
+              el('div', { class: 'label' }, ['الإدارة']),
               el('div', { class: 'desc' }, ['إدارة الفريق بالكامل، توزيع العملاء، ومتابعة التحليلات.']),
             ]),
-            el('div', { class: 'login-card', onclick: async () => { screen = 'employee-pick'; await loadEmployees(); render(); } }, [
+            el('div', { class: 'login-card', onclick: async () => { activeDept = 'customer_service'; screen = 'employee-pick'; await loadEmployees(); render(); } }, [
               el('div', { class: 'icon' }, ['👥']),
-              el('div', { class: 'label' }, ['الموظفين']),
+              el('div', { class: 'label' }, ['خدمة العملاء']),
               el('div', { class: 'desc' }, ['متابعة عملائك ومهامك الخاصة.']),
+            ]),
+            el('div', { class: 'login-card', onclick: async () => { activeDept = 'accounting'; screen = 'employee-pick'; await loadEmployees(); render(); } }, [
+              el('div', { class: 'icon' }, ['🧾']),
+              el('div', { class: 'label' }, ['الحسابات']),
+              el('div', { class: 'desc' }, ['إدارة ملفات العملاء وحركة المستندات.']),
             ]),
           ])
         );
       } else if (screen === 'tl-form') {
-        container.appendChild(renderLoginForm('Teamleader-optional', 'تسجيل دخول قائد الفريق', true));
+        container.appendChild(renderLoginForm('Teamleader-optional', 'تسجيل دخول الإدارة', true));
       } else if (screen === 'employee-pick') {
+        const deptLabel = activeDept === 'accounting' ? 'الحسابات' : 'خدمة العملاء';
         if (employeesClosedInfo) {
           const info = employeesClosedInfo;
           container.appendChild(
@@ -50,9 +58,16 @@
               ]),
             ])
           );
+        } else if (filteredEmployees.length === 0) {
+          container.appendChild(
+            el('div', { class: 'empty-state' }, [
+              el('div', { class: 'icon' }, ['📭']),
+              el('div', { style: 'font-weight:700' }, [`لا يوجد موظفين في قسم ${deptLabel}`]),
+            ])
+          );
         } else {
           container.appendChild(
-            el('div', { class: 'employee-pick-grid' }, employees.map((e) =>
+            el('div', { class: 'employee-pick-grid' }, filteredEmployees.map((e) =>
               el('div', { class: 'employee-pick', onclick: () => { selectedEmployee = e; screen = 'employee-form'; render(); } }, [
                 App.avatar({ url: e.avatar_data_url, name: e.name }),
                 el('div', { style: 'font-weight:700;font-size:13px' }, [e.name]),
@@ -70,7 +85,13 @@
     async function loadEmployees() {
       try {
         const data = await api('/auth/employees-public');
-        employees = data.employees;
+        allEmployees = data.employees;
+        // فلترة حسب القسم المختار
+        filteredEmployees = allEmployees.filter((e) =>
+          activeDept === 'accounting'
+            ? e.department === 'accounting'
+            : e.department !== 'accounting'
+        );
         employeesClosedInfo = data.closed ? { shiftText: data.shiftText, opensInText: data.opensInText, isOffDay: data.isOffDay } : null;
       } catch (e) {
         toast('تعذّر تحميل قائمة الموظفين', 'error');
