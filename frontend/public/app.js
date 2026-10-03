@@ -836,6 +836,8 @@ const NAV_ACCOUNTING = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['file-movements', '📂', 'حركة الملفات'],
+  ['payroll-salaries', '💰', 'تكوين الرواتب'],
+  ['payroll-runs', '📋', 'دورات المرتبات'],
   ['leaves', '🗓️', 'إجازاتي'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
   ['chat', '💬', 'الدردشة'],
