@@ -288,3 +288,467 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
     todayMovements: todayMovements.cnt,
   });
 });
+
+// =====================================================================
+//  نظام المرتبات — Payroll System
+// =====================================================================
+
+// ── تكوين المرتبات (salary_config) ──
+
+// عرض قائمة الموظفين مع رواتبهم
+accountingRoutes.get('/payroll/salaries', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const rows = await db.prepare(
+    `SELECT e.id AS employee_id, e.name, COALESCE(e.name_ar, e.name) AS name_ar, e.active,
+            sc.base_salary, sc.housing_allowance, sc.transport_allowance, sc.other_allowance,
+            sc.effective_from, sc.notes AS salary_notes,
+            hp.job_title, hp.department AS hr_department
+     FROM employees e
+     LEFT JOIN salary_config sc ON sc.employee_id = e.id
+     LEFT JOIN employee_hr_profiles hp ON hp.employee_id = e.id
+     WHERE e.active = 1
+     ORDER BY e.name COLLATE NOCASE`
+  ).all();
+  return c.json({ employees: rows.results });
+});
+
+// حفظ / تحديث راتب موظف
+accountingRoutes.post('/payroll/salaries/:employeeId', requireAccountingAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const employeeId = Number(c.req.param('employeeId'));
+  const body = await c.req.json().catch(() => ({}));
+
+  const emp = await db.prepare(`SELECT id, name FROM employees WHERE id = ? AND active = 1`).bind(employeeId).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'EMPLOYEE_NOT_FOUND');
+
+  const baseSalary = Number(body.baseSalary) || 0;
+  const housingAllowance = Number(body.housingAllowance) || 0;
+  const transportAllowance = Number(body.transportAllowance) || 0;
+  const otherAllowance = Number(body.otherAllowance) || 0;
+  const effectiveFrom = body.effectiveFrom || new Date().toISOString().slice(0, 10);
+  const notes = body.notes ? String(body.notes).trim() : null;
+
+  if (baseSalary < 0) return jsonError(c, 400, 'الراتب الأساسي لا يمكن أن يكون سالبًا', 'INVALID_SALARY');
+
+  const now = nowIso();
+  const existing = await db.prepare(`SELECT id FROM salary_config WHERE employee_id = ?`).bind(employeeId).first();
+
+  if (existing) {
+    await db.prepare(
+      `UPDATE salary_config SET base_salary=?, housing_allowance=?, transport_allowance=?, other_allowance=?, effective_from=?, notes=?, updated_by=?, updated_at=? WHERE employee_id=?`
+    ).bind(baseSalary, housingAllowance, transportAllowance, otherAllowance, effectiveFrom, notes, user.id, now, employeeId).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO salary_config (employee_id, base_salary, housing_allowance, transport_allowance, other_allowance, effective_from, notes, created_by, updated_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(employeeId, baseSalary, housingAllowance, transportAllowance, otherAllowance, effectiveFrom, notes, user.id, user.id, now, now).run();
+  }
+
+  await logActivity(db, {
+    actor: user, action: 'SALARY_CONFIGURED', entityType: 'salary_config', entityId: String(employeeId),
+    metadata: { employeeName: emp.name, baseSalary },
+  });
+
+  return c.json({ ok: true });
+});
+
+// ── دورات المرتبات (payroll_runs) ──
+
+// قائمة الدورات
+accountingRoutes.get('/payroll/runs', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const rows = await db.prepare(
+    `SELECT pr.*, u1.display_name AS created_by_name, u2.display_name AS closed_by_name
+     FROM payroll_runs pr
+     LEFT JOIN users u1 ON u1.id = pr.created_by
+     LEFT JOIN users u2 ON u2.id = pr.closed_by
+     ORDER BY pr.month DESC`
+  ).all();
+  return c.json({ runs: rows.results });
+});
+
+// إنشاء دورة مرتبات جديدة (مسودة) + حساب تلقائي
+accountingRoutes.post('/payroll/runs', requireAccountingAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const body = await c.req.json().catch(() => ({}));
+  const month = String(body.month || '').trim(); // YYYY-MM
+  const notes = body.notes ? String(body.notes).trim() : null;
+
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return jsonError(c, 400, 'صيغة الشهر غير صالحة (YYYY-MM)', 'INVALID_MONTH');
+  }
+
+  const existing = await db.prepare(`SELECT id, status FROM payroll_runs WHERE month = ?`).bind(month).first();
+  if (existing) {
+    return jsonError(c, 409, `يوجد بالفعل دورة مرتبات لشهر ${month} (${existing.status === 'CLOSED' ? 'مغلقة' : 'مسودة'})`, 'DUPLICATE_RUN');
+  }
+
+  // جلب الموظفين النشطين مع رواتبهم
+  const employees = await db.prepare(
+    `SELECT e.id, e.name, COALESCE(e.name_ar, e.name) AS name_ar,
+            COALESCE(sc.base_salary, 0) AS base_salary,
+            COALESCE(sc.housing_allowance, 0) AS housing_allowance,
+            COALESCE(sc.transport_allowance, 0) AS transport_allowance,
+            COALESCE(sc.other_allowance, 0) AS other_allowance
+     FROM employees e
+     LEFT JOIN salary_config sc ON sc.employee_id = e.id
+     WHERE e.active = 1
+     ORDER BY e.name COLLATE NOCASE`
+  ).all();
+
+  const monthStart = month + '-01';
+  const monthEndDate = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0);
+  const monthEnd = month + '-' + String(monthEndDate.getDate()).padStart(2, '0');
+  const daysInMonth = monthEndDate.getDate();
+
+  const now = nowIso();
+
+  // إنشاء الدورة أولاً
+  const runRow = await db.prepare(
+    `INSERT INTO payroll_runs (month, status, notes, created_by, created_at, updated_at)
+     VALUES (?, 'DRAFT', ?, ?, ?, ?) RETURNING id`
+  ).bind(month, notes, user.id, now, now).first();
+  const runId = runRow.id;
+
+  let totalBase = 0, totalAllowances = 0, totalBonuses = 0;
+  let totalDeductions = 0, totalAdvances = 0, totalPenalties = 0, totalNet = 0;
+
+  // حساب كشف مرتب لكل موظف
+  for (const emp of employees.results) {
+    const eid = emp.id;
+
+    // ─ بدلات من employee_benefits ─
+    const benefitsAllow = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits
+       WHERE employee_id = ? AND benefit_type = 'ALLOWANCE' AND status = 'APPROVED'
+       AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+
+    const benefitsBonuses = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits
+       WHERE employee_id = ? AND benefit_type = 'BONUS' AND status = 'APPROVED'
+       AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+
+    const benefitsDeductions = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits
+       WHERE employee_id = ? AND benefit_type = 'DEDUCTION' AND status = 'APPROVED'
+       AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+
+    const benefitsAdvances = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits
+       WHERE employee_id = ? AND benefit_type = 'ADVANCE' AND status IN ('APPROVED','PAID')
+       AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+
+    // ─ مكافآت المبيعات (reward_transactions) ─
+    const rewardRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS bonuses,
+              COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS deductions
+       FROM reward_transactions
+       WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+
+    // ─ حوافز (motivation_events) ─
+    const motivRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS bonuses,
+              COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS penalties
+       FROM motivation_events
+       WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+
+    // ─ الغياب (إجازات بدون مرتب) ─
+    const absenceRow = await db.prepare(
+      `SELECT COALESCE(SUM(days_count), 0) AS days FROM leave_requests
+       WHERE employee_id = ? AND leave_type = 'UNPAID' AND status = 'APPROVED'
+       AND start_date >= ? AND start_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const absenceDays = absenceRow.days;
+    const dailyRate = emp.base_salary > 0 ? emp.base_salary / 30 : 0;
+    const absenceDeduction = Math.round(absenceDays * dailyRate * 100) / 100;
+
+    // ─ التأخير ─
+    const lateRow = await db.prepare(
+      `SELECT COALESCE(late_count_at_penalty, 0) AS cnt FROM attendance_penalties
+       WHERE user_id = (SELECT user_id FROM employees WHERE id = ?) AND month = ?`
+    ).bind(eid, month).first();
+    const lateCount = lateRow?.cnt || 0;
+    // خصم التأخير: كل 3 تأخيرات = يوم خصم
+    const latePenaltyDays = Math.floor(lateCount / 3);
+    const lateDeduction = Math.round(latePenaltyDays * dailyRate * 100) / 100;
+
+    // ─ مخالفات (غرامات) ─
+    const violRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN action_taken = 'FINE' THEN 1 ELSE 0 END), 0) AS fines
+       FROM employee_violations
+       WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+    // كل مخالفة غرامة = خصم يوم
+    const violationFines = Math.round((violRow?.fines || 0) * dailyRate * 100) / 100;
+
+    // ─ الحساب النهائي ─
+    const configAllowances = emp.housing_allowance + emp.transport_allowance + emp.other_allowance;
+    const gross = emp.base_salary + configAllowances + (benefitsAllow?.total || 0) + (benefitsBonuses?.total || 0) + (rewardRow?.bonuses || 0) + (motivRow?.bonuses || 0);
+    const deductions = (benefitsDeductions?.total || 0) + (benefitsAdvances?.total || 0) + absenceDeduction + lateDeduction + violationFines + (rewardRow?.deductions || 0) + (motivRow?.penalties || 0);
+    const net = Math.round((gross - deductions) * 100) / 100;
+
+    const details = {
+      rewards: { bonuses: rewardRow?.bonuses || 0, deductions: rewardRow?.deductions || 0 },
+      motivation: { bonuses: motivRow?.bonuses || 0, penalties: motivRow?.penalties || 0 },
+      absence: { days: absenceDays, deduction: absenceDeduction },
+      late: { count: lateCount, penaltyDays: latePenaltyDays, deduction: lateDeduction },
+      violations: { fineCount: violRow?.fines || 0, deduction: violationFines },
+    };
+
+    await db.prepare(
+      `INSERT INTO payslips (payroll_run_id, employee_id, employee_name, base_salary,
+        housing_allowance, transport_allowance, other_allowance,
+        benefits_allowances, benefits_bonuses, reward_bonus, motivation_bonus,
+        benefits_deductions, benefits_advances, absence_days, absence_deduction,
+        late_count, late_deduction, violation_fines, gross_salary, total_deductions, net_salary, details_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      runId, eid, emp.name_ar || emp.name, emp.base_salary,
+      emp.housing_allowance, emp.transport_allowance, emp.other_allowance,
+      benefitsAllow?.total || 0, benefitsBonuses?.total || 0, rewardRow?.bonuses || 0, motivRow?.bonuses || 0,
+      benefitsDeductions?.total || 0, benefitsAdvances?.total || 0, absenceDays, absenceDeduction,
+      lateCount, lateDeduction, violationFines, gross, deductions, net, JSON.stringify(details), now
+    ).run();
+
+    totalBase += emp.base_salary;
+    totalAllowances += configAllowances + (benefitsAllow?.total || 0);
+    totalBonuses += (benefitsBonuses?.total || 0) + (rewardRow?.bonuses || 0) + (motivRow?.bonuses || 0);
+    totalDeductions += (benefitsDeductions?.total || 0) + (rewardRow?.deductions || 0) + (motivRow?.penalties || 0) + violationFines;
+    totalAdvances += (benefitsAdvances?.total || 0);
+    totalPenalties += absenceDeduction + lateDeduction;
+    totalNet += net;
+  }
+
+  // تحديث إجماليات الدورة
+  await db.prepare(
+    `UPDATE payroll_runs SET total_base=?, total_allowances=?, total_bonuses=?, total_deductions=?, total_advances=?, total_penalties=?, total_net=?, employee_count=?, updated_at=? WHERE id=?`
+  ).bind(
+    Math.round(totalBase * 100) / 100,
+    Math.round(totalAllowances * 100) / 100,
+    Math.round(totalBonuses * 100) / 100,
+    Math.round(totalDeductions * 100) / 100,
+    Math.round(totalAdvances * 100) / 100,
+    Math.round(totalPenalties * 100) / 100,
+    Math.round(totalNet * 100) / 100,
+    employees.results.length, now, runId
+  ).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYROLL_CREATED', entityType: 'payroll_run', entityId: String(runId),
+    metadata: { month, employeeCount: employees.results.length },
+  });
+
+  return c.json({ ok: true, runId, month, employeeCount: employees.results.length });
+});
+
+// تفاصيل دورة مرتبات مع كشوف المرتبات
+accountingRoutes.get('/payroll/runs/:id', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const run = await db.prepare(
+    `SELECT pr.*, u1.display_name AS created_by_name, u2.display_name AS closed_by_name
+     FROM payroll_runs pr
+     LEFT JOIN users u1 ON u1.id = pr.created_by
+     LEFT JOIN users u2 ON u2.id = pr.closed_by
+     WHERE pr.id = ?`
+  ).bind(id).first();
+  if (!run) return jsonError(c, 404, 'الدورة غير موجودة', 'RUN_NOT_FOUND');
+
+  const payslips = await db.prepare(
+    `SELECT * FROM payslips WHERE payroll_run_id = ? ORDER BY employee_name COLLATE NOCASE`
+  ).bind(id).all();
+
+  return c.json({ run, payslips: payslips.results });
+});
+
+// إغلاق دورة المرتبات
+accountingRoutes.post('/payroll/runs/:id/close', requireAccountingAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const run = await db.prepare(`SELECT * FROM payroll_runs WHERE id = ?`).bind(id).first();
+  if (!run) return jsonError(c, 404, 'الدورة غير موجودة', 'RUN_NOT_FOUND');
+  if (run.status === 'CLOSED') return jsonError(c, 400, 'الدورة مغلقة بالفعل', 'ALREADY_CLOSED');
+
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE payroll_runs SET status='CLOSED', closed_by=?, closed_at=?, updated_at=? WHERE id=?`
+  ).bind(user.id, now, now, id).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYROLL_CLOSED', entityType: 'payroll_run', entityId: String(id),
+    metadata: { month: run.month },
+  });
+
+  return c.json({ ok: true });
+});
+
+// إعادة فتح دورة مغلقة (المالك فقط)
+accountingRoutes.post('/payroll/runs/:id/reopen', requireAccountingAccess, async (c) => {
+  const user = c.get('user');
+  if (!user.isOwner) return jsonError(c, 403, 'إعادة الفتح متاحة للمالك فقط', 'OWNER_ONLY');
+
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const run = await db.prepare(`SELECT * FROM payroll_runs WHERE id = ?`).bind(id).first();
+  if (!run) return jsonError(c, 404, 'الدورة غير موجودة', 'RUN_NOT_FOUND');
+  if (run.status !== 'CLOSED') return jsonError(c, 400, 'الدورة ليست مغلقة', 'NOT_CLOSED');
+
+  const now = nowIso();
+  await db.prepare(
+    `UPDATE payroll_runs SET status='DRAFT', closed_by=NULL, closed_at=NULL, updated_at=? WHERE id=?`
+  ).bind(now, id).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYROLL_REOPENED', entityType: 'payroll_run', entityId: String(id),
+    metadata: { month: run.month },
+  });
+
+  return c.json({ ok: true });
+});
+
+// إعادة حساب دورة (حذف الكشوف القديمة وإعادة الحساب)
+accountingRoutes.post('/payroll/runs/:id/recalculate', requireAccountingAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const run = await db.prepare(`SELECT * FROM payroll_runs WHERE id = ?`).bind(id).first();
+  if (!run) return jsonError(c, 404, 'الدورة غير موجودة', 'RUN_NOT_FOUND');
+  if (run.status === 'CLOSED') return jsonError(c, 400, 'لا يمكن إعادة حساب دورة مغلقة', 'RUN_CLOSED');
+
+  // حذف الكشوف القديمة
+  await db.prepare(`DELETE FROM payslips WHERE payroll_run_id = ?`).bind(id).run();
+
+  // إعادة الحساب (نفس منطق الإنشاء)
+  const month = run.month;
+  const employees = await db.prepare(
+    `SELECT e.id, e.name, COALESCE(e.name_ar, e.name) AS name_ar,
+            COALESCE(sc.base_salary, 0) AS base_salary,
+            COALESCE(sc.housing_allowance, 0) AS housing_allowance,
+            COALESCE(sc.transport_allowance, 0) AS transport_allowance,
+            COALESCE(sc.other_allowance, 0) AS other_allowance
+     FROM employees e
+     LEFT JOIN salary_config sc ON sc.employee_id = e.id
+     WHERE e.active = 1
+     ORDER BY e.name COLLATE NOCASE`
+  ).all();
+
+  const monthStart = month + '-01';
+  const monthEndDate = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0);
+  const monthEnd = month + '-' + String(monthEndDate.getDate()).padStart(2, '0');
+  const now = nowIso();
+
+  let totalBase = 0, totalAllowances = 0, totalBonuses = 0;
+  let totalDeductions = 0, totalAdvances = 0, totalPenalties = 0, totalNet = 0;
+
+  for (const emp of employees.results) {
+    const eid = emp.id;
+    const benefitsAllow = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits WHERE employee_id = ? AND benefit_type = 'ALLOWANCE' AND status = 'APPROVED' AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const benefitsBonuses = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits WHERE employee_id = ? AND benefit_type = 'BONUS' AND status = 'APPROVED' AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const benefitsDeductions = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits WHERE employee_id = ? AND benefit_type = 'DEDUCTION' AND status = 'APPROVED' AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const benefitsAdvances = await db.prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM employee_benefits WHERE employee_id = ? AND benefit_type = 'ADVANCE' AND status IN ('APPROVED','PAID') AND effective_date >= ? AND effective_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const rewardRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS bonuses, COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS deductions FROM reward_transactions WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+    const motivRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS bonuses, COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS penalties FROM motivation_events WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+    const absenceRow = await db.prepare(
+      `SELECT COALESCE(SUM(days_count), 0) AS days FROM leave_requests WHERE employee_id = ? AND leave_type = 'UNPAID' AND status = 'APPROVED' AND start_date >= ? AND start_date <= ?`
+    ).bind(eid, monthStart, monthEnd).first();
+    const absenceDays = absenceRow.days;
+    const dailyRate = emp.base_salary > 0 ? emp.base_salary / 30 : 0;
+    const absenceDeduction = Math.round(absenceDays * dailyRate * 100) / 100;
+    const lateRow = await db.prepare(
+      `SELECT COALESCE(late_count_at_penalty, 0) AS cnt FROM attendance_penalties WHERE user_id = (SELECT user_id FROM employees WHERE id = ?) AND month = ?`
+    ).bind(eid, month).first();
+    const lateCount = lateRow?.cnt || 0;
+    const latePenaltyDays = Math.floor(lateCount / 3);
+    const lateDeduction = Math.round(latePenaltyDays * dailyRate * 100) / 100;
+    const violRow = await db.prepare(
+      `SELECT COALESCE(SUM(CASE WHEN action_taken = 'FINE' THEN 1 ELSE 0 END), 0) AS fines FROM employee_violations WHERE employee_id = ? AND created_at >= ? AND created_at < ?`
+    ).bind(eid, monthStart + 'T00:00:00', monthEnd + 'T23:59:59').first();
+    const violationFines = Math.round((violRow?.fines || 0) * dailyRate * 100) / 100;
+
+    const configAllowances = emp.housing_allowance + emp.transport_allowance + emp.other_allowance;
+    const gross = emp.base_salary + configAllowances + (benefitsAllow?.total || 0) + (benefitsBonuses?.total || 0) + (rewardRow?.bonuses || 0) + (motivRow?.bonuses || 0);
+    const deductions = (benefitsDeductions?.total || 0) + (benefitsAdvances?.total || 0) + absenceDeduction + lateDeduction + violationFines + (rewardRow?.deductions || 0) + (motivRow?.penalties || 0);
+    const net = Math.round((gross - deductions) * 100) / 100;
+
+    const details = {
+      rewards: { bonuses: rewardRow?.bonuses || 0, deductions: rewardRow?.deductions || 0 },
+      motivation: { bonuses: motivRow?.bonuses || 0, penalties: motivRow?.penalties || 0 },
+      absence: { days: absenceDays, deduction: absenceDeduction },
+      late: { count: lateCount, penaltyDays: latePenaltyDays, deduction: lateDeduction },
+      violations: { fineCount: violRow?.fines || 0, deduction: violationFines },
+    };
+
+    await db.prepare(
+      `INSERT INTO payslips (payroll_run_id, employee_id, employee_name, base_salary, housing_allowance, transport_allowance, other_allowance, benefits_allowances, benefits_bonuses, reward_bonus, motivation_bonus, benefits_deductions, benefits_advances, absence_days, absence_deduction, late_count, late_deduction, violation_fines, gross_salary, total_deductions, net_salary, details_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      id, eid, emp.name_ar || emp.name, emp.base_salary,
+      emp.housing_allowance, emp.transport_allowance, emp.other_allowance,
+      benefitsAllow?.total || 0, benefitsBonuses?.total || 0, rewardRow?.bonuses || 0, motivRow?.bonuses || 0,
+      benefitsDeductions?.total || 0, benefitsAdvances?.total || 0, absenceDays, absenceDeduction,
+      lateCount, lateDeduction, violationFines, gross, deductions, net, JSON.stringify(details), now
+    ).run();
+
+    totalBase += emp.base_salary;
+    totalAllowances += configAllowances + (benefitsAllow?.total || 0);
+    totalBonuses += (benefitsBonuses?.total || 0) + (rewardRow?.bonuses || 0) + (motivRow?.bonuses || 0);
+    totalDeductions += (benefitsDeductions?.total || 0) + (rewardRow?.deductions || 0) + (motivRow?.penalties || 0) + violationFines;
+    totalAdvances += (benefitsAdvances?.total || 0);
+    totalPenalties += absenceDeduction + lateDeduction;
+    totalNet += net;
+  }
+
+  await db.prepare(
+    `UPDATE payroll_runs SET total_base=?, total_allowances=?, total_bonuses=?, total_deductions=?, total_advances=?, total_penalties=?, total_net=?, employee_count=?, updated_at=? WHERE id=?`
+  ).bind(
+    Math.round(totalBase * 100) / 100, Math.round(totalAllowances * 100) / 100,
+    Math.round(totalBonuses * 100) / 100, Math.round(totalDeductions * 100) / 100,
+    Math.round(totalAdvances * 100) / 100, Math.round(totalPenalties * 100) / 100,
+    Math.round(totalNet * 100) / 100, employees.results.length, now, id
+  ).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYROLL_RECALCULATED', entityType: 'payroll_run', entityId: String(id),
+    metadata: { month: run.month },
+  });
+
+  return c.json({ ok: true, employeeCount: employees.results.length });
+});
+
+// كشف مرتب فردي (payslip)
+accountingRoutes.get('/payroll/payslip/:id', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const slip = await db.prepare(`SELECT * FROM payslips WHERE id = ?`).bind(id).first();
+  if (!slip) return jsonError(c, 404, 'كشف المرتب غير موجود', 'PAYSLIP_NOT_FOUND');
+
+  const run = await db.prepare(`SELECT month, status FROM payroll_runs WHERE id = ?`).bind(slip.payroll_run_id).first();
+
+  return c.json({ payslip: slip, run });
+});
