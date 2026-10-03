@@ -9,17 +9,88 @@
     ]);
   }
 
-  App.route('/dashboard', async () => {
-    const user = App.state.user;
-    const container = el('div');
-    const header = el('div', { class: 'page-header' }, [
-      el('div', {}, [
-        el('div', { class: 'page-title' }, [user.role === 'team_leader' ? 'لوحة تحكم الفريق' : `أهلاً بك، ${user.displayName}`]),
-        el('div', { class: 'muted' }, [new Date().toLocaleDateString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })]),
-      ]),
-    ]);
-    container.appendChild(header);
+  // ── الحسابات labels ──
+  const STATUS_AR = { active_regular: 'عادي', active_late: 'متأخر', rejected: 'مرفوض', needs_review: 'يحتاج مراجعة' };
+  const STATUS_ACCENT = { active_regular: 'success', active_late: 'warning', rejected: 'danger', needs_review: 'info' };
+  const LOCATION_AR = { office: 'المكتب (أ. هاني)', accounting: 'الحسابات', legal: 'الشئون القانونية' };
+  const LOCATION_ACCENT = { office: 'brand', accounting: 'info', legal: 'warning' };
 
+  // ====================================================================
+  //  لوحة تحكم قسم الحسابات
+  // ====================================================================
+  async function accountingDashboard(container, user) {
+    const kpiGrid = el('div', { class: 'kpi-grid' });
+    container.appendChild(kpiGrid);
+
+    async function loadStats() {
+      const stats = await api('/accounting/stats');
+      kpiGrid.innerHTML = '';
+
+      // إجمالي الملفات
+      const totalFiles = stats.byStatus.reduce((s, r) => s + r.cnt, 0);
+      kpiGrid.appendChild(kpi('إجمالي الملفات', totalFiles, 'brand', () => App.navigate('#/accounting-files')));
+
+      // حسب الحالة
+      stats.byStatus.forEach((r) => {
+        kpiGrid.appendChild(kpi(STATUS_AR[r.status] || r.status, r.cnt, STATUS_ACCENT[r.status], () => App.navigate('#/accounting-files?status=' + r.status)));
+      });
+
+      // حسب الموقع
+      stats.byLocation.forEach((r) => {
+        kpiGrid.appendChild(kpi(LOCATION_AR[r.current_location] || r.current_location, r.cnt, LOCATION_ACCENT[r.current_location], () => App.navigate('#/accounting-files?location=' + r.current_location)));
+      });
+
+      // حركات اليوم / الإجمالي
+      kpiGrid.appendChild(kpi('حركات اليوم', stats.todayMovements, 'success', () => App.navigate('#/file-movements')));
+      kpiGrid.appendChild(kpi('إجمالي الحركات', stats.totalMovements, null, () => App.navigate('#/file-movements')));
+    }
+    await loadStats();
+    const offRt = App.onRealtime(() => loadStats(), 8000);
+
+    // ── أزرار سريعة ──
+    container.appendChild(el('div', { class: 'flex gap-8 mt-16', style: 'flex-wrap:wrap' }, [
+      el('button', { class: 'btn btn-brand', onclick: () => App.navigate('#/accounting-files') }, ['🗃️ ملفات العملاء']),
+      el('button', { class: 'btn btn-outline', onclick: () => App.navigate('#/file-movements') }, ['📂 حركة الملفات']),
+    ]));
+
+    // ── آخر الحركات ──
+    container.appendChild(el('div', { class: 'section-title mt-24' }, ['آخر الحركات']));
+    const movWrap = el('div');
+    container.appendChild(movWrap);
+    try {
+      const { movements } = await api('/accounting/movements?page=1');
+      if (!movements || movements.length === 0) {
+        movWrap.appendChild(el('div', { class: 'empty-state' }, ['لا توجد حركات مسجّلة بعد.']));
+      } else {
+        const recent = movements.slice(0, 10);
+        movWrap.appendChild(el('div', { class: 'table-wrap' }, [
+          el('table', { class: 'data-table' }, [
+            el('thead', {}, [el('tr', {}, ['رقم الملف', 'العميل', 'من', 'إلى', 'المستلم', 'السبب', 'التاريخ'].map((h) => el('th', {}, [h])))]),
+            el('tbody', {}, recent.map((m) =>
+              el('tr', {}, [
+                el('td', { class: 'mono' }, [m.file_number || '']),
+                el('td', {}, [m.client_name || '']),
+                el('td', {}, [LOCATION_AR[m.from_location] || m.from_location]),
+                el('td', {}, [LOCATION_AR[m.to_location] || m.to_location]),
+                el('td', {}, [m.taken_by_name || '']),
+                el('td', {}, [m.reason || '—']),
+                el('td', { class: 'muted', style: 'font-size:12px' }, [fmt.dateTime(m.created_at)]),
+              ])
+            )),
+          ]),
+        ]));
+      }
+    } catch {
+      movWrap.appendChild(el('div', { class: 'empty-state' }, ['تعذّر تحميل الحركات.']));
+    }
+
+    container.cleanup = () => { offRt(); };
+  }
+
+  // ====================================================================
+  //  لوحة التحكم الرئيسية (CRM)
+  // ====================================================================
+  async function crmDashboard(container, user) {
     const kpiGrid = el('div', { class: 'kpi-grid' });
     container.appendChild(kpiGrid);
 
@@ -103,6 +174,31 @@
     }
 
     container.cleanup = () => { offRt(); offTeamListeners.forEach((off) => off()); };
+  }
+
+  // ====================================================================
+  //  Route handler
+  // ====================================================================
+  App.route('/dashboard', async () => {
+    const user = App.state.user;
+    const container = el('div');
+    const titleText = user.department === 'accounting'
+      ? 'لوحة تحكم الحسابات'
+      : (user.role === 'team_leader' ? 'لوحة تحكم الفريق' : `أهلاً بك، ${user.displayName}`);
+    const header = el('div', { class: 'page-header' }, [
+      el('div', {}, [
+        el('div', { class: 'page-title' }, [titleText]),
+        el('div', { class: 'muted' }, [new Date().toLocaleDateString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })]),
+      ]),
+    ]);
+    container.appendChild(header);
+
+    if (user.department === 'accounting') {
+      await accountingDashboard(container, user);
+    } else {
+      await crmDashboard(container, user);
+    }
+
     return container;
   });
 
