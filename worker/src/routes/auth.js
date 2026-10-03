@@ -236,10 +236,11 @@ authRoutes.get('/me', requireAuth, async (c) => {
   const db = c.env.DB;
   let availability = null;
   let avatarUrl = null;
+  let department = user.department || 'customer_service';
   if (user.role === 'employee') {
-    // Best-effort: this is now the ONLY D1 read on the app's most-called
-    // endpoint (fired on every page load) — never let it turn a valid,
-    // already-verified session into a failed page load if D1 hiccups.
+    // Best-effort: these D1 reads on the app's most-called endpoint
+    // (fired on every page load) must never turn a valid, already-verified
+    // session into a failed page load if D1 hiccups.
     try {
       const emp = await db.prepare(`SELECT availability, avatar_data_url FROM employees WHERE id = ?`).bind(user.employeeId).first();
       availability = emp?.availability ?? null;
@@ -247,8 +248,16 @@ authRoutes.get('/me', requireAuth, async (c) => {
     } catch (err) {
       console.error('/auth/me: could not load availability/avatar (non-fatal)', err);
     }
+    // Always look up department from DB — session may be stale (created
+    // before department code was deployed) or missing the field entirely.
+    try {
+      const deptRow = await db.prepare(`SELECT department FROM employee_department WHERE employee_id = ?`).bind(user.employeeId).first();
+      if (deptRow) department = deptRow.department;
+    } catch (err) {
+      console.error('/auth/me: could not load department (non-fatal)', err);
+    }
   }
-  return c.json({ user: { ...user, token: undefined, availability, avatarUrl } });
+  return c.json({ user: { ...user, token: undefined, availability, avatarUrl, department } });
 });
 
 authRoutes.post('/change-password', requireAuth, async (c) => {
