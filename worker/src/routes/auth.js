@@ -178,7 +178,7 @@ authRoutes.post('/login', async (c) => {
     }
   }
 
-  // القسم الوظيفي — حاليًا "customer_service" (الافتراضي) أو "accounting".
+  // القسم الوظيفي — حاليًا "customer_service" (الافتراضي) أو "accounting" أو "legal".
   // مخزّن في جدول employee_department المنفصل (لتفادي ALTER TABLE الممنوع).
   let department = 'customer_service';
   if (employeeId) {

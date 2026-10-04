@@ -6,22 +6,20 @@ export const accountingRoutes = new Hono();
 accountingRoutes.use('*', requireAuth);
 
 // ---------------------------------------------------------------------------
-// صلاحيات قسم الحسابات
+// صلاحيات قسم الملفات (الحسابات + الشئون القانونية + HR)
 // ---------------------------------------------------------------------------
-// - موظفو الحسابات (department='accounting') + المالك (isOwner): تحكم كامل
-//   في الملفات وأذونات الحركة (إنشاء/تعديل/حذف).
-// - أ. هاني (المالك) هو الوحيد اللي يقدر يعدّل ويحرّك مع الحسابات من برّا
-//   القسم نفسه.
-// - قائد الفريق / HR: يشوفوا حركة الملفات فقط (قراءة بدون أي تعديل).
-// - موظف خدمة العملاء العادي: لا يصل لأي شيء في الحسابات.
+// - موظفو الحسابات (department='accounting') + الشئون القانونية (department='legal')
+//   + HR (isHr) + المالك (isOwner): تحكم كامل في الملفات وأذونات الحركة.
+// - قائد الفريق العادي: يشوف حركة الملفات فقط (قراءة بدون أي تعديل).
+// - موظف خدمة العملاء العادي: لا يصل لأي شيء في الملفات.
 // ---------------------------------------------------------------------------
 
 function isAccountingUser(user) {
-  return user.isOwner || user.department === 'accounting';
+  return user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.isHr;
 }
 
 function canViewMovements(user) {
-  return user.isOwner || user.department === 'accounting' || user.role === 'team_leader' || user.isHr;
+  return user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.role === 'team_leader' || user.isHr;
 }
 
 // حارس: العمليات الكاملة (إنشاء/تعديل ملفات وحركات) — حسابات + المالك فقط
@@ -77,9 +75,11 @@ accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
 
   const countRow = await db.prepare(`SELECT COUNT(*) AS total FROM client_files cf WHERE ${where}`).bind(...params).first();
   const rows = await db.prepare(
-    `SELECT cf.*, u.display_name AS created_by_name
+    `SELECT cf.*, u.display_name AS created_by_name,
+            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep
      FROM client_files cf
      LEFT JOIN users u ON u.id = cf.created_by
+     LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      WHERE ${where}
      ORDER BY cf.id DESC
      LIMIT ? OFFSET ?`
@@ -93,8 +93,10 @@ accountingRoutes.get('/files/:id', requireAccountingAccess, async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const file = await db.prepare(
-    `SELECT cf.*, u.display_name AS created_by_name
+    `SELECT cf.*, u.display_name AS created_by_name,
+            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep
      FROM client_files cf LEFT JOIN users u ON u.id = cf.created_by
+     LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      WHERE cf.id = ?`
   ).bind(id).first();
   if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
@@ -133,6 +135,16 @@ accountingRoutes.post('/files', requireAccountingAccess, async (c) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
   ).bind(fileNumber, clientName, clientPhone, guarantorName, guarantorPhone, status, statusReason, currentLocation, notes, user.id, user.id, now, now).first();
 
+  // Insert extra details into client_file_details
+  const installmentValue = body.installmentValue != null ? Number(body.installmentValue) : 0;
+  const productType = body.productType ? String(body.productType).trim() : null;
+  const salesRep = body.salesRep ? String(body.salesRep).trim() : null;
+  const investigationRep = body.investigationRep ? String(body.investigationRep).trim() : null;
+  await db.prepare(
+    `INSERT INTO client_file_details (file_id, installment_value, product_type, sales_rep, investigation_rep, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(row.id, installmentValue, productType, salesRep, investigationRep, now, now).run();
+
   await logActivity(db, {
     actor: user, action: 'FILE_CREATED', entityType: 'client_file', entityId: String(row.id),
     metadata: { fileNumber, clientName },
@@ -168,6 +180,22 @@ accountingRoutes.put('/files/:id', requireAccountingAccess, async (c) => {
   await db.prepare(
     `UPDATE client_files SET client_name=?, client_phone=?, guarantor_name=?, guarantor_phone=?, status=?, status_reason=?, notes=?, updated_by=?, updated_at=? WHERE id=?`
   ).bind(clientName, clientPhone, guarantorName, guarantorPhone, status, statusReason, notes, user.id, now, id).run();
+
+  // Upsert extra details into client_file_details
+  const installmentValue = body.installmentValue != null ? Number(body.installmentValue) : 0;
+  const productType = body.productType !== undefined ? (body.productType ? String(body.productType).trim() : null) : null;
+  const salesRep = body.salesRep !== undefined ? (body.salesRep ? String(body.salesRep).trim() : null) : null;
+  const investigationRep = body.investigationRep !== undefined ? (body.investigationRep ? String(body.investigationRep).trim() : null) : null;
+  await db.prepare(
+    `INSERT INTO client_file_details (file_id, installment_value, product_type, sales_rep, investigation_rep, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(file_id) DO UPDATE SET
+       installment_value = excluded.installment_value,
+       product_type = excluded.product_type,
+       sales_rep = excluded.sales_rep,
+       investigation_rep = excluded.investigation_rep,
+       updated_at = excluded.updated_at`
+  ).bind(id, installmentValue, productType, salesRep, investigationRep, now, now).run();
 
   await logActivity(db, {
     actor: user, action: 'FILE_UPDATED', entityType: 'client_file', entityId: String(id),
