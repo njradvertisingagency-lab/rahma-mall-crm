@@ -845,6 +845,19 @@ const NAV_ACCOUNTING = [
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 
+// موظفو الشئون القانونية (department='legal') — نفس صفحات الحسابات تقريبًا:
+// الداشبورد + ملفات العملاء + حركة الملفات + الإجازات + الإشعارات + الملف الشخصي.
+const NAV_LEGAL = [
+  ['dashboard', '📊', 'لوحة التحكم'],
+  ['accounting-files', '🗃️', 'ملفات العملاء'],
+  ['file-movements', '📂', 'حركة الملفات'],
+  ['leaves', '🗓️', 'إجازاتي'],
+  ['announcements', '📢', 'الإعلانات الداخلية'],
+  ['chat', '💬', 'الدردشة'],
+  ['notifications', '🔔', 'الإشعارات'],
+  ['profile', '🙍', 'الملف الشخصي'],
+];
+
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['work-queue', '🎯', 'قائمة مهامي'],
@@ -914,7 +927,9 @@ function renderShell() {
   // الأدمن/المالك فقط). قائد الفريق العادي لسه يشوف مبيعاته بس.
   const nav = user.role === 'team_leader'
     ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL)
-    : (user.department === 'accounting' ? NAV_ACCOUNTING : NAV_EMPLOYEE);
+    : (user.department === 'accounting' ? NAV_ACCOUNTING
+       : user.department === 'legal' ? NAV_LEGAL
+       : NAV_EMPLOYEE);
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
   const chatNavBadge = renderChatNavBadge();
 

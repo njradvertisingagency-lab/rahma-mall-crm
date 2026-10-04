@@ -38,10 +38,10 @@
     return { close, el: backdrop };
   }
 
-  // ===== هل المستخدم محاسب أو المالك =====
+  // ===== هل المستخدم له صلاحية الملفات (حسابات / شئون قانونية / HR / المالك) =====
   function isAccountingUser() {
     const u = App.state.user;
-    return u.isOwner || u.department === 'accounting';
+    return u.isOwner || u.department === 'accounting' || u.department === 'legal' || u.isHr;
   }
   function canEdit() { return isAccountingUser(); }
 
@@ -53,19 +53,10 @@
     const clientPhoneInput = el('input', { type: 'tel', value: existing?.client_phone || '', placeholder: '01xxxxxxxxx' });
     const guarantorNameInput = el('input', { type: 'text', value: existing?.guarantor_name || '', placeholder: 'اسم الضامن' });
     const guarantorPhoneInput = el('input', { type: 'tel', value: existing?.guarantor_phone || '', placeholder: '01xxxxxxxxx' });
-    const statusSelect = el('select', {}, Object.entries(STATUS_MAP).map(([k, v]) => {
-      const opt = el('option', { value: k }, [v.label]);
-      if (k === (existing?.status || 'active_regular')) opt.selected = true;
-      return opt;
-    }));
-    const statusReasonInput = el('textarea', { rows: 2, placeholder: 'السبب (مطلوب عند الرفض أو المراجعة)', value: existing?.status_reason || '' });
-    const notesInput = el('textarea', { rows: 2, placeholder: 'ملاحظات إضافية (اختياري)', value: existing?.notes || '' });
-
-    // إظهار/إخفاء حقل السبب بناءً على الحالة
-    const reasonRow = el('div', { class: 'field', style: (existing?.status === 'rejected' || existing?.status === 'needs_review') ? '' : 'display:none' }, [el('label', {}, ['السبب']), statusReasonInput]);
-    statusSelect.addEventListener('change', () => {
-      reasonRow.style.display = (statusSelect.value === 'rejected' || statusSelect.value === 'needs_review') ? '' : 'none';
-    });
+    const installmentInput = el('input', { type: 'number', value: existing?.installment_value || '', placeholder: '0', min: '0', step: '0.01' });
+    const productTypeInput = el('input', { type: 'text', value: existing?.product_type || '', placeholder: 'نوع المنتج' });
+    const salesRepInput = el('input', { type: 'text', value: existing?.sales_rep || '', placeholder: 'اسم مندوب البيع' });
+    const investigationRepInput = el('input', { type: 'text', value: existing?.investigation_rep || '', placeholder: 'اسم مندوب التحري' });
 
     const body = el('div', {}, [
       el('div', { class: 'field' }, [el('label', {}, ['رقم الملف *']), fileNumberInput]),
@@ -73,9 +64,10 @@
       el('div', { class: 'field' }, [el('label', {}, ['رقم هاتف العميل']), clientPhoneInput]),
       el('div', { class: 'field' }, [el('label', {}, ['اسم الضامن']), guarantorNameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['رقم هاتف الضامن']), guarantorPhoneInput]),
-      el('div', { class: 'field' }, [el('label', {}, ['حالة الملف']), statusSelect]),
-      reasonRow,
-      el('div', { class: 'field' }, [el('label', {}, ['ملاحظات']), notesInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['قيمة القسط']), installmentInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['نوع المنتج']), productTypeInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['مندوب التحري']), investigationRepInput]),
     ]);
 
     const dlg = modal(isEdit ? '✏️ تعديل ملف' : '➕ ملف جديد', body, []);
@@ -87,16 +79,14 @@
           clientPhone: clientPhoneInput.value.trim() || null,
           guarantorName: guarantorNameInput.value.trim() || null,
           guarantorPhone: guarantorPhoneInput.value.trim() || null,
-          status: statusSelect.value,
-          statusReason: statusReasonInput.value.trim() || null,
-          notes: notesInput.value.trim() || null,
+          installmentValue: installmentInput.value ? Number(installmentInput.value) : 0,
+          productType: productTypeInput.value.trim() || null,
+          salesRep: salesRepInput.value.trim() || null,
+          investigationRep: investigationRepInput.value.trim() || null,
         };
         if (!isEdit) payload.fileNumber = fileNumberInput.value.trim();
         if (!payload.clientName) { toast('اسم العميل مطلوب', 'error'); return; }
         if (!isEdit && !payload.fileNumber) { toast('رقم الملف مطلوب', 'error'); return; }
-        if ((payload.status === 'rejected' || payload.status === 'needs_review') && !payload.statusReason) {
-          toast('يجب كتابة السبب', 'error'); return;
-        }
         try {
           if (isEdit) {
             await api('/accounting/files/' + existing.id, { method: 'PUT', body: payload });
@@ -260,10 +250,13 @@
             el('thead', {}, [el('tr', {}, [
               el('th', {}, ['رقم الملف']),
               el('th', {}, ['اسم العميل']),
-              el('th', {}, ['الهاتف']),
+              el('th', {}, ['هاتف العميل']),
               el('th', {}, ['الضامن']),
-              el('th', {}, ['الحالة']),
-              el('th', {}, ['الموقع']),
+              el('th', {}, ['هاتف الضامن']),
+              el('th', {}, ['قيمة القسط']),
+              el('th', {}, ['نوع المنتج']),
+              el('th', {}, ['مندوب البيع']),
+              el('th', {}, ['مندوب التحري']),
               el('th', {}, ['الإجراءات']),
             ])]),
             el('tbody', {}, data.files.map(f => el('tr', {}, [
@@ -271,8 +264,11 @@
               el('td', {}, [f.client_name]),
               el('td', { style: 'direction:ltr;text-align:right' }, [f.client_phone || '—']),
               el('td', {}, [f.guarantor_name || '—']),
-              el('td', {}, [statusBadge(f.status)]),
-              el('td', {}, [locBadge(f.current_location)]),
+              el('td', { style: 'direction:ltr;text-align:right' }, [f.guarantor_phone || '—']),
+              el('td', {}, [f.installment_value ? String(f.installment_value) : '—']),
+              el('td', {}, [f.product_type || '—']),
+              el('td', {}, [f.sales_rep || '—']),
+              el('td', {}, [f.investigation_rep || '—']),
               el('td', { style: 'white-space:nowrap' }, [
                 el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الحركات', onclick: () => showFileMovements(f.id) }, ['📋']),
                 canEdit() ? el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'تعديل', onclick: () => fileFormModal(f, () => { load(); loadStats(); }) }, ['✏️']) : null,
@@ -296,7 +292,7 @@
   // ===== صفحة حركة الملفات (مشتركة — قراءة لقائد الفريق/HR، كاملة للحسابات) =====
   App.route('/file-movements', async () => {
     const user = App.state.user;
-    const canView = user.isOwner || user.department === 'accounting' || user.role === 'team_leader' || user.isHr;
+    const canView = user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.role === 'team_leader' || user.isHr;
     if (!canView) { toast('غير مصرح', 'error'); App.navigate('#/dashboard'); return; }
 
     const container = el('div');
@@ -328,7 +324,11 @@
         }
         data.movements.forEach(m => {
           const from = LOC_MAP[m.from_location] || { label: m.from_location, icon: '📍' };
-          const to = LOC_MAP[m.to_location] || { label: m.to_location, icon: '📍' };
+          const toBase = LOC_MAP[m.to_location] || { label: m.to_location, icon: '📍' };
+          // عند النقل للشئون القانونية: إظهار اسم الموظف المستلم بجانب القسم
+          const toLabel = m.to_location === 'legal' && m.taken_by_name
+            ? toBase.label + ' (' + m.taken_by_name + ')'
+            : toBase.label;
           listBox.appendChild(el('div', { class: 'card card-pad mb-12', style: 'border-right:4px solid var(--brand,#0f766e)' }, [
             el('div', { style: 'display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px' }, [
               el('div', {}, [
@@ -336,7 +336,7 @@
                 el('div', { style: 'display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600' }, [
                   el('span', {}, [from.icon + ' ' + from.label]),
                   el('span', { style: 'color:var(--brand,#0f766e);font-size:20px' }, ['←']),
-                  el('span', {}, [to.icon + ' ' + to.label]),
+                  el('span', {}, [toBase.icon + ' ' + toLabel]),
                 ]),
               ]),
               el('div', { style: 'text-align:left;font-size:12px;color:var(--muted,#888);white-space:nowrap' }, [fmt.dateTime(m.created_at)]),

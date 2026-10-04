@@ -23,7 +23,7 @@
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', {}, [
         el('div', { class: 'page-title' }, ['تكوين الرواتب']),
-        el('div', { class: 'muted' }, ['تحديد الراتب الأساسي والبدلات لكل موظف']),
+        el('div', { class: 'muted' }, ['تحديد الراتب الأساسي لكل موظف (الكوميشن يُحسب تلقائيًا)']),
       ]),
     ]));
 
@@ -41,25 +41,19 @@
 
       const table = el('table', { class: 'data-table' });
       table.appendChild(el('thead', {}, [el('tr', {}, [
-        'الموظف', 'الراتب الأساسي', 'بدل سكن', 'بدل مواصلات', 'بدل أخرى', 'الإجمالي', ''
+        'الموظف', 'الوظيفة', 'الراتب الأساسي', 'الحالة', ''
       ].map(h => el('th', {}, [h])))]));
 
       const tbody = el('tbody');
       employees.forEach(emp => {
         const base = emp.base_salary || 0;
-        const housing = emp.housing_allowance || 0;
-        const transport = emp.transport_allowance || 0;
-        const other = emp.other_allowance || 0;
-        const total = base + housing + transport + other;
         const configured = base > 0;
 
         tbody.appendChild(el('tr', {}, [
           el('td', { style: 'font-weight:700' }, [emp.name_ar || emp.name]),
-          el('td', { class: 'mono' }, [configured ? money(base) : el('span', { class: 'muted' }, ['—'])]),
-          el('td', { class: 'mono' }, [configured ? money(housing) : '']),
-          el('td', { class: 'mono' }, [configured ? money(transport) : '']),
-          el('td', { class: 'mono' }, [configured ? money(other) : '']),
-          el('td', { class: 'mono', style: 'font-weight:700' }, [configured ? money(total) : el('span', { class: 'badge badge-danger' }, ['غير محدد'])]),
+          el('td', { class: 'muted' }, [emp.job_title || '—']),
+          el('td', { class: 'mono', style: 'font-size:15px;font-weight:700' }, [configured ? money(base) : el('span', { class: 'muted' }, ['—'])]),
+          el('td', {}, [configured ? el('span', { class: 'badge badge-success' }, ['محدد']) : el('span', { class: 'badge badge-danger' }, ['غير محدد'])]),
           el('td', {}, [
             el('button', { class: 'btn btn-sm ' + (configured ? 'btn-outline' : 'btn-brand'), onclick: () => openSalaryDialog(emp, load) }, [configured ? 'تعديل' : 'تحديد الراتب']),
           ]),
@@ -77,19 +71,8 @@
     const overlay = el('div', { class: 'modal-overlay active' });
     const dialog = el('div', { class: 'modal', style: 'max-width:440px' });
 
-    const inBase = el('input', { type: 'number', class: 'form-input', value: emp.base_salary || '', placeholder: '0', min: '0', step: '100' });
-    const inHousing = el('input', { type: 'number', class: 'form-input', value: emp.housing_allowance || '', placeholder: '0', min: '0', step: '50' });
-    const inTransport = el('input', { type: 'number', class: 'form-input', value: emp.transport_allowance || '', placeholder: '0', min: '0', step: '50' });
-    const inOther = el('input', { type: 'number', class: 'form-input', value: emp.other_allowance || '', placeholder: '0', min: '0', step: '50' });
+    const inBase = el('input', { type: 'number', class: 'form-input', value: emp.base_salary || '', placeholder: '0', min: '0', step: '100', style: 'font-size:18px;font-weight:700;text-align:center' });
     const inNotes = el('input', { type: 'text', class: 'form-input', value: emp.salary_notes || '', placeholder: 'ملاحظات (اختياري)' });
-
-    const totalDisplay = el('div', { class: 'mono', style: 'font-size:18px;font-weight:700;color:var(--brand)' });
-    function updateTotal() {
-      const t = (Number(inBase.value) || 0) + (Number(inHousing.value) || 0) + (Number(inTransport.value) || 0) + (Number(inOther.value) || 0);
-      totalDisplay.textContent = money(t);
-    }
-    [inBase, inHousing, inTransport, inOther].forEach(i => i.addEventListener('input', updateTotal));
-    updateTotal();
 
     const saveBtn = el('button', { class: 'btn btn-brand' }, ['حفظ']);
     const cancelBtn = el('button', { class: 'btn btn-outline' }, ['إلغاء']);
@@ -103,9 +86,6 @@
           method: 'POST',
           body: JSON.stringify({
             baseSalary: Number(inBase.value) || 0,
-            housingAllowance: Number(inHousing.value) || 0,
-            transportAllowance: Number(inTransport.value) || 0,
-            otherAllowance: Number(inOther.value) || 0,
             notes: inNotes.value.trim() || null,
           }),
         });
@@ -123,15 +103,9 @@
       el('div', { class: 'modal-title' }, ['راتب ' + (emp.name_ar || emp.name)]),
     ]));
     dialog.appendChild(el('div', { class: 'modal-body' }, [
-      el('label', { class: 'form-label' }, ['الراتب الأساسي']), inBase,
-      el('label', { class: 'form-label mt-12' }, ['بدل السكن']), inHousing,
-      el('label', { class: 'form-label mt-12' }, ['بدل المواصلات']), inTransport,
-      el('label', { class: 'form-label mt-12' }, ['بدل أخرى']), inOther,
+      el('label', { class: 'form-label' }, ['الراتب الأساسي (شهري)']), inBase,
       el('label', { class: 'form-label mt-12' }, ['ملاحظات']), inNotes,
-      el('div', { class: 'mt-16', style: 'text-align:center' }, [
-        el('div', { class: 'muted', style: 'font-size:12px' }, ['إجمالي الراتب']),
-        totalDisplay,
-      ]),
+      el('div', { class: 'muted mt-12', style: 'font-size:12px' }, ['الكوميشن يُحسب تلقائيًا من عمولات المبيعات المسجّلة.']),
     ]));
     dialog.appendChild(el('div', { class: 'modal-footer' }, [cancelBtn, saveBtn]));
     overlay.appendChild(dialog);
@@ -184,8 +158,7 @@
           ]),
           el('div', { class: 'kpi-grid mt-12', style: 'gap:8px' }, [
             miniKpi('الرواتب الأساسية', money(run.total_base)),
-            miniKpi('البدلات', money(run.total_allowances)),
-            miniKpi('المكافآت', money(run.total_bonuses)),
+            miniKpi('الكوميشن', money(run.total_bonuses)),
             miniKpi('الخصومات', money(run.total_deductions + run.total_advances + run.total_penalties)),
             miniKpi('صافي المرتبات', money(run.total_net), true),
           ]),
@@ -302,11 +275,8 @@
     // ── ملخص الإجماليات ──
     container.appendChild(el('div', { class: 'kpi-grid' }, [
       kpiCard('الرواتب الأساسية', money(run.total_base), 'brand'),
-      kpiCard('البدلات', money(run.total_allowances), 'info'),
-      kpiCard('المكافآت', money(run.total_bonuses), 'success'),
-      kpiCard('الخصومات', money(run.total_deductions), 'danger'),
-      kpiCard('السُلف', money(run.total_advances), 'warning'),
-      kpiCard('خصم غياب/تأخير', money(run.total_penalties), 'danger'),
+      kpiCard('الكوميشن والمكافآت', money(run.total_bonuses), 'success'),
+      kpiCard('إجمالي الخصومات', money(run.total_deductions + run.total_advances + run.total_penalties), 'danger'),
       kpiCard('صافي المرتبات', money(run.total_net), 'brand'),
     ]));
 
@@ -318,24 +288,19 @@
     } else {
       const table = el('table', { class: 'data-table' });
       table.appendChild(el('thead', {}, [el('tr', {}, [
-        'الموظف', 'الأساسي', 'البدلات', 'المكافآت', 'الخصومات', 'السُلف', 'غياب', 'تأخير', 'مخالفات', 'الإجمالي', 'الصافي', ''
-      ].map(h => el('th', { style: 'font-size:11px;white-space:nowrap' }, [h])))]));
+        'الموظف', 'الأساسي', 'الكوميشن', 'الخصومات', 'الإجمالي', 'الصافي', ''
+      ].map(h => el('th', { style: 'font-size:12px;white-space:nowrap' }, [h])))]));
 
       const tbody = el('tbody');
       payslips.forEach(slip => {
-        const allAllowances = slip.housing_allowance + slip.transport_allowance + slip.other_allowance + slip.benefits_allowances;
-        const allBonuses = slip.benefits_bonuses + slip.reward_bonus + slip.motivation_bonus;
+        const commission = slip.reward_bonus + slip.motivation_bonus + slip.benefits_bonuses;
+        const allDeductions = slip.benefits_deductions + slip.benefits_advances + slip.absence_deduction + slip.late_deduction + slip.violation_fines;
 
         tbody.appendChild(el('tr', {}, [
           el('td', { style: 'font-weight:700;white-space:nowrap' }, [slip.employee_name]),
           el('td', { class: 'mono' }, [money(slip.base_salary)]),
-          el('td', { class: 'mono' }, [money(allAllowances)]),
-          el('td', { class: 'mono', style: 'color:var(--success)' }, [allBonuses > 0 ? '+' + money(allBonuses) : '—']),
-          el('td', { class: 'mono', style: 'color:var(--danger)' }, [slip.benefits_deductions > 0 ? '-' + money(slip.benefits_deductions) : '—']),
-          el('td', { class: 'mono', style: 'color:var(--warning)' }, [slip.benefits_advances > 0 ? '-' + money(slip.benefits_advances) : '—']),
-          el('td', { class: 'mono' }, [slip.absence_days > 0 ? slip.absence_days + ' يوم (-' + money(slip.absence_deduction) + ')' : '—']),
-          el('td', { class: 'mono' }, [slip.late_count > 0 ? slip.late_count + ' (-' + money(slip.late_deduction) + ')' : '—']),
-          el('td', { class: 'mono' }, [slip.violation_fines > 0 ? '-' + money(slip.violation_fines) : '—']),
+          el('td', { class: 'mono', style: 'color:var(--success)' }, [commission > 0 ? '+' + money(commission) : '—']),
+          el('td', { class: 'mono', style: 'color:var(--danger)' }, [allDeductions > 0 ? '-' + money(allDeductions) : '—']),
           el('td', { class: 'mono', style: 'font-weight:600' }, [money(slip.gross_salary)]),
           el('td', { class: 'mono', style: 'font-weight:700;color:var(--brand);font-size:14px' }, [money(slip.net_salary)]),
           el('td', {}, [
@@ -364,8 +329,7 @@
     const overlay = el('div', { class: 'modal-overlay active' });
     const dialog = el('div', { class: 'modal', style: 'max-width:520px' });
 
-    const allAllowances = slip.housing_allowance + slip.transport_allowance + slip.other_allowance + slip.benefits_allowances;
-    const allBonuses = slip.benefits_bonuses + slip.reward_bonus + slip.motivation_bonus;
+    const commission = slip.reward_bonus + slip.motivation_bonus + slip.benefits_bonuses;
     const allDeductions = slip.benefits_deductions + slip.benefits_advances + slip.absence_deduction + slip.late_deduction + slip.violation_fines;
 
     function row(label, value, style) {
@@ -383,16 +347,12 @@
     dialog.appendChild(el('div', { class: 'modal-body', style: 'font-size:13px' }, [
       el('div', { style: 'font-weight:700;margin-bottom:8px;color:var(--brand)' }, ['الاستحقاقات']),
       row('الراتب الأساسي', money(slip.base_salary)),
-      slip.housing_allowance > 0 ? row('بدل سكن', money(slip.housing_allowance)) : null,
-      slip.transport_allowance > 0 ? row('بدل مواصلات', money(slip.transport_allowance)) : null,
-      slip.other_allowance > 0 ? row('بدل أخرى', money(slip.other_allowance)) : null,
-      slip.benefits_allowances > 0 ? row('بدلات إضافية (مزايا)', money(slip.benefits_allowances)) : null,
-      slip.benefits_bonuses > 0 ? row('مكافآت (مزايا)', money(slip.benefits_bonuses)) : null,
-      slip.reward_bonus > 0 ? row('عمولات المبيعات', money(slip.reward_bonus)) : null,
-      slip.motivation_bonus > 0 ? row('حوافز', money(slip.motivation_bonus)) : null,
+      slip.reward_bonus > 0 ? row('عمولات المبيعات', '+' + money(slip.reward_bonus)) : null,
+      slip.motivation_bonus > 0 ? row('حوافز', '+' + money(slip.motivation_bonus)) : null,
+      slip.benefits_bonuses > 0 ? row('مكافآت إضافية', '+' + money(slip.benefits_bonuses)) : null,
       row('إجمالي الاستحقاقات', money(slip.gross_salary), 'font-weight:700;color:var(--success)'),
 
-      el('div', { style: 'font-weight:700;margin:16px 0 8px;color:var(--danger)' }, ['الاستقطاعات']),
+      allDeductions > 0 ? el('div', { style: 'font-weight:700;margin:16px 0 8px;color:var(--danger)' }, ['الاستقطاعات']) : null,
       slip.benefits_deductions > 0 ? row('خصومات', '-' + money(slip.benefits_deductions)) : null,
       slip.benefits_advances > 0 ? row('سُلف', '-' + money(slip.benefits_advances)) : null,
       slip.absence_deduction > 0 ? row('خصم غياب (' + slip.absence_days + ' يوم)', '-' + money(slip.absence_deduction)) : null,
