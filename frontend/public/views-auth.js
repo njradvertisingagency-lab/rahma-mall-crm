@@ -25,7 +25,7 @@
         container.appendChild(
           el('div', { class: 'login-cards login-cards-3' }, [
             el('div', { class: 'login-card', onclick: () => { screen = 'tl-form'; render(); } }, [
-              el('div', { class: 'icon' }, ['🧑‍💼']),
+              el('div', { class: 'icon' }, ['💼']),
               el('div', { class: 'label' }, ['الإدارة']),
               el('div', { class: 'desc' }, ['إدارة الفريق بالكامل، توزيع العملاء، ومتابعة التحليلات.']),
             ]),
