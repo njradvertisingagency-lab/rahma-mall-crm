@@ -46,6 +46,30 @@
   function canEdit() { return isAccountingUser(); }
 
   // ===== مودال إنشاء / تعديل ملف =====
+  // تنسيق تاريخ قصير (YYYY-MM-DD → DD/MM/YYYY)
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'Africa/Cairo' });
+  }
+  // هل تاريخ الاستحقاق فات؟
+  function isOverdue(dueDate) {
+    if (!dueDate) return false;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); // YYYY-MM-DD
+    return dueDate < today;
+  }
+
+  function paymentBadge(active, dueDate) {
+    if (active === 0 || active === false) {
+      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#dc2626;background:#fef2f2;white-space:nowrap' }, ['⛔ متوقف عن الدفع']);
+    }
+    if (isOverdue(dueDate)) {
+      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#d97706;background:#fffbeb;white-space:nowrap' }, ['⚠️ متأخر']);
+    }
+    return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#059669;background:#ecfdf5;white-space:nowrap' }, ['✅ نشط في الدفع']);
+  }
+
   function fileFormModal(existing, onDone) {
     const isEdit = !!existing;
     const fileNumberInput = el('input', { type: 'text', value: existing?.file_number || '', placeholder: 'مثال: 001', disabled: isEdit });
@@ -58,6 +82,13 @@
     const salesRepInput = el('input', { type: 'text', value: existing?.sales_rep || '', placeholder: 'اسم مندوب البيع' });
     const investigationRepInput = el('input', { type: 'text', value: existing?.investigation_rep || '', placeholder: 'اسم مندوب التحري' });
 
+    // حقول الدفع الجديدة
+    const paymentActiveSelect = el('select', {}, [
+      el('option', { value: '1', selected: existing?.payment_active !== 0 }, ['✅ نشط في الدفع']),
+      el('option', { value: '0', selected: existing?.payment_active === 0 }, ['⛔ متوقف عن الدفع']),
+    ]);
+    const installmentDueDateInput = el('input', { type: 'date', value: existing?.installment_due_date || '' });
+
     const body = el('div', {}, [
       el('div', { class: 'field' }, [el('label', {}, ['رقم الملف *']), fileNumberInput]),
       el('div', { class: 'field' }, [el('label', {}, ['اسم العميل *']), clientNameInput]),
@@ -68,6 +99,9 @@
       el('div', { class: 'field' }, [el('label', {}, ['نوع المنتج']), productTypeInput]),
       el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepInput]),
       el('div', { class: 'field' }, [el('label', {}, ['مندوب التحري']), investigationRepInput]),
+      el('div', { style: 'border-top:1px solid var(--border,#e5e7eb);margin-top:12px;padding-top:12px' }),
+      el('div', { class: 'field' }, [el('label', {}, ['💳 حالة الدفع']), paymentActiveSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['📅 تاريخ استحقاق القسط']), installmentDueDateInput]),
     ]);
 
     const dlg = modal(isEdit ? '✏️ تعديل ملف' : '➕ ملف جديد', body, []);
@@ -83,6 +117,8 @@
           productType: productTypeInput.value.trim() || null,
           salesRep: salesRepInput.value.trim() || null,
           investigationRep: investigationRepInput.value.trim() || null,
+          paymentActive: paymentActiveSelect.value === '1',
+          installmentDueDate: installmentDueDateInput.value || null,
         };
         if (!isEdit) payload.fileNumber = fileNumberInput.value.trim();
         if (!payload.clientName) { toast('اسم العميل مطلوب', 'error'); return; }
@@ -195,7 +231,13 @@
       el('option', { value: '' }, ['كل المواقع']),
       ...Object.entries(LOC_MAP).map(([k, v]) => el('option', { value: k }, [v.icon + ' ' + v.label])),
     ]);
-    const filterBar = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center' }, [searchInput, statusFilter, locFilter]);
+    const paymentFilter = el('select', { style: 'min-width:150px' }, [
+      el('option', { value: '' }, ['كل حالات الدفع']),
+      el('option', { value: 'active' }, ['✅ نشط في الدفع']),
+      el('option', { value: 'inactive' }, ['⛔ متوقف عن الدفع']),
+      el('option', { value: 'overdue' }, ['⚠️ متأخر']),
+    ]);
+    const filterBar = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center' }, [searchInput, statusFilter, locFilter, paymentFilter]);
     container.appendChild(filterBar);
 
     // إحصائيات
@@ -209,6 +251,7 @@
     searchInput.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(load, 350); });
     statusFilter.addEventListener('change', load);
     locFilter.addEventListener('change', load);
+    paymentFilter.addEventListener('change', load);
 
     async function loadStats() {
       try {
@@ -217,7 +260,9 @@
         const total = data.byStatus.reduce((s, r) => s + r.cnt, 0);
         const statCards = [
           { label: 'إجمالي الملفات', value: total, color: '#374151' },
-          ...data.byStatus.map(r => ({ label: STATUS_MAP[r.status]?.label || r.status, value: r.cnt, color: STATUS_MAP[r.status]?.color || '#666' })),
+          { label: '✅ نشط في الدفع', value: data.paymentActive || 0, color: '#059669' },
+          { label: '⛔ متوقف عن الدفع', value: data.paymentInactive || 0, color: '#dc2626' },
+          { label: '⚠️ متأخر (فات الاستحقاق)', value: data.overdueCount || 0, color: '#d97706' },
           { label: 'حركات اليوم', value: data.todayMovements, color: '#0891b2' },
         ];
         statCards.forEach(sc => {
@@ -234,6 +279,7 @@
       if (searchInput.value.trim()) params.set('q', searchInput.value.trim());
       if (statusFilter.value) params.set('status', statusFilter.value);
       if (locFilter.value) params.set('location', locFilter.value);
+      if (paymentFilter.value) params.set('payment', paymentFilter.value);
       const qs = params.toString() ? '?' + params.toString() : '';
 
       listBox.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted,#888)">جاري التحميل…</div>';
@@ -251,30 +297,38 @@
               el('th', {}, ['رقم الملف']),
               el('th', {}, ['اسم العميل']),
               el('th', {}, ['هاتف العميل']),
-              el('th', {}, ['الضامن']),
-              el('th', {}, ['هاتف الضامن']),
+              el('th', {}, ['حالة الدفع']),
+              el('th', {}, ['تاريخ الملف']),
+              el('th', {}, ['استحقاق القسط']),
               el('th', {}, ['قيمة القسط']),
+              el('th', {}, ['الضامن']),
               el('th', {}, ['نوع المنتج']),
               el('th', {}, ['مندوب البيع']),
-              el('th', {}, ['مندوب التحري']),
               el('th', {}, ['الإجراءات']),
             ])]),
-            el('tbody', {}, data.files.map(f => el('tr', {}, [
-              el('td', { style: 'font-weight:700;white-space:nowrap' }, [f.file_number]),
-              el('td', {}, [f.client_name]),
-              el('td', { style: 'direction:ltr;text-align:right' }, [f.client_phone || '—']),
-              el('td', {}, [f.guarantor_name || '—']),
-              el('td', { style: 'direction:ltr;text-align:right' }, [f.guarantor_phone || '—']),
-              el('td', {}, [f.installment_value ? String(f.installment_value) : '—']),
-              el('td', {}, [f.product_type || '—']),
-              el('td', {}, [f.sales_rep || '—']),
-              el('td', {}, [f.investigation_rep || '—']),
-              el('td', { style: 'white-space:nowrap' }, [
-                el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الحركات', onclick: () => showFileMovements(f.id) }, ['📋']),
-                canEdit() ? el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'تعديل', onclick: () => fileFormModal(f, () => { load(); loadStats(); }) }, ['✏️']) : null,
-                canEdit() ? el('button', { class: 'btn btn-primary btn-xs', title: 'إذن حركة', onclick: () => movementFormModal(f, () => { load(); loadStats(); }) }, ['🔄']) : null,
-              ]),
-            ]))),
+            el('tbody', {}, data.files.map(f => {
+              const overdue = f.payment_active && isOverdue(f.installment_due_date);
+              const rowStyle = f.payment_active === 0 ? 'background:rgba(220,38,38,0.04)' : overdue ? 'background:rgba(217,119,6,0.04)' : '';
+              return el('tr', { style: rowStyle }, [
+                el('td', { style: 'font-weight:700;white-space:nowrap' }, [f.file_number]),
+                el('td', {}, [f.client_name]),
+                el('td', { style: 'direction:ltr;text-align:right' }, [f.client_phone || '—']),
+                el('td', {}, [paymentBadge(f.payment_active, f.installment_due_date)]),
+                el('td', { style: 'white-space:nowrap;font-size:12px' }, [fmtDate(f.created_at)]),
+                el('td', { style: 'white-space:nowrap;font-size:12px' + (overdue ? ';color:#dc2626;font-weight:700' : '') }, [
+                  f.installment_due_date ? fmtDate(f.installment_due_date) : '—',
+                ]),
+                el('td', {}, [f.installment_value ? String(f.installment_value) : '—']),
+                el('td', {}, [f.guarantor_name || '—']),
+                el('td', {}, [f.product_type || '—']),
+                el('td', {}, [f.sales_rep || '—']),
+                el('td', { style: 'white-space:nowrap' }, [
+                  el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الحركات', onclick: () => showFileMovements(f.id) }, ['📋']),
+                  canEdit() ? el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'تعديل', onclick: () => fileFormModal(f, () => { load(); loadStats(); }) }, ['✏️']) : null,
+                  canEdit() ? el('button', { class: 'btn btn-primary btn-xs', title: 'إذن حركة', onclick: () => movementFormModal(f, () => { load(); loadStats(); }) }, ['🔄']) : null,
+                ]),
+              ]);
+            })),
           ]),
         ]);
         listBox.appendChild(table);
