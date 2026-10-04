@@ -83,11 +83,23 @@
     const investigationRepInput = el('input', { type: 'text', value: existing?.investigation_rep || '', placeholder: 'اسم مندوب التحري' });
 
     // حقول الدفع الجديدة
+    const existingOverdue = existing && existing.payment_active && isOverdue(existing.installment_due_date);
     const paymentActiveSelect = el('select', {}, [
-      el('option', { value: '1', selected: existing?.payment_active !== 0 }, ['✅ نشط في الدفع']),
+      el('option', { value: '1', selected: existing ? (existing.payment_active !== 0 && !existingOverdue) : true }, ['✅ نشط في الدفع']),
+      el('option', { value: 'overdue', selected: !!existingOverdue }, ['⚠️ متأخر في الدفع']),
       el('option', { value: '0', selected: existing?.payment_active === 0 }, ['⛔ متوقف عن الدفع']),
     ]);
     const installmentDueDateInput = el('input', { type: 'date', value: existing?.installment_due_date || '' });
+    // عند اختيار "متأخر"، لو تاريخ الاستحقاق فاضي أو في المستقبل — نضبطه لأمس
+    paymentActiveSelect.addEventListener('change', () => {
+      if (paymentActiveSelect.value === 'overdue') {
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+        if (!installmentDueDateInput.value || installmentDueDateInput.value >= today) {
+          const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+          installmentDueDateInput.value = yesterday;
+        }
+      }
+    });
 
     const body = el('div', {}, [
       el('div', { class: 'field' }, [el('label', {}, ['رقم الملف *']), fileNumberInput]),
@@ -117,7 +129,7 @@
           productType: productTypeInput.value.trim() || null,
           salesRep: salesRepInput.value.trim() || null,
           investigationRep: investigationRepInput.value.trim() || null,
-          paymentActive: paymentActiveSelect.value === '1',
+          paymentActive: paymentActiveSelect.value !== '0',
           installmentDueDate: installmentDueDateInput.value || null,
         };
         if (!isEdit) payload.fileNumber = fileNumberInput.value.trim();
