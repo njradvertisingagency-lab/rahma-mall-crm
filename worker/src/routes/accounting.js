@@ -52,6 +52,7 @@ accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
   const q = c.req.query('q')?.trim();
   const status = c.req.query('status');
   const location = c.req.query('location');
+  const payment = c.req.query('payment'); // active | inactive | overdue
   const page = Math.max(1, Number(c.req.query('page')) || 1);
   const limit = 50;
   const offset = (page - 1) * limit;
@@ -72,14 +73,30 @@ accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
     where += ` AND cf.current_location = ?`;
     params.push(location);
   }
+  if (payment === 'active') {
+    where += ` AND COALESCE(cfpi.payment_active, 1) = 1`;
+  } else if (payment === 'inactive') {
+    where += ` AND cfpi.payment_active = 0`;
+  } else if (payment === 'overdue') {
+    where += ` AND COALESCE(cfpi.payment_active, 1) = 1 AND cfpi.installment_due_date IS NOT NULL AND cfpi.installment_due_date < date('now')`;
+  }
 
-  const countRow = await db.prepare(`SELECT COUNT(*) AS total FROM client_files cf WHERE ${where}`).bind(...params).first();
+  // COUNT needs the same JOINs when filtering by payment
+  const needsPaymentJoin = !!payment;
+  const countSql = needsPaymentJoin
+    ? `SELECT COUNT(*) AS total FROM client_files cf LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id WHERE ${where}`
+    : `SELECT COUNT(*) AS total FROM client_files cf WHERE ${where}`;
+  const countRow = await db.prepare(countSql).bind(...params).first();
+
   const rows = await db.prepare(
     `SELECT cf.*, u.display_name AS created_by_name,
-            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep
+            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
+            COALESCE(cfpi.payment_active, 1) AS payment_active,
+            cfpi.installment_due_date
      FROM client_files cf
      LEFT JOIN users u ON u.id = cf.created_by
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
      WHERE ${where}
      ORDER BY cf.id DESC
      LIMIT ? OFFSET ?`
@@ -94,9 +111,12 @@ accountingRoutes.get('/files/:id', requireAccountingAccess, async (c) => {
   const id = Number(c.req.param('id'));
   const file = await db.prepare(
     `SELECT cf.*, u.display_name AS created_by_name,
-            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep
+            cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
+            COALESCE(cfpi.payment_active, 1) AS payment_active,
+            cfpi.installment_due_date
      FROM client_files cf LEFT JOIN users u ON u.id = cf.created_by
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
      WHERE cf.id = ?`
   ).bind(id).first();
   if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
@@ -144,6 +164,14 @@ accountingRoutes.post('/files', requireAccountingAccess, async (c) => {
     `INSERT INTO client_file_details (file_id, installment_value, product_type, sales_rep, investigation_rep, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).bind(row.id, installmentValue, productType, salesRep, investigationRep, now, now).run();
+
+  // بيانات الدفع — جدول منفصل (ALTER TABLE ممنوع)
+  const paymentActive = body.paymentActive != null ? (body.paymentActive ? 1 : 0) : 1;
+  const installmentDueDate = body.installmentDueDate ? String(body.installmentDueDate).trim() : null;
+  await db.prepare(
+    `INSERT INTO client_file_payment_info (file_id, payment_active, installment_due_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
+  ).bind(row.id, paymentActive, installmentDueDate, now, now).run();
 
   await logActivity(db, {
     actor: user, action: 'FILE_CREATED', entityType: 'client_file', entityId: String(row.id),
@@ -196,6 +224,20 @@ accountingRoutes.put('/files/:id', requireAccountingAccess, async (c) => {
        investigation_rep = excluded.investigation_rep,
        updated_at = excluded.updated_at`
   ).bind(id, installmentValue, productType, salesRep, investigationRep, now, now).run();
+
+  // Upsert بيانات الدفع
+  const paymentActive = body.paymentActive != null ? (body.paymentActive ? 1 : 0) : 1;
+  const installmentDueDate = body.installmentDueDate !== undefined
+    ? (body.installmentDueDate ? String(body.installmentDueDate).trim() : null)
+    : null;
+  await db.prepare(
+    `INSERT INTO client_file_payment_info (file_id, payment_active, installment_due_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(file_id) DO UPDATE SET
+       payment_active = excluded.payment_active,
+       installment_due_date = excluded.installment_due_date,
+       updated_at = excluded.updated_at`
+  ).bind(id, paymentActive, installmentDueDate, now, now).run();
 
   await logActivity(db, {
     actor: user, action: 'FILE_UPDATED', entityType: 'client_file', entityId: String(id),
@@ -309,11 +351,26 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
     `SELECT COUNT(*) AS cnt FROM file_movements WHERE created_at >= date('now', 'start of day')`
   ).first();
 
+  // إحصائيات الدفع
+  const paymentActive = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 1`
+  ).first();
+  const paymentInactive = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 0`
+  ).first();
+  const overdueCount = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_file_payment_info
+     WHERE installment_due_date IS NOT NULL AND installment_due_date < date('now') AND payment_active = 1`
+  ).first();
+
   return c.json({
     byStatus: byStatus.results,
     byLocation: byLocation.results,
     totalMovements: totalMovements.cnt,
     todayMovements: todayMovements.cnt,
+    paymentActive: paymentActive?.cnt || 0,
+    paymentInactive: paymentInactive?.cnt || 0,
+    overdueCount: overdueCount?.cnt || 0,
   });
 });
 
