@@ -6,27 +6,46 @@ export const accountingRoutes = new Hono();
 accountingRoutes.use('*', requireAuth);
 
 // ---------------------------------------------------------------------------
-// صلاحيات قسم الملفات (الحسابات + الشئون القانونية + HR)
+// صلاحيات قسم الملفات
 // ---------------------------------------------------------------------------
-// - موظفو الحسابات (department='accounting') + الشئون القانونية (department='legal')
-//   + HR (isHr) + المالك (isOwner): تحكم كامل في الملفات وأذونات الحركة.
-// - قائد الفريق العادي: يشوف حركة الملفات فقط (قراءة بدون أي تعديل).
-// - موظف خدمة العملاء العادي: لا يصل لأي شيء في الملفات.
+// - المالك (isOwner): تحكم كامل في كل شيء.
+// - قائد الفريق (team_leader): تحكم كامل في الملفات (إنشاء + تعديل + حذف + حركات).
+// - HR (isHr): إنشاء ملفات فقط (بدون تعديل أو حذف) + عرض.
+// - موظفو الحسابات (accounting) + الشئون القانونية (legal): عرض + حركات فقط.
+// - موظف خدمة العملاء العادي: يشوف ملفاته فقط (صفحة "ملفاتي").
 // ---------------------------------------------------------------------------
 
 function isAccountingUser(user) {
-  return user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.isHr;
+  return user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.isHr || user.role === 'team_leader';
 }
 
 function canViewMovements(user) {
   return user.isOwner || user.department === 'accounting' || user.department === 'legal' || user.role === 'team_leader' || user.isHr;
 }
 
-// حارس: العمليات الكاملة (إنشاء/تعديل ملفات وحركات) — حسابات + المالك فقط
+// حارس: عرض صفحة الملفات + الحركات — حسابات + قانونية + HR + قائد الفريق + المالك
 async function requireAccountingAccess(c, next) {
   const user = c.get('user');
   if (!isAccountingUser(user)) {
     return jsonError(c, 403, 'هذا القسم مخصص لموظفي الحسابات فقط', 'FORBIDDEN_ACCOUNTING');
+  }
+  return next();
+}
+
+// حارس: إنشاء ملفات — HR + قائد الفريق + المالك فقط
+async function requireFileCreateAccess(c, next) {
+  const user = c.get('user');
+  if (!(user.isOwner || user.role === 'team_leader' || user.isHr)) {
+    return jsonError(c, 403, 'ليس لديك صلاحية إضافة ملفات — هذه الصلاحية لقائد الفريق و HR فقط', 'FORBIDDEN_FILE_CREATE');
+  }
+  return next();
+}
+
+// حارس: تعديل أو حذف ملفات — قائد الفريق + المالك فقط
+async function requireFileEditAccess(c, next) {
+  const user = c.get('user');
+  if (!(user.isOwner || user.role === 'team_leader')) {
+    return jsonError(c, 403, 'ليس لديك صلاحية تعديل أو حذف الملفات — هذه الصلاحية لقائد الفريق فقط', 'FORBIDDEN_FILE_EDIT');
   }
   return next();
 }
@@ -57,7 +76,7 @@ accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
   const limit = 50;
   const offset = (page - 1) * limit;
 
-  let where = '1=1';
+  let where = `cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
   const params = [];
 
   if (q) {
@@ -117,14 +136,14 @@ accountingRoutes.get('/files/:id', requireAccountingAccess, async (c) => {
      FROM client_files cf LEFT JOIN users u ON u.id = cf.created_by
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
-     WHERE cf.id = ?`
+     WHERE cf.id = ? AND cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
   ).bind(id).first();
   if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
   return c.json({ file });
 });
 
-// إنشاء ملف جديد
-accountingRoutes.post('/files', requireAccountingAccess, async (c) => {
+// إنشاء ملف جديد — HR + قائد الفريق + المالك فقط
+accountingRoutes.post('/files', requireFileCreateAccess, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const body = await c.req.json().catch(() => ({}));
@@ -146,7 +165,7 @@ accountingRoutes.post('/files', requireAccountingAccess, async (c) => {
     return jsonError(c, 400, 'يجب تحديد السبب عند اختيار هذه الحالة', 'MISSING_STATUS_REASON');
   }
 
-  const existing = await db.prepare(`SELECT id FROM client_files WHERE file_number = ?`).bind(fileNumber).first();
+  const existing = await db.prepare(`SELECT id FROM client_files WHERE file_number = ? AND id NOT IN (SELECT file_id FROM client_files_soft_deletes)`).bind(fileNumber).first();
   if (existing) return jsonError(c, 409, 'رقم الملف موجود بالفعل', 'DUPLICATE_FILE_NUMBER');
 
   const now = nowIso();
@@ -181,8 +200,8 @@ accountingRoutes.post('/files', requireAccountingAccess, async (c) => {
   return c.json({ ok: true, fileId: row.id });
 });
 
-// تعديل ملف
-accountingRoutes.put('/files/:id', requireAccountingAccess, async (c) => {
+// تعديل ملف — قائد الفريق + المالك فقط
+accountingRoutes.put('/files/:id', requireFileEditAccess, async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
@@ -242,6 +261,32 @@ accountingRoutes.put('/files/:id', requireAccountingAccess, async (c) => {
   await logActivity(db, {
     actor: user, action: 'FILE_UPDATED', entityType: 'client_file', entityId: String(id),
     metadata: { fileNumber: file.file_number, status },
+  });
+
+  return c.json({ ok: true });
+});
+
+// حذف ملف (حذف ناعم) — قائد الفريق + المالك فقط
+accountingRoutes.delete('/files/:id', requireFileEditAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+
+  const file = await db.prepare(`SELECT id, file_number, client_name FROM client_files WHERE id = ?`).bind(id).first();
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
+
+  // هل محذوف بالفعل؟
+  const already = await db.prepare(`SELECT file_id FROM client_files_soft_deletes WHERE file_id = ?`).bind(id).first();
+  if (already) return jsonError(c, 400, 'الملف محذوف بالفعل', 'ALREADY_DELETED');
+
+  // حذف ناعم
+  await db.prepare(
+    `INSERT INTO client_files_soft_deletes (file_id, deleted_by, deleted_at) VALUES (?, ?, datetime('now'))`
+  ).bind(id, user.id).run();
+
+  await logActivity(db, {
+    actor: user, action: 'FILE_DELETED', entityType: 'client_file', entityId: String(id),
+    metadata: { fileNumber: file.file_number, clientName: file.client_name },
   });
 
   return c.json({ ok: true });
@@ -344,8 +389,10 @@ accountingRoutes.get('/movements', requireMovementViewAccess, async (c) => {
 // إحصائيات سريعة (عدد الملفات لكل حالة/موقع)
 accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
   const db = c.env.DB;
-  const byStatus = await db.prepare(`SELECT status, COUNT(*) AS cnt FROM client_files GROUP BY status`).all();
-  const byLocation = await db.prepare(`SELECT current_location, COUNT(*) AS cnt FROM client_files GROUP BY current_location`).all();
+  const notDeleted = `id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
+  const notDeletedFk = `file_id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
+  const byStatus = await db.prepare(`SELECT status, COUNT(*) AS cnt FROM client_files WHERE ${notDeleted} GROUP BY status`).all();
+  const byLocation = await db.prepare(`SELECT current_location, COUNT(*) AS cnt FROM client_files WHERE ${notDeleted} GROUP BY current_location`).all();
   const totalMovements = await db.prepare(`SELECT COUNT(*) AS cnt FROM file_movements`).first();
   const todayMovements = await db.prepare(
     `SELECT COUNT(*) AS cnt FROM file_movements WHERE created_at >= date('now', 'start of day')`
@@ -353,14 +400,14 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
 
   // إحصائيات الدفع
   const paymentActive = await db.prepare(
-    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 1`
+    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 1 AND ${notDeletedFk}`
   ).first();
   const paymentInactive = await db.prepare(
-    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 0`
+    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 0 AND ${notDeletedFk}`
   ).first();
   const overdueCount = await db.prepare(
     `SELECT COUNT(*) AS cnt FROM client_file_payment_info
-     WHERE installment_due_date IS NOT NULL AND installment_due_date < date('now') AND payment_active = 1`
+     WHERE installment_due_date IS NOT NULL AND installment_due_date < date('now') AND payment_active = 1 AND ${notDeletedFk}`
   ).first();
 
   return c.json({
@@ -872,7 +919,7 @@ accountingRoutes.get('/my-files', requireAuth, async (c) => {
   const offset = (page - 1) * limit;
   const allTime = c.req.query('all') === '1'; // لو عايز كل الملفات مش بس الشهر
 
-  let where = `cfd.sales_rep = ?`;
+  let where = `cfd.sales_rep = ? AND cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
   const params = [empName];
 
   if (!allTime) {
