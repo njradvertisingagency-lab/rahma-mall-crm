@@ -8,7 +8,7 @@ accountingRoutes.use('*', requireAuth);
 // ---------------------------------------------------------------------------
 // صلاحيات قسم الملفات
 // ---------------------------------------------------------------------------
-// - المالك (isOwner): تحكم كامل في كل شيء.
+// - المالك (isOwner): عرض + إنشاء + حركات (بدون تعديل أو حذف).
 // - قائد الفريق (team_leader): تحكم كامل في الملفات (إنشاء + تعديل + حذف + حركات).
 // - HR (isHr): إنشاء ملفات فقط (بدون تعديل أو حذف) + عرض.
 // - موظفو الحسابات (accounting) + الشئون القانونية (legal): عرض + حركات فقط.
@@ -41,10 +41,10 @@ async function requireFileCreateAccess(c, next) {
   return next();
 }
 
-// حارس: تعديل أو حذف ملفات — قائد الفريق + المالك فقط
+// حارس: تعديل أو حذف ملفات — قائد الفريق فقط
 async function requireFileEditAccess(c, next) {
   const user = c.get('user');
-  if (!(user.isOwner || user.role === 'team_leader')) {
+  if (user.role !== 'team_leader') {
     return jsonError(c, 403, 'ليس لديك صلاحية تعديل أو حذف الملفات — هذه الصلاحية لقائد الفريق فقط', 'FORBIDDEN_FILE_EDIT');
   }
   return next();
