@@ -837,3 +837,65 @@ accountingRoutes.get('/payroll/payslip/:id', requireAccountingAccess, async (c) 
 
   return c.json({ payslip: slip, run });
 });
+
+// ===== قائمة موظفي خدمة العملاء (للاختيار في فورم الملف) =====
+accountingRoutes.get('/sales-reps', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const rows = await db.prepare(
+    `SELECT e.id, e.name, COALESCE(e.name_ar, e.name) AS name_ar
+     FROM employees e
+     LEFT JOIN employee_department ed ON ed.employee_id = e.id
+     WHERE e.active = 1 AND COALESCE(ed.department, 'customer_service') = 'customer_service'
+     ORDER BY e.name COLLATE NOCASE`
+  ).all();
+  return c.json({ employees: rows.results });
+});
+
+// ===== ملفاتي — الملفات المرتبطة بالموظف كمندوب بيع (الشهر الحالي) =====
+accountingRoutes.get('/my-files', requireAuth, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+
+  // جلب اسم الموظف من جدول employees
+  let empName = null;
+  if (user.employeeId) {
+    const emp = await db.prepare(`SELECT name FROM employees WHERE id = ?`).bind(user.employeeId).first();
+    if (emp) empName = emp.name;
+  }
+  if (!empName) {
+    return c.json({ files: [], total: 0, employeeName: null });
+  }
+
+  // بداية الشهر الحالي (بتوقيت القاهرة)
+  const page = Math.max(1, Number(c.req.query('page')) || 1);
+  const limit = 50;
+  const offset = (page - 1) * limit;
+  const allTime = c.req.query('all') === '1'; // لو عايز كل الملفات مش بس الشهر
+
+  let where = `cfd.sales_rep = ?`;
+  const params = [empName];
+
+  if (!allTime) {
+    where += ` AND cf.created_at >= date('now', 'start of month')`;
+  }
+
+  const countRow = await db.prepare(
+    `SELECT COUNT(*) AS total FROM client_files cf
+     LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
+     WHERE ${where}`
+  ).bind(...params).first();
+
+  const rows = await db.prepare(
+    `SELECT cf.*, cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
+            COALESCE(cfpi.payment_active, 1) AS payment_active,
+            cfpi.installment_due_date
+     FROM client_files cf
+     LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     WHERE ${where}
+     ORDER BY cf.created_at DESC
+     LIMIT ? OFFSET ?`
+  ).bind(...params, limit, offset).all();
+
+  return c.json({ files: rows.results, total: countRow.total, page, limit, employeeName: empName });
+});
