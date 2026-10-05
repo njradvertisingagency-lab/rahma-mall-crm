@@ -49,10 +49,10 @@
     const u = App.state.user;
     return u.isOwner || u.role === 'team_leader' || u.isHr;
   }
-  // تعديل أو حذف ملف: قائد الفريق + المالك فقط
+  // تعديل أو حذف ملف: قائد الفريق فقط
   function canEdit() {
     const u = App.state.user;
-    return u.isOwner || u.role === 'team_leader';
+    return u.role === 'team_leader';
   }
 
   // ===== مودال إنشاء / تعديل ملف =====
