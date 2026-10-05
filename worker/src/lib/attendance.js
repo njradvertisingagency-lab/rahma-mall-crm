@@ -442,7 +442,7 @@ export async function getAttendanceDashboard(env, { date } = {}) {
     followupsOverdue: sum('followupsOverdue'),
     needsNoteTotal: sum('needsNoteCount'),
     assignedTotal: sum('assignedTotal'),
-    topPerformer: ranked[0] ? ranked[0].name : null,
+    topPerformer: ranked[0] && ranked[0].activityScore > 0 ? ranked[0].name : null,
   };
 
   return { dateStr, isHolidayToday: status.isHolidayToday, people: scored, team };
