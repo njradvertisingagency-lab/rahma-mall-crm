@@ -865,6 +865,7 @@ const NAV_LEGAL = [
 
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
+  ['my-files', '🗃️', 'ملفاتي'],
   ['work-queue', '🎯', 'قائمة مهامي'],
   ['my-customers', '👥', 'عملائي'],
   ['favorites', '⭐', 'المفضلة'],

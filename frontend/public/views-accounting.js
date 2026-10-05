@@ -70,6 +70,17 @@
     return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#059669;background:#ecfdf5;white-space:nowrap' }, ['✅ نشط في الدفع']);
   }
 
+  // كاش موظفي خدمة العملاء
+  let _salesRepsCache = null;
+  async function loadSalesReps() {
+    if (_salesRepsCache) return _salesRepsCache;
+    try {
+      const data = await api('/accounting/sales-reps');
+      _salesRepsCache = data.employees || [];
+    } catch { _salesRepsCache = []; }
+    return _salesRepsCache;
+  }
+
   function fileFormModal(existing, onDone) {
     const isEdit = !!existing;
     const fileNumberInput = el('input', { type: 'text', value: existing?.file_number || '', placeholder: 'مثال: 001', disabled: isEdit });
@@ -79,7 +90,15 @@
     const guarantorPhoneInput = el('input', { type: 'tel', value: existing?.guarantor_phone || '', placeholder: '01xxxxxxxxx' });
     const installmentInput = el('input', { type: 'number', value: existing?.installment_value || '', placeholder: '0', min: '0', step: '0.01' });
     const productTypeInput = el('input', { type: 'text', value: existing?.product_type || '', placeholder: 'نوع المنتج' });
-    const salesRepInput = el('input', { type: 'text', value: existing?.sales_rep || '', placeholder: 'اسم مندوب البيع' });
+    // مندوب البيع — dropdown من موظفي خدمة العملاء
+    const salesRepSelect = el('select', {}, [el('option', { value: '' }, ['-- اختر مندوب البيع --'])]);
+    loadSalesReps().then((reps) => {
+      reps.forEach((r) => {
+        const opt = el('option', { value: r.name }, [r.name_ar || r.name]);
+        if (existing?.sales_rep === r.name) opt.selected = true;
+        salesRepSelect.appendChild(opt);
+      });
+    });
     const investigationRepInput = el('input', { type: 'text', value: existing?.investigation_rep || '', placeholder: 'اسم مندوب التحري' });
 
     // حقول الدفع الجديدة
@@ -109,7 +128,7 @@
       el('div', { class: 'field' }, [el('label', {}, ['رقم هاتف الضامن']), guarantorPhoneInput]),
       el('div', { class: 'field' }, [el('label', {}, ['قيمة القسط']), installmentInput]),
       el('div', { class: 'field' }, [el('label', {}, ['نوع المنتج']), productTypeInput]),
-      el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepSelect]),
       el('div', { class: 'field' }, [el('label', {}, ['مندوب التحري']), investigationRepInput]),
       el('div', { style: 'border-top:1px solid var(--border,#e5e7eb);margin-top:12px;padding-top:12px' }),
       el('div', { class: 'field' }, [el('label', {}, ['💳 حالة الدفع']), paymentActiveSelect]),
@@ -127,7 +146,7 @@
           guarantorPhone: guarantorPhoneInput.value.trim() || null,
           installmentValue: installmentInput.value ? Number(installmentInput.value) : 0,
           productType: productTypeInput.value.trim() || null,
-          salesRep: salesRepInput.value.trim() || null,
+          salesRep: salesRepSelect.value || null,
           investigationRep: investigationRepInput.value.trim() || null,
           paymentActive: paymentActiveSelect.value !== '0',
           installmentDueDate: installmentDueDateInput.value || null,
@@ -418,6 +437,83 @@
         if (data.total > data.limit) {
           listBox.appendChild(el('div', { style: 'text-align:center;padding:8px;color:var(--muted,#888);font-size:13px' }, ['عرض ' + data.movements.length + ' من ' + data.total]));
         }
+      } catch (err) { listBox.innerHTML = ''; toast(err.message, 'error'); }
+    }
+
+    load();
+    return container;
+  });
+
+  // ===== صفحة "ملفاتي" — الملفات المرتبطة بالموظف كمندوب بيع =====
+  App.route('/my-files', async () => {
+    const user = App.state.user;
+    const container = el('div');
+
+    container.appendChild(el('div', { class: 'page-header' }, [
+      el('div', { class: 'page-title' }, ['🗃️ ملفاتي']),
+    ]));
+
+    // تبديل: الشهر الحالي / كل الملفات
+    let showAll = false;
+    const toggleBtn = el('button', { class: 'btn btn-outline btn-sm mb-12', onclick: () => { showAll = !showAll; toggleBtn.textContent = showAll ? '📅 عرض الشهر الحالي فقط' : '📋 عرض كل الملفات'; load(); } }, ['📋 عرض كل الملفات']);
+    container.appendChild(toggleBtn);
+
+    const statsBox = el('div', { class: 'kpi-grid mb-16' });
+    container.appendChild(statsBox);
+
+    const listBox = el('div');
+    container.appendChild(listBox);
+
+    async function load() {
+      listBox.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted,#888)">جاري التحميل…</div>';
+      statsBox.innerHTML = '';
+      try {
+        const qs = showAll ? '?all=1' : '';
+        const data = await api('/accounting/my-files' + qs);
+        listBox.innerHTML = '';
+        if (!data.employeeName) {
+          listBox.appendChild(el('div', { class: 'empty-state' }, [
+            el('div', { class: 'icon' }, ['📭']),
+            el('div', { style: 'font-weight:700' }, ['لا يوجد حساب موظف مرتبط']),
+          ]));
+          return;
+        }
+        // إحصائيات
+        const total = data.total || 0;
+        const activePayment = data.files.filter(f => f.payment_active && !isOverdue(f.installment_due_date)).length;
+        const overduePayment = data.files.filter(f => f.payment_active && isOverdue(f.installment_due_date)).length;
+        const stoppedPayment = data.files.filter(f => !f.payment_active).length;
+
+        statsBox.appendChild(el('div', { class: 'kpi-card accent-brand' }, [el('div', { class: 'kpi-value' }, [String(total)]), el('div', { class: 'kpi-label' }, [showAll ? 'إجمالي ملفاتي' : 'ملفاتي هذا الشهر'])]));
+        statsBox.appendChild(el('div', { class: 'kpi-card accent-success' }, [el('div', { class: 'kpi-value' }, [String(activePayment)]), el('div', { class: 'kpi-label' }, ['نشط في الدفع'])]));
+        if (overduePayment > 0) statsBox.appendChild(el('div', { class: 'kpi-card accent-warning' }, [el('div', { class: 'kpi-value' }, [String(overduePayment)]), el('div', { class: 'kpi-label' }, ['متأخر في الدفع'])]));
+        if (stoppedPayment > 0) statsBox.appendChild(el('div', { class: 'kpi-card accent-danger' }, [el('div', { class: 'kpi-value' }, [String(stoppedPayment)]), el('div', { class: 'kpi-label' }, ['متوقف عن الدفع'])]));
+
+        if (data.files.length === 0) {
+          listBox.appendChild(el('div', { class: 'empty-state' }, [
+            el('div', { class: 'icon' }, ['📭']),
+            el('div', { style: 'font-weight:700' }, [showAll ? 'لا توجد ملفات مرتبطة بك بعد' : 'لا توجد ملفات هذا الشهر']),
+          ]));
+          return;
+        }
+
+        const table = el('div', { class: 'table-wrap' }, [
+          el('table', { class: 'data-table' }, [
+            el('thead', {}, [el('tr', {}, ['رقم الملف', 'اسم العميل', 'هاتف العميل', 'نوع المنتج', 'قيمة القسط', 'حالة الدفع', 'تاريخ الملف'].map(h => el('th', {}, [h])))]),
+            el('tbody', {}, data.files.map(f =>
+              el('tr', {}, [
+                el('td', { class: 'mono', style: 'font-weight:700' }, [f.file_number]),
+                el('td', {}, [f.client_name]),
+                el('td', { class: 'mono' }, [f.client_phone || '—']),
+                el('td', {}, [f.product_type || '—']),
+                el('td', { class: 'mono' }, [f.installment_value ? String(f.installment_value) : '—']),
+                el('td', {}, [paymentBadge(f.payment_active, f.installment_due_date)]),
+                el('td', { class: 'muted', style: 'font-size:12px;white-space:nowrap' }, [fmtDate(f.created_at)]),
+              ])
+            )),
+          ]),
+        ]);
+        listBox.appendChild(table);
       } catch (err) { listBox.innerHTML = ''; toast(err.message, 'error'); }
     }
 
