@@ -758,6 +758,7 @@ App.rerender = renderRoute;
 // يوافق/يرفض على طلبات الإجازة (شوف views-leaves.js).
 const NAV_TL = [
   ['dashboard', '📊', 'لوحة التحكم'],
+  ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
   ['favorites', '⭐', 'المفضلة'],
@@ -781,6 +782,7 @@ const NAV_TL = [
 // أساسي، بدون أي وصول لشغل المبيعات/CRM (العملاء، التوزيع، التحليلات...).
 const NAV_HR = [
   ['dashboard', '📊', 'لوحة التحكم'],
+  ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['leaves', '🗓️', 'الإجازات والغياب'],
   ['evaluations', '📝', 'الأداء والتقييم'],

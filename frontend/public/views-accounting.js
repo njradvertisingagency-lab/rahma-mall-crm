@@ -38,12 +38,22 @@
     return { close, el: backdrop };
   }
 
-  // ===== هل المستخدم له صلاحية الملفات (حسابات / شئون قانونية / HR / المالك) =====
+  // ===== صلاحيات الملفات =====
+  // عرض صفحة الملفات: حسابات + قانونية + HR + قائد الفريق + المالك
   function isAccountingUser() {
     const u = App.state.user;
-    return u.isOwner || u.department === 'accounting' || u.department === 'legal' || u.isHr;
+    return u.isOwner || u.department === 'accounting' || u.department === 'legal' || u.isHr || u.role === 'team_leader';
   }
-  function canEdit() { return isAccountingUser(); }
+  // إنشاء ملف: HR + قائد الفريق + المالك
+  function canCreate() {
+    const u = App.state.user;
+    return u.isOwner || u.role === 'team_leader' || u.isHr;
+  }
+  // تعديل أو حذف ملف: قائد الفريق + المالك فقط
+  function canEdit() {
+    const u = App.state.user;
+    return u.isOwner || u.role === 'team_leader';
+  }
 
   // ===== مودال إنشاء / تعديل ملف =====
   // تنسيق تاريخ قصير (YYYY-MM-DD → DD/MM/YYYY)
@@ -240,6 +250,31 @@
     modal('📋 سجل حركات ملف ' + file.file_number + ' — ' + file.client_name, list, []);
   }
 
+  // ===== تأكيد حذف ملف =====
+  function confirmDeleteFile(file, onDone) {
+    const body = el('div', { style: 'text-align:center;padding:8px 0' }, [
+      el('div', { style: 'font-size:40px;margin-bottom:12px' }, ['⚠️']),
+      el('div', { style: 'font-size:15px;font-weight:700;margin-bottom:8px' }, ['هل أنت متأكد من حذف هذا الملف؟']),
+      el('div', { style: 'background:var(--surface-2,#f3f4f6);border-radius:8px;padding:12px;margin:12px 0;text-align:right' }, [
+        el('div', {}, [el('strong', {}, ['رقم الملف: ']), file.file_number]),
+        el('div', {}, [el('strong', {}, ['العميل: ']), file.client_name]),
+      ]),
+      el('div', { style: 'color:#dc2626;font-size:13px' }, ['لا يمكن التراجع عن هذا الإجراء.']),
+    ]);
+    const dlg = modal('🗑️ حذف ملف', body, []);
+    dlg.el.querySelector('.modal-footer').append(
+      el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
+      el('button', { class: 'btn', style: 'background:#dc2626;color:#fff;border:none', onclick: async () => {
+        try {
+          await api('/accounting/files/' + file.id, { method: 'DELETE' });
+          toast('تم حذف الملف بنجاح', 'success');
+          dlg.close();
+          if (onDone) onDone();
+        } catch (err) { toast(err.message, 'error'); }
+      } }, ['نعم، احذف الملف'])
+    );
+  }
+
   // ===== صفحة ملفات العملاء (الحسابات) =====
   App.route('/accounting-files', async () => {
     const user = App.state.user;
@@ -249,7 +284,7 @@
     // شريط العنوان
     container.appendChild(el('div', { class: 'page-header' }, [
       el('div', { class: 'page-title' }, ['🗃️ ملفات العملاء — قسم الحسابات']),
-      canEdit() ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => fileFormModal(null, load) }, ['➕ ملف جديد']) : null,
+      canCreate() ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => fileFormModal(null, load) }, ['➕ ملف جديد']) : null,
     ]));
 
     // فلاتر
@@ -356,7 +391,8 @@
                 el('td', { style: 'white-space:nowrap' }, [
                   el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الحركات', onclick: () => showFileMovements(f.id) }, ['📋']),
                   canEdit() ? el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'تعديل', onclick: () => fileFormModal(f, () => { load(); loadStats(); }) }, ['✏️']) : null,
-                  canEdit() ? el('button', { class: 'btn btn-primary btn-xs', title: 'إذن حركة', onclick: () => movementFormModal(f, () => { load(); loadStats(); }) }, ['🔄']) : null,
+                  isAccountingUser() ? el('button', { class: 'btn btn-primary btn-xs', style: 'margin-left:4px', title: 'إذن حركة', onclick: () => movementFormModal(f, () => { load(); loadStats(); }) }, ['🔄']) : null,
+                  canEdit() ? el('button', { class: 'btn btn-xs', style: 'margin-left:4px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca', title: 'حذف', onclick: () => confirmDeleteFile(f, () => { load(); loadStats(); }) }, ['🗑️']) : null,
                 ]),
               ]);
             })),
