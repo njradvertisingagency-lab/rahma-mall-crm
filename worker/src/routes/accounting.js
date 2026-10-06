@@ -65,16 +65,25 @@ const STATUSES = ['active_regular', 'active_late', 'rejected', 'needs_review'];
 
 // ===== ملفات العملاء =====
 
+// الشهر الحالي بصيغة YYYY-MM (توقيت القاهرة)
+function currentMonth() {
+  const now = new Date();
+  // تقريب: UTC+2
+  const cairo = new Date(now.getTime() + 2 * 3600000);
+  return cairo.toISOString().slice(0, 7);
+}
+
 // قائمة الملفات مع بحث وفلترة
 accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
   const db = c.env.DB;
   const q = c.req.query('q')?.trim();
   const status = c.req.query('status');
   const location = c.req.query('location');
-  const payment = c.req.query('payment'); // active | inactive | overdue
+  const payment = c.req.query('payment'); // active | inactive | overdue | paid | unpaid
   const page = Math.max(1, Number(c.req.query('page')) || 1);
   const limit = 50;
   const offset = (page - 1) * limit;
+  const month = currentMonth();
 
   let where = `cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
   const params = [];
@@ -98,44 +107,60 @@ accountingRoutes.get('/files', requireAccountingAccess, async (c) => {
     where += ` AND cfpi.payment_active = 0`;
   } else if (payment === 'overdue') {
     where += ` AND COALESCE(cfpi.payment_active, 1) = 1 AND cfpi.installment_due_date IS NOT NULL AND cfpi.installment_due_date < date('now')`;
+  } else if (payment === 'paid') {
+    where += ` AND mp.id IS NOT NULL`; // دفع هذا الشهر
+  } else if (payment === 'unpaid') {
+    where += ` AND mp.id IS NULL AND COALESCE(cfpi.payment_active, 1) = 1`; // لم يدفع هذا الشهر (نشط فقط)
   }
 
-  // COUNT needs the same JOINs when filtering by payment
+  // COUNT needs the same JOINs
   const needsPaymentJoin = !!payment;
-  const countSql = needsPaymentJoin
-    ? `SELECT COUNT(*) AS total FROM client_files cf LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id WHERE ${where}`
-    : `SELECT COUNT(*) AS total FROM client_files cf WHERE ${where}`;
+  const countSql = `SELECT COUNT(*) AS total FROM client_files cf
+    LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+    LEFT JOIN client_file_monthly_payments mp ON mp.file_id = cf.id AND mp.month = '${month}'
+    WHERE ${where}`;
   const countRow = await db.prepare(countSql).bind(...params).first();
 
   const rows = await db.prepare(
     `SELECT cf.*, u.display_name AS created_by_name,
             cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
             COALESCE(cfpi.payment_active, 1) AS payment_active,
-            cfpi.installment_due_date
+            cfpi.installment_due_date,
+            COALESCE(cfdp.amount, 0) AS down_payment_amount,
+            CASE WHEN mp.id IS NOT NULL THEN 1 ELSE 0 END AS paid_this_month,
+            mp.paid_at AS paid_at,
+            mp.recorded_by AS payment_recorded_by
      FROM client_files cf
      LEFT JOIN users u ON u.id = cf.created_by
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     LEFT JOIN client_file_down_payment cfdp ON cfdp.file_id = cf.id
+     LEFT JOIN client_file_monthly_payments mp ON mp.file_id = cf.id AND mp.month = '${month}'
      WHERE ${where}
      ORDER BY cf.id DESC
      LIMIT ? OFFSET ?`
   ).bind(...params, limit, offset).all();
 
-  return c.json({ files: rows.results, total: countRow.total, page, limit });
+  return c.json({ files: rows.results, total: countRow.total, page, limit, currentMonth: month });
 });
 
 // تفاصيل ملف واحد
 accountingRoutes.get('/files/:id', requireAccountingAccess, async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
+  const month = currentMonth();
   const file = await db.prepare(
     `SELECT cf.*, u.display_name AS created_by_name,
             cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
             COALESCE(cfpi.payment_active, 1) AS payment_active,
-            cfpi.installment_due_date
+            cfpi.installment_due_date,
+            COALESCE(cfdp.amount, 0) AS down_payment_amount,
+            CASE WHEN mp.id IS NOT NULL THEN 1 ELSE 0 END AS paid_this_month
      FROM client_files cf LEFT JOIN users u ON u.id = cf.created_by
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     LEFT JOIN client_file_down_payment cfdp ON cfdp.file_id = cf.id
+     LEFT JOIN client_file_monthly_payments mp ON mp.file_id = cf.id AND mp.month = '${month}'
      WHERE cf.id = ? AND cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
   ).bind(id).first();
   if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
@@ -191,6 +216,15 @@ accountingRoutes.post('/files', requireFileCreateAccess, async (c) => {
     `INSERT INTO client_file_payment_info (file_id, payment_active, installment_due_date, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)`
   ).bind(row.id, paymentActive, installmentDueDate, now, now).run();
+
+  // المقدم المدفوع (down payment)
+  const downPayment = body.downPayment != null ? Number(body.downPayment) : 0;
+  if (downPayment > 0) {
+    await db.prepare(
+      `INSERT INTO client_file_down_payment (file_id, amount, created_at, updated_at)
+       VALUES (?, ?, ?, ?)`
+    ).bind(row.id, downPayment, now, now).run();
+  }
 
   await logActivity(db, {
     actor: user, action: 'FILE_CREATED', entityType: 'client_file', entityId: String(row.id),
@@ -257,6 +291,16 @@ accountingRoutes.put('/files/:id', requireFileEditAccess, async (c) => {
        installment_due_date = excluded.installment_due_date,
        updated_at = excluded.updated_at`
   ).bind(id, paymentActive, installmentDueDate, now, now).run();
+
+  // Upsert المقدم المدفوع
+  const downPayment = body.downPayment != null ? Number(body.downPayment) : 0;
+  await db.prepare(
+    `INSERT INTO client_file_down_payment (file_id, amount, created_at, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(file_id) DO UPDATE SET
+       amount = excluded.amount,
+       updated_at = excluded.updated_at`
+  ).bind(id, downPayment, now, now).run();
 
   await logActivity(db, {
     actor: user, action: 'FILE_UPDATED', entityType: 'client_file', entityId: String(id),
@@ -386,11 +430,94 @@ accountingRoutes.get('/movements', requireMovementViewAccess, async (c) => {
   return c.json({ movements: rows.results, total: countRow.total, page, limit });
 });
 
+// ===== تسجيل دفع القسط الشهري =====
+
+// تسجيل دفع — HR + قائد الفريق + المالك
+accountingRoutes.post('/files/:id/pay', requireFileCreateAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const fileId = Number(c.req.param('id'));
+  const month = currentMonth();
+
+  const file = await db.prepare(
+    `SELECT id, file_number, client_name FROM client_files WHERE id = ? AND id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
+  ).bind(fileId).first();
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
+
+  // هل مسجّل بالفعل لهذا الشهر؟
+  const already = await db.prepare(
+    `SELECT id FROM client_file_monthly_payments WHERE file_id = ? AND month = ?`
+  ).bind(fileId, month).first();
+  if (already) return jsonError(c, 409, 'تم تسجيل دفع هذا الشهر بالفعل', 'ALREADY_PAID');
+
+  const body = await c.req.json().catch(() => ({}));
+  const notes = body.notes ? String(body.notes).trim() : null;
+
+  await db.prepare(
+    `INSERT INTO client_file_monthly_payments (file_id, month, recorded_by, notes) VALUES (?, ?, ?, ?)`
+  ).bind(fileId, month, user.id, notes).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYMENT_RECORDED', entityType: 'client_file', entityId: String(fileId),
+    metadata: { fileNumber: file.file_number, clientName: file.client_name, month },
+  });
+
+  return c.json({ ok: true, month });
+});
+
+// إلغاء تسجيل دفع — قائد الفريق فقط
+accountingRoutes.post('/files/:id/unpay', requireFileEditAccess, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const fileId = Number(c.req.param('id'));
+  const month = currentMonth();
+
+  const file = await db.prepare(
+    `SELECT id, file_number, client_name FROM client_files WHERE id = ? AND id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
+  ).bind(fileId).first();
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
+
+  const record = await db.prepare(
+    `SELECT id FROM client_file_monthly_payments WHERE file_id = ? AND month = ?`
+  ).bind(fileId, month).first();
+  if (!record) return jsonError(c, 404, 'لا يوجد تسجيل دفع لهذا الشهر', 'NO_PAYMENT_RECORD');
+
+  await db.prepare(`DELETE FROM client_file_monthly_payments WHERE id = ?`).bind(record.id).run();
+
+  await logActivity(db, {
+    actor: user, action: 'PAYMENT_CANCELLED', entityType: 'client_file', entityId: String(fileId),
+    metadata: { fileNumber: file.file_number, clientName: file.client_name, month },
+  });
+
+  return c.json({ ok: true, month });
+});
+
+// سجل الدفعات لملف واحد
+accountingRoutes.get('/files/:id/payments', requireAccountingAccess, async (c) => {
+  const db = c.env.DB;
+  const fileId = Number(c.req.param('id'));
+
+  const file = await db.prepare(`SELECT file_number, client_name FROM client_files WHERE id = ?`).bind(fileId).first();
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'FILE_NOT_FOUND');
+
+  const rows = await db.prepare(
+    `SELECT mp.*, u.display_name AS recorded_by_name
+     FROM client_file_monthly_payments mp
+     LEFT JOIN users u ON u.id = mp.recorded_by
+     WHERE mp.file_id = ?
+     ORDER BY mp.month DESC`
+  ).bind(fileId).all();
+
+  return c.json({ payments: rows.results, file });
+});
+
 // إحصائيات سريعة (عدد الملفات لكل حالة/موقع)
 accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
   const db = c.env.DB;
   const notDeleted = `id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
   const notDeletedFk = `file_id NOT IN (SELECT file_id FROM client_files_soft_deletes)`;
+  const month = currentMonth();
+
   const byStatus = await db.prepare(`SELECT status, COUNT(*) AS cnt FROM client_files WHERE ${notDeleted} GROUP BY status`).all();
   const byLocation = await db.prepare(`SELECT current_location, COUNT(*) AS cnt FROM client_files WHERE ${notDeleted} GROUP BY current_location`).all();
   const totalMovements = await db.prepare(`SELECT COUNT(*) AS cnt FROM file_movements`).first();
@@ -398,16 +525,36 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
     `SELECT COUNT(*) AS cnt FROM file_movements WHERE created_at >= date('now', 'start of day')`
   ).first();
 
-  // إحصائيات الدفع
-  const paymentActive = await db.prepare(
-    `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 1 AND ${notDeletedFk}`
+  // إحصائيات الدفع — الأقساط الشهرية
+  // عدد الملفات النشطة في الدفع
+  const activeFiles = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_files cf
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     WHERE cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes) AND COALESCE(cfpi.payment_active, 1) = 1`
   ).first();
+  // عدد اللي دفعوا هذا الشهر
+  const paidThisMonth = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_file_monthly_payments mp
+     WHERE mp.month = ? AND mp.file_id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
+  ).bind(month).first();
+  // عدد اللي مدفعوش هذا الشهر (نشطين بس مدفعوش)
+  const unpaidThisMonth = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_files cf
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     LEFT JOIN client_file_monthly_payments mp ON mp.file_id = cf.id AND mp.month = ?
+     WHERE cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes) AND COALESCE(cfpi.payment_active, 1) = 1 AND mp.id IS NULL`
+  ).bind(month).first();
+  // متوقف عن الدفع
   const paymentInactive = await db.prepare(
     `SELECT COUNT(*) AS cnt FROM client_file_payment_info WHERE payment_active = 0 AND ${notDeletedFk}`
   ).first();
-  const overdueCount = await db.prepare(
-    `SELECT COUNT(*) AS cnt FROM client_file_payment_info
-     WHERE installment_due_date IS NOT NULL AND installment_due_date < date('now') AND payment_active = 1 AND ${notDeletedFk}`
+  // ملفات بدون تاريخ استحقاق
+  const noDueDate = await db.prepare(
+    `SELECT COUNT(*) AS cnt FROM client_files cf
+     LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     WHERE cf.id NOT IN (SELECT file_id FROM client_files_soft_deletes)
+       AND COALESCE(cfpi.payment_active, 1) = 1
+       AND (cfpi.installment_due_date IS NULL OR cfpi.installment_due_date = '')`
   ).first();
 
   return c.json({
@@ -415,9 +562,12 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
     byLocation: byLocation.results,
     totalMovements: totalMovements.cnt,
     todayMovements: todayMovements.cnt,
-    paymentActive: paymentActive?.cnt || 0,
+    currentMonth: month,
+    activeFiles: activeFiles?.cnt || 0,
+    paidThisMonth: paidThisMonth?.cnt || 0,
+    unpaidThisMonth: unpaidThisMonth?.cnt || 0,
     paymentInactive: paymentInactive?.cnt || 0,
-    overdueCount: overdueCount?.cnt || 0,
+    noDueDate: noDueDate?.cnt || 0,
   });
 });
 
@@ -932,13 +1082,18 @@ accountingRoutes.get('/my-files', requireAuth, async (c) => {
      WHERE ${where}`
   ).bind(...params).first();
 
+  const myMonth = currentMonth();
   const rows = await db.prepare(
     `SELECT cf.*, cfd.installment_value, cfd.product_type, cfd.sales_rep, cfd.investigation_rep,
             COALESCE(cfpi.payment_active, 1) AS payment_active,
-            cfpi.installment_due_date
+            cfpi.installment_due_date,
+            COALESCE(cfdp.amount, 0) AS down_payment_amount,
+            CASE WHEN mp.id IS NOT NULL THEN 1 ELSE 0 END AS paid_this_month
      FROM client_files cf
      LEFT JOIN client_file_details cfd ON cfd.file_id = cf.id
      LEFT JOIN client_file_payment_info cfpi ON cfpi.file_id = cf.id
+     LEFT JOIN client_file_down_payment cfdp ON cfdp.file_id = cf.id
+     LEFT JOIN client_file_monthly_payments mp ON mp.file_id = cf.id AND mp.month = '${myMonth}'
      WHERE ${where}
      ORDER BY cf.created_at DESC
      LIMIT ? OFFSET ?`
