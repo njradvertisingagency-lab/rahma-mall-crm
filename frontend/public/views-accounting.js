@@ -622,7 +622,7 @@
                 el('td', { class: 'mono' }, [f.client_phone || '—']),
                 el('td', {}, [f.product_type || '—']),
                 el('td', { class: 'mono' }, [f.installment_value ? String(f.installment_value) : '—']),
-                el('td', {}, [paymentBadge(f.payment_active, f.installment_due_date)]),
+                el('td', {}, [paymentBadge(f)]),
                 el('td', { class: 'muted', style: 'font-size:12px;white-space:nowrap' }, [fmtDate(f.created_at)]),
               ])
             )),
