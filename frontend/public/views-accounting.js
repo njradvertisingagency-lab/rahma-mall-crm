@@ -70,14 +70,14 @@
     return dueDate < today;
   }
 
-  function paymentBadge(active, dueDate) {
-    if (active === 0 || active === false) {
-      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#dc2626;background:#fef2f2;white-space:nowrap' }, ['⛔ متوقف عن الدفع']);
+  function paymentBadge(f) {
+    if (f.payment_active === 0 || f.payment_active === false) {
+      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#dc2626;background:#fef2f2;white-space:nowrap' }, ['⛔ متوقف']);
     }
-    if (isOverdue(dueDate)) {
-      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#d97706;background:#fffbeb;white-space:nowrap' }, ['⚠️ متأخر']);
+    if (f.paid_this_month) {
+      return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#059669;background:#ecfdf5;white-space:nowrap' }, ['✅ دفع هذا الشهر']);
     }
-    return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#059669;background:#ecfdf5;white-space:nowrap' }, ['✅ نشط في الدفع']);
+    return el('span', { style: 'display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:#d97706;background:#fffbeb;white-space:nowrap' }, ['⏳ لم يدفع بعد']);
   }
 
   // كاش موظفي خدمة العملاء
@@ -99,34 +99,62 @@
     const guarantorNameInput = el('input', { type: 'text', value: existing?.guarantor_name || '', placeholder: 'اسم الضامن' });
     const guarantorPhoneInput = el('input', { type: 'tel', value: existing?.guarantor_phone || '', placeholder: '01xxxxxxxxx' });
     const installmentInput = el('input', { type: 'number', value: existing?.installment_value || '', placeholder: '0', min: '0', step: '0.01' });
+    const downPaymentInput = el('input', { type: 'number', value: existing?.down_payment_amount || '', placeholder: '0', min: '0', step: '0.01' });
     const productTypeInput = el('input', { type: 'text', value: existing?.product_type || '', placeholder: 'نوع المنتج' });
-    // مندوب البيع — dropdown من موظفي خدمة العملاء
-    const salesRepSelect = el('select', {}, [el('option', { value: '' }, ['-- اختر مندوب البيع --'])]);
+
+    // مندوب البيع — dropdown + خيار كتابة اسم يدوي
+    const salesRepSelect = el('select', {}, [
+      el('option', { value: '' }, ['-- اختر مندوب البيع --']),
+      el('option', { value: '__custom__' }, ['✏️ كتابة اسم يدوي...']),
+    ]);
+    const salesRepCustomInput = el('input', { type: 'text', value: '', placeholder: 'اكتب اسم الموظف', style: 'display:none;margin-top:6px' });
+    let existingSalesRepInList = false;
     loadSalesReps().then((reps) => {
       reps.forEach((r) => {
         const opt = el('option', { value: r.name }, [r.name_ar || r.name]);
-        if (existing?.sales_rep === r.name) opt.selected = true;
-        salesRepSelect.appendChild(opt);
+        if (existing?.sales_rep === r.name) { opt.selected = true; existingSalesRepInList = true; }
+        // insert before the custom option
+        salesRepSelect.insertBefore(opt, salesRepSelect.lastChild);
       });
+      // لو الموظف الحالي مش موجود في القائمة — نفعّل الكتابة اليدوية
+      if (existing?.sales_rep && !existingSalesRepInList) {
+        salesRepSelect.value = '__custom__';
+        salesRepCustomInput.value = existing.sales_rep;
+        salesRepCustomInput.style.display = 'block';
+      }
     });
+    salesRepSelect.addEventListener('change', () => {
+      if (salesRepSelect.value === '__custom__') {
+        salesRepCustomInput.style.display = 'block';
+        salesRepCustomInput.focus();
+      } else {
+        salesRepCustomInput.style.display = 'none';
+        salesRepCustomInput.value = '';
+      }
+    });
+
     const investigationRepInput = el('input', { type: 'text', value: existing?.investigation_rep || '', placeholder: 'اسم مندوب التحري' });
 
-    // حقول الدفع الجديدة
-    const existingOverdue = existing && existing.payment_active && isOverdue(existing.installment_due_date);
+    // حقول الدفع
     const paymentActiveSelect = el('select', {}, [
-      el('option', { value: '1', selected: existing ? (existing.payment_active !== 0 && !existingOverdue) : true }, ['✅ نشط في الدفع']),
-      el('option', { value: 'overdue', selected: !!existingOverdue }, ['⚠️ متأخر في الدفع']),
+      el('option', { value: '1', selected: existing ? existing.payment_active !== 0 : true }, ['✅ نشط في الدفع']),
       el('option', { value: '0', selected: existing?.payment_active === 0 }, ['⛔ متوقف عن الدفع']),
     ]);
-    const installmentDueDateInput = el('input', { type: 'date', value: existing?.installment_due_date || '' });
-    // عند اختيار "متأخر"، لو تاريخ الاستحقاق فاضي أو في المستقبل — نضبطه لأمس
-    paymentActiveSelect.addEventListener('change', () => {
-      if (paymentActiveSelect.value === 'overdue') {
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        if (!installmentDueDateInput.value || installmentDueDateInput.value >= today) {
-          const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-          installmentDueDateInput.value = yesterday;
-        }
+
+    // تاريخ استحقاق القسط — مع اختيار "لا يوجد تاريخ"
+    const hasDate = existing ? !!existing.installment_due_date : false;
+    const dueDateToggle = el('select', { style: 'margin-bottom:6px' }, [
+      el('option', { value: 'no_date', selected: !hasDate }, ['📅 لا يوجد تاريخ']),
+      el('option', { value: 'has_date', selected: hasDate }, ['📅 إدخال تاريخ']),
+    ]);
+    const installmentDueDateInput = el('input', { type: 'date', value: existing?.installment_due_date || '', style: hasDate ? '' : 'display:none' });
+    dueDateToggle.addEventListener('change', () => {
+      if (dueDateToggle.value === 'has_date') {
+        installmentDueDateInput.style.display = 'block';
+        installmentDueDateInput.focus();
+      } else {
+        installmentDueDateInput.style.display = 'none';
+        installmentDueDateInput.value = '';
       }
     });
 
@@ -137,26 +165,29 @@
       el('div', { class: 'field' }, [el('label', {}, ['اسم الضامن']), guarantorNameInput]),
       el('div', { class: 'field' }, [el('label', {}, ['رقم هاتف الضامن']), guarantorPhoneInput]),
       el('div', { class: 'field' }, [el('label', {}, ['قيمة القسط']), installmentInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['💰 المقدم المدفوع']), downPaymentInput]),
       el('div', { class: 'field' }, [el('label', {}, ['نوع المنتج']), productTypeInput]),
-      el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepSelect]),
+      el('div', { class: 'field' }, [el('label', {}, ['مندوب البيع']), salesRepSelect, salesRepCustomInput]),
       el('div', { class: 'field' }, [el('label', {}, ['مندوب التحري']), investigationRepInput]),
       el('div', { style: 'border-top:1px solid var(--border,#e5e7eb);margin-top:12px;padding-top:12px' }),
       el('div', { class: 'field' }, [el('label', {}, ['💳 حالة الدفع']), paymentActiveSelect]),
-      el('div', { class: 'field' }, [el('label', {}, ['📅 تاريخ استحقاق القسط']), installmentDueDateInput]),
+      el('div', { class: 'field' }, [el('label', {}, ['📅 تاريخ استحقاق القسط']), dueDateToggle, installmentDueDateInput]),
     ]);
 
     const dlg = modal(isEdit ? '✏️ تعديل ملف' : '➕ ملف جديد', body, []);
     dlg.el.querySelector('.modal-footer').append(
       el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
       el('button', { class: 'btn btn-primary', onclick: async () => {
+        const salesRepValue = salesRepSelect.value === '__custom__' ? salesRepCustomInput.value.trim() : salesRepSelect.value;
         const payload = {
           clientName: clientNameInput.value.trim(),
           clientPhone: clientPhoneInput.value.trim() || null,
           guarantorName: guarantorNameInput.value.trim() || null,
           guarantorPhone: guarantorPhoneInput.value.trim() || null,
           installmentValue: installmentInput.value ? Number(installmentInput.value) : 0,
+          downPayment: downPaymentInput.value ? Number(downPaymentInput.value) : 0,
           productType: productTypeInput.value.trim() || null,
-          salesRep: salesRepSelect.value || null,
+          salesRep: salesRepValue || null,
           investigationRep: investigationRepInput.value.trim() || null,
           paymentActive: paymentActiveSelect.value !== '0',
           installmentDueDate: installmentDueDateInput.value || null,
@@ -250,6 +281,28 @@
     modal('📋 سجل حركات ملف ' + file.file_number + ' — ' + file.client_name, list, []);
   }
 
+  // ===== مودال سجل الدفعات الشهرية =====
+  async function showPaymentHistory(fileId) {
+    const { payments, file } = await api('/accounting/files/' + fileId + '/payments');
+    const list = payments.length === 0
+      ? el('div', { style: 'text-align:center;padding:24px;color:var(--muted,#888)' }, ['لا توجد دفعات مسجّلة لهذا الملف.'])
+      : el('div', {}, payments.map(p => {
+          return el('div', { style: 'border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface,#fff);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px' }, [
+            el('div', { style: 'display:flex;align-items:center;gap:8px' }, [
+              el('span', { style: 'font-size:20px' }, ['✅']),
+              el('span', { style: 'font-weight:700;font-size:15px' }, ['شهر ' + p.month]),
+            ]),
+            el('div', { style: 'font-size:12px;color:var(--muted,#888)' }, [
+              el('div', {}, ['بواسطة: ' + (p.recorded_by_name || '—')]),
+              el('div', {}, ['التاريخ: ' + fmt.dateTime(p.paid_at)]),
+              p.notes ? el('div', {}, ['💬 ' + p.notes]) : null,
+            ]),
+          ]);
+        }));
+
+    modal('📋 سجل دفعات ملف ' + file.file_number + ' — ' + file.client_name, list, []);
+  }
+
   // ===== تأكيد حذف ملف =====
   function confirmDeleteFile(file, onDone) {
     const body = el('div', { style: 'text-align:center;padding:8px 0' }, [
@@ -299,9 +352,9 @@
     ]);
     const paymentFilter = el('select', { style: 'min-width:150px' }, [
       el('option', { value: '' }, ['كل حالات الدفع']),
-      el('option', { value: 'active' }, ['✅ نشط في الدفع']),
+      el('option', { value: 'paid' }, ['✅ دفع هذا الشهر']),
+      el('option', { value: 'unpaid' }, ['⏳ لم يدفع بعد']),
       el('option', { value: 'inactive' }, ['⛔ متوقف عن الدفع']),
-      el('option', { value: 'overdue' }, ['⚠️ متأخر']),
     ]);
     const filterBar = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center' }, [searchInput, statusFilter, locFilter, paymentFilter]);
     container.appendChild(filterBar);
@@ -324,11 +377,13 @@
         const data = await api('/accounting/stats');
         statsRow.innerHTML = '';
         const total = data.byStatus.reduce((s, r) => s + r.cnt, 0);
+        const monthLabel = data.currentMonth || '';
         const statCards = [
           { label: 'إجمالي الملفات', value: total, color: '#374151' },
-          { label: '✅ نشط في الدفع', value: data.paymentActive || 0, color: '#059669' },
+          { label: '✅ دفعوا هذا الشهر', value: data.paidThisMonth || 0, color: '#059669' },
+          { label: '⏳ لم يدفعوا بعد', value: data.unpaidThisMonth || 0, color: '#d97706' },
           { label: '⛔ متوقف عن الدفع', value: data.paymentInactive || 0, color: '#dc2626' },
-          { label: '⚠️ متأخر (فات الاستحقاق)', value: data.overdueCount || 0, color: '#d97706' },
+          { label: '📅 بدون تاريخ استحقاق', value: data.noDueDate || 0, color: '#7c3aed' },
           { label: 'حركات اليوم', value: data.todayMovements, color: '#0891b2' },
         ];
         statCards.forEach(sc => {
@@ -337,6 +392,16 @@
             el('div', { style: 'font-size:12px;color:var(--muted,#888);margin-top:2px' }, [sc.label]),
           ]));
         });
+        if (monthLabel) {
+          statsRow.parentNode.insertBefore(
+            el('div', { style: 'font-size:13px;color:var(--muted,#888);margin-bottom:4px;text-align:center', id: 'month-label' }, ['📆 الشهر الحالي: ' + monthLabel]),
+            statsRow
+          );
+          const old = document.getElementById('month-label');
+          // remove duplicates
+          const labels = statsRow.parentNode.querySelectorAll('#month-label');
+          if (labels.length > 1) labels[0].remove();
+        }
       } catch (_) { /* silent */ }
     }
 
@@ -363,33 +428,47 @@
               el('th', {}, ['رقم الملف']),
               el('th', {}, ['اسم العميل']),
               el('th', {}, ['هاتف العميل']),
-              el('th', {}, ['حالة الدفع']),
+              el('th', {}, ['قسط الشهر']),
               el('th', {}, ['تاريخ الملف']),
               el('th', {}, ['استحقاق القسط']),
               el('th', {}, ['قيمة القسط']),
+              el('th', {}, ['المقدم']),
               el('th', {}, ['الضامن']),
               el('th', {}, ['نوع المنتج']),
               el('th', {}, ['مندوب البيع']),
               el('th', {}, ['الإجراءات']),
             ])]),
             el('tbody', {}, data.files.map(f => {
-              const overdue = f.payment_active && isOverdue(f.installment_due_date);
-              const rowStyle = f.payment_active === 0 ? 'background:rgba(220,38,38,0.04)' : overdue ? 'background:rgba(217,119,6,0.04)' : '';
+              const unpaid = f.payment_active !== 0 && !f.paid_this_month;
+              const stopped = f.payment_active === 0;
+              const rowStyle = stopped ? 'background:rgba(220,38,38,0.04)' : unpaid ? 'background:rgba(217,119,6,0.04)' : '';
               return el('tr', { style: rowStyle }, [
                 el('td', { style: 'font-weight:700;white-space:nowrap' }, [f.file_number]),
                 el('td', {}, [f.client_name]),
                 el('td', { style: 'direction:ltr;text-align:right' }, [f.client_phone || '—']),
-                el('td', {}, [paymentBadge(f.payment_active, f.installment_due_date)]),
+                el('td', {}, [paymentBadge(f)]),
                 el('td', { style: 'white-space:nowrap;font-size:12px' }, [fmtDate(f.created_at)]),
-                el('td', { style: 'white-space:nowrap;font-size:12px' + (overdue ? ';color:#dc2626;font-weight:700' : '') }, [
-                  f.installment_due_date ? fmtDate(f.installment_due_date) : '—',
+                el('td', { style: 'white-space:nowrap;font-size:12px' + (!f.installment_due_date ? ';color:#7c3aed;font-weight:700' : '') }, [
+                  f.installment_due_date ? fmtDate(f.installment_due_date) : '❌ لا يوجد',
                 ]),
                 el('td', {}, [f.installment_value ? String(f.installment_value) : '—']),
+                el('td', {}, [f.down_payment_amount ? String(f.down_payment_amount) : '—']),
                 el('td', {}, [f.guarantor_name || '—']),
                 el('td', {}, [f.product_type || '—']),
                 el('td', {}, [f.sales_rep || '—']),
                 el('td', { style: 'white-space:nowrap' }, [
-                  el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الحركات', onclick: () => showFileMovements(f.id) }, ['📋']),
+                  // زرار تسجيل الدفع / إلغاء الدفع
+                  (canCreate() && f.payment_active !== 0) ? (
+                    f.paid_this_month
+                      ? (canEdit() ? el('button', { class: 'btn btn-xs', style: 'margin-left:4px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca', title: 'إلغاء تسجيل الدفع', onclick: async () => {
+                          if (!confirm('هل تريد إلغاء تسجيل دفع هذا الشهر؟')) return;
+                          try { await api('/accounting/files/' + f.id + '/unpay', { method: 'POST', body: {} }); toast('تم إلغاء تسجيل الدفع', 'success'); load(); loadStats(); } catch (err) { toast(err.message, 'error'); }
+                        } }, ['↩️']) : null)
+                      : el('button', { class: 'btn btn-xs', style: 'margin-left:4px;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-weight:700', title: 'تسجيل دفع القسط', onclick: async () => {
+                          try { await api('/accounting/files/' + f.id + '/pay', { method: 'POST', body: {} }); toast('تم تسجيل الدفع ✅', 'success'); load(); loadStats(); } catch (err) { toast(err.message, 'error'); }
+                        } }, ['💰 تم الدفع'])
+                  ) : null,
+                  el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'سجل الدفعات', onclick: () => showPaymentHistory(f.id) }, ['📋']),
                   canEdit() ? el('button', { class: 'btn btn-outline btn-xs', style: 'margin-left:4px', title: 'تعديل', onclick: () => fileFormModal(f, () => { load(); loadStats(); }) }, ['✏️']) : null,
                   isAccountingUser() ? el('button', { class: 'btn btn-primary btn-xs', style: 'margin-left:4px', title: 'إذن حركة', onclick: () => movementFormModal(f, () => { load(); loadStats(); }) }, ['🔄']) : null,
                   canEdit() ? el('button', { class: 'btn btn-xs', style: 'margin-left:4px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca', title: 'حذف', onclick: () => confirmDeleteFile(f, () => { load(); loadStats(); }) }, ['🗑️']) : null,
