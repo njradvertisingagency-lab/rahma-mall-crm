@@ -97,6 +97,12 @@ analyticsRoutes.get('/dashboard', async (c) => {
     const waBinds = user.role === 'employee' ? [user.employeeId] : [];
     const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
     const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const unopenedRow = await db.prepare(
+      `SELECT COUNT(*) AS n FROM customers c WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)
+       ${scope}`
+    ).bind(...binds).first();
+
     const [waToday, waWeek, waMonth] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(today, ...waBinds).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(weekAgo, ...waBinds).first(),
@@ -119,6 +125,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
         interested: byStatus.INTERESTED || 0,
         notInterested: byStatus.NOT_INTERESTED || 0,
         closed,
+        unopened: unopenedRow.n,
         overdue: overdueFollowups.n,
         todayCustomers: todayCustomers.n,
         todayClosed: todayClosed.n,

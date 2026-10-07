@@ -97,11 +97,15 @@
     async function loadKpis() {
       const { kpis } = await api('/analytics/dashboard');
       kpiGrid.innerHTML = '';
+      // Compute today's start in Cairo timezone for date-filtered links
+      const cairoToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+      const todayFrom = cairoToday + 'T00:00:00';
       const items = [
         ['إجمالي العملاء', kpis.total, 'brand', '#/customers'],
         ...(user.role === 'team_leader' ? [['غير موزّعين', kpis.unassigned, 'danger', '#/customers?employeeId=unassigned']] : []),
         ['موزّعين', kpis.assigned, 'info', '#/customers'],
         ['جديد', kpis.new, 'info', '#/customers?status=NEW'],
+        ['لم يُفتح بعد', kpis.unopened || 0, 'danger', '#/customers?seen=not_seen'],
         ['جارِ الاتصال', kpis.calling, 'brand', '#/customers?status=CALLING'],
         ['لا يوجد رد', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
         ['متابعة', kpis.followUp, 'warning', '#/customers?status=FOLLOW_UP'],
@@ -109,12 +113,12 @@
         ['غير مهتم', kpis.notInterested, null, '#/customers?status=NOT_INTERESTED'],
         ['مغلق', kpis.closed, 'success', '#/customers?status=CLOSED'],
         ['متابعات متأخرة', kpis.overdue, 'danger', '#/followups?overdue=true'],
-        ['عملاء اليوم', kpis.todayCustomers, 'brand'],
-        ['مغلق اليوم', kpis.todayClosed, 'success'],
-        ['متابعات اليوم', kpis.todayFollowups, 'warning'],
-        ['نسبة الإنجاز', Math.round(kpis.completionRate * 100) + '%', 'brand'],
+        ['عملاء اليوم', kpis.todayCustomers, 'brand', '#/customers?dateFrom=' + todayFrom],
+        ['مغلق اليوم', kpis.todayClosed, 'success', '#/customers?status=CLOSED&dateFrom=' + todayFrom],
+        ['متابعات اليوم', kpis.todayFollowups, 'warning', '#/followups'],
+        ['نسبة الإنجاز', Math.round(kpis.completionRate * 100) + '%', 'brand', '#/analytics'],
         ['واتساب اليوم', kpis.whatsappToday, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
-        ['واتساب هذا الأسبوع', kpis.whatsappWeek, 'success'],
+        ['واتساب هذا الأسبوع', kpis.whatsappWeek, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
       ];
       items.forEach(([label, value, accent, link]) => kpiGrid.appendChild(kpi(label, value, accent, link ? () => App.navigate(link) : null)));
     }
