@@ -38,7 +38,7 @@ import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
 import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
 import { sweepOpsReports } from './lib/opsreports.js';
-import { sweepAutoReclaim } from './lib/reclaim.js';
+import { sweepAutoReclaim, sweepRedistribute3pm } from './lib/reclaim.js';
 import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
@@ -281,6 +281,7 @@ export default {
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
+    ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
     // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
     // كل ١٥ دقيقة بدل ٥ يقلل ثلثي مرات فحص العملاء المتأخرين.
     if (isDueEvery(15, 5)) {
