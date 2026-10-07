@@ -27,7 +27,8 @@
 // never on a holiday — same dedup pattern as the two ops reports
 // (lib/opsreports.js) via a key in the shared `settings` table.
 import { nowIso, createNotification, broadcast, logActivity } from './db.js';
-import { getWorkHoursStatus, getCairoDayBoundsUtc } from './workhours.js';
+import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
+import { getEmployeePresenceMap } from './presence.js';
 
 export async function sweepAutoReclaim(db, env) {
   const status = await getWorkHoursStatus(db);
@@ -131,4 +132,177 @@ export async function sweepAutoReclaim(db, env) {
     .run();
 
   return { reclaimed };
+}
+
+// ---------------------------------------------------------------------------
+// 3 PM REDISTRIBUTION — طلب صاحب الشركة: كل يوم الساعة 3 العصر، أي عميل
+// اتوزّع النهاردة ولسه الموظف ما عملش فيه أي إجراء (مش فتح و خلاص — لازم
+// يكون غيّر حالة أو عمل محاولة اتصال أو كتب ملاحظة) — يتسحب تلقائيًا من
+// الموظف ويتوزّع بالتساوي على زمايله الأونلاين وقتها.
+//
+// Scope:
+//   - Only customers ASSIGNED TODAY (assigned_at within the current Cairo day)
+//   - "Untouched" = no customer_status_history change, no call_attempts, AND
+//     no customer_notes since assignment — customer_seen (just viewing) does
+//     NOT count as an action
+//   - Redistributed to employees who are currently ONLINE (employee_presence
+//     online = 1), excluding the original assignee
+//   - Runs once per Cairo calendar day at/after 15:00, deduped via settings key
+// ---------------------------------------------------------------------------
+const REDISTRIBUTE_HOUR = 15; // 3 PM Cairo
+
+export async function sweepRedistribute3pm(db, env) {
+  const status = await getWorkHoursStatus(db);
+  if (status.isHolidayToday) return { redistributed: 0 };
+
+  // Only fire at or after 3 PM Cairo
+  const targetMinute = REDISTRIBUTE_HOUR * 60;
+  if (status.minutesSinceMidnight < targetMinute) return { redistributed: 0 };
+
+  // Dedup: once per Cairo calendar day
+  const dedupRow = await db.prepare(`SELECT value FROM settings WHERE key = 'redistribute_3pm_sent'`).first();
+  let sentDate = null;
+  try {
+    sentDate = dedupRow ? JSON.parse(dedupRow.value).date : null;
+  } catch {
+    sentDate = null;
+  }
+  if (sentDate === status.dateStr) return { redistributed: 0 };
+
+  const { dayStartIso, dayEndIso } = getCairoDayBoundsUtc(status.dateStr);
+
+  // Find today's assigned customers with NO action taken since assignment:
+  // no status change, no call attempt, no note written.
+  const candidates = await db
+    .prepare(
+      `SELECT c.id, c.name, c.phone, c.assigned_employee_id, c.assigned_at
+       FROM customers c
+       WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
+         AND c.assigned_at >= ? AND c.assigned_at <= ?
+         AND NOT EXISTS (SELECT 1 FROM customer_status_history h WHERE h.customer_id = c.id AND h.changed_at >= c.assigned_at)
+         AND NOT EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.created_at >= c.assigned_at)
+         AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)`
+    )
+    .bind(dayStartIso, dayEndIso)
+    .all();
+
+  let redistributed = 0;
+
+  if (candidates.results.length > 0) {
+    // Get currently online employees (read-time corrected presence map)
+    const presenceMap = await getEmployeePresenceMap(db);
+    const onlineEmployeeIds = Object.entries(presenceMap)
+      .filter(([, p]) => p.online)
+      .map(([id]) => Number(id));
+
+    if (onlineEmployeeIds.length === 0) {
+      // Nobody online — skip, mark as done so it doesn't retry all afternoon
+      await db
+        .prepare(
+          `INSERT INTO settings (key, value, updated_at) VALUES ('redistribute_3pm_sent', ?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+        )
+        .bind(JSON.stringify({ date: status.dateStr, redistributed: 0, reason: 'no_online_employees' }), nowIso())
+        .run();
+      return { redistributed: 0 };
+    }
+
+    // Group untouched leads by their original assignee
+    const byEmployee = {};
+    for (const c of candidates.results) {
+      (byEmployee[c.assigned_employee_id] ||= []).push(c);
+    }
+
+    const now = nowIso();
+    const owners = await db.prepare(`SELECT id FROM users WHERE is_owner = 1 AND active = 1`).all();
+
+    for (const [employeeIdStr, custs] of Object.entries(byEmployee)) {
+      const fromEmployeeId = Number(employeeIdStr);
+      const fromEmp = await db.prepare(`SELECT name, name_ar, user_id FROM employees WHERE id = ?`).bind(fromEmployeeId).first();
+
+      // Eligible targets = online employees EXCEPT the original assignee
+      const targets = onlineEmployeeIds.filter((id) => id !== fromEmployeeId);
+      if (targets.length === 0) continue; // This employee is the only one online — skip their leads
+
+      // Distribute equally (round-robin) among targets
+      for (let i = 0; i < custs.length; i++) {
+        const c = custs[i];
+        const targetEmployeeId = targets[i % targets.length];
+
+        await db
+          .prepare(`UPDATE customers SET assigned_employee_id = ?, assigned_at = ?, updated_at = ?, version = version + 1 WHERE id = ?`)
+          .bind(targetEmployeeId, now, now, c.id)
+          .run();
+        await db
+          .prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, assigned_at, reason) VALUES (?, ?, NULL, ?, 'REASSIGNMENT')`)
+          .bind(c.id, targetEmployeeId, now)
+          .run();
+        redistributed++;
+      }
+
+      const fromLabel = fromEmp?.name_ar ? `${fromEmp.name} (${fromEmp.name_ar})` : fromEmp?.name || 'موظف';
+
+      // Notify the employee their leads were taken
+      if (fromEmp?.user_id) {
+        await createNotification(db, {
+          userId: fromEmp.user_id,
+          type: 'CUSTOMERS_AUTO_RECLAIMED',
+          title: '⚠️ تم إعادة توزيع عملاء منك تلقائيًا',
+          message: `تم سحب ${custs.length} عميل لم تُتخذ عليهم أي إجراء وإعادة توزيعهم على زملائك الأونلاين.`,
+        });
+        await broadcast(env, 'CUSTOMER_REASSIGNED', { customerIds: custs.map((c) => c.id) }, { scope: 'user', userId: fromEmp.user_id });
+      }
+
+      // Notify each target employee about their new leads
+      const targetCounts = {};
+      for (let i = 0; i < custs.length; i++) {
+        const tid = targets[i % targets.length];
+        targetCounts[tid] = (targetCounts[tid] || 0) + 1;
+      }
+      for (const [targetIdStr, count] of Object.entries(targetCounts)) {
+        const targetEmp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(Number(targetIdStr)).first();
+        if (targetEmp?.user_id) {
+          await createNotification(db, {
+            userId: targetEmp.user_id,
+            type: 'CUSTOMERS_REDISTRIBUTED_TO_YOU',
+            title: '📥 تم توزيع عملاء جدد عليك',
+            message: `تم توزيع ${count} عميل جديد عليك تلقائيًا (كانوا مع ${fromLabel} ولم يُتخذ عليهم أي إجراء).`,
+          });
+          await broadcast(env, 'CUSTOMER_REASSIGNED', { count }, { scope: 'user', userId: targetEmp.user_id });
+        }
+      }
+
+      // Notify owners (Mr. Hany)
+      for (const o of owners.results) {
+        await createNotification(db, {
+          userId: o.id,
+          type: 'CUSTOMERS_REDISTRIBUTED_OWNER',
+          title: '🔄 إعادة توزيع تلقائية الساعة 3',
+          message: `تم سحب ${custs.length} عميل بلا إجراء من ${fromLabel} وإعادة توزيعهم على ${targets.length} زملاء أونلاين.`,
+        });
+      }
+      if (owners.results.length > 0) {
+        await broadcast(env, 'CUSTOMERS_REDISTRIBUTED', { fromEmployeeId, count: custs.length }, { scope: 'users', userIds: owners.results.map((o) => o.id) });
+      }
+      await broadcast(env, 'CUSTOMERS_REDISTRIBUTED', { fromEmployeeId, count: custs.length }, { scope: 'role', role: 'team_leader' });
+      await logActivity(db, {
+        actor: null,
+        action: 'AUTO_REDISTRIBUTE_3PM',
+        entityType: 'customer',
+        entityId: String(fromEmployeeId),
+        metadata: { fromEmployeeId, targetEmployeeIds: targets, customerIds: custs.map((c) => c.id) },
+      });
+    }
+  }
+
+  // Mark today as done
+  await db
+    .prepare(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('redistribute_3pm_sent', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind(JSON.stringify({ date: status.dateStr, redistributed }), nowIso())
+    .run();
+
+  return { redistributed };
 }
