@@ -556,6 +556,13 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
        AND COALESCE(cfpi.payment_active, 1) = 1
        AND (cfpi.installment_due_date IS NULL OR cfpi.installment_due_date = '')`
   ).first();
+  // إجمالي الأقساط المحصّلة هذا الشهر (مجموع قيمة القسط للملفات اللي دفعت)
+  const totalCollected = await db.prepare(
+    `SELECT COALESCE(SUM(cfd.installment_value), 0) AS total
+     FROM client_file_monthly_payments mp
+     JOIN client_file_details cfd ON cfd.file_id = mp.file_id
+     WHERE mp.month = ? AND mp.file_id NOT IN (SELECT file_id FROM client_files_soft_deletes)`
+  ).bind(month).first();
 
   return c.json({
     byStatus: byStatus.results,
@@ -568,6 +575,7 @@ accountingRoutes.get('/stats', requireAccountingAccess, async (c) => {
     unpaidThisMonth: unpaidThisMonth?.cnt || 0,
     paymentInactive: paymentInactive?.cnt || 0,
     noDueDate: noDueDate?.cnt || 0,
+    totalCollected: totalCollected?.total || 0,
   });
 });
 
