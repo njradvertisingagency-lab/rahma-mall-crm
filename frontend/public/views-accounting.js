@@ -380,6 +380,7 @@
         const monthLabel = data.currentMonth || '';
         const statCards = [
           { label: 'إجمالي الملفات', value: total, color: '#374151' },
+          { label: '💵 إجمالي الأقساط المحصّلة', value: (data.totalCollected || 0).toLocaleString('en'), color: '#059669', isMoney: true },
           { label: '✅ دفعوا هذا الشهر', value: data.paidThisMonth || 0, color: '#059669' },
           { label: '⏳ لم يدفعوا بعد', value: data.unpaidThisMonth || 0, color: '#d97706' },
           { label: '⛔ متوقف عن الدفع', value: data.paymentInactive || 0, color: '#dc2626' },
@@ -465,6 +466,7 @@
                           try { await api('/accounting/files/' + f.id + '/unpay', { method: 'POST', body: {} }); toast('تم إلغاء تسجيل الدفع', 'success'); load(); loadStats(); } catch (err) { toast(err.message, 'error'); }
                         } }, ['↩️']) : null)
                       : el('button', { class: 'btn btn-xs', style: 'margin-left:4px;background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-weight:700', title: 'تسجيل دفع القسط', onclick: async () => {
+                          if (!confirm('هل دفع "' + f.client_name + '" القسط بالفعل؟')) return;
                           try { await api('/accounting/files/' + f.id + '/pay', { method: 'POST', body: {} }); toast('تم تسجيل الدفع ✅', 'success'); load(); loadStats(); } catch (err) { toast(err.message, 'error'); }
                         } }, ['💰 تم الدفع'])
                   ) : null,
