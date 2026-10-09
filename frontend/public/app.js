@@ -712,48 +712,6 @@ const NAV_EMPLOYEE = [
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
-
-// شاشة أستاذ هاني كاملة: مفيش شريط جانبي ولا أي زر ينقّل لصفحة تانية —
-// بس شعار الموقع، شارة الاتصال المباشر، وزرار تسجيل الخروج. القصد إنه
-// يفتح الموقع فيلاقي نفسه على الداش بورد على طول، من غير ما يقدر يعمل
-// أي حاجة تانية أو يضغط غلط على أي إجراء.
-function renderOwnerShell() {
-  const user = App.state.user;
-  const connBadge = renderConnBadge();
-  // Pure read-only report modal (start-of-day / end-of-shift snapshots) —
-  // no action on any data, just viewing, so it belongs here same as it did
-  // in the old sidebar's topbar. renderAdminReportsButton() already checks
-  // isOwner internally and returns the button for this account.
-  const adminReportsBtn = renderAdminReportsButton();
-  const refreshBtn = renderRefreshBtn();
-  // مظهر مميز لحساب المالك — شريط علوي بتدرّج ذهبي وشارة "المالك"، حتى
-  // يكون واضحًا من أول لحظة إن هذا الحساب مختلف عن أي حساب موظف أو حتى
-  // قائد الفريق العادي (بناءً على طلبه صراحةً).
-  const topbar = el('div', { class: 'topbar', style: 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' }, [
-    el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
-      el('img', { src: '/logo.png', alt: 'رحمة مول', style: 'height:28px' }),
-      el('div', { style: 'font-weight:800' }, ['رحمة مول']),
-      el('span', { class: 'badge', style: 'background:#d4a017;color:#fff;font-weight:800' }, ['👑 حساب المالك']),
-    ]),
-    el('div', { class: 'topbar-actions' }, [
-      connBadge,
-      refreshBtn,
-      adminReportsBtn,
-      el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
-      el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
-        App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
-        el('div', { class: 'topbar-user-name' }, [el('div', { style: 'font-weight:700;font-size:13px' }, [user.displayName])]),
-        el('button', { class: 'btn btn-outline btn-sm', onclick: doLogout }, ['تسجيل خروج']),
-      ]),
-    ]),
-  ]);
-  const content = el('div', { class: 'content' });
-  const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
-  const root = el('div', { class: 'shell owner-shell' }, [main]);
-  const cleanups = [connBadge.offEvt, refreshBtn.offEvt].filter(Boolean);
-  return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
-}
-
 function renderShell() {
   const user = App.state.user;
   const isAdmin = !!user.isOwner; // حساب "admin" — الرؤية الشاملة (god-view)
@@ -848,14 +806,12 @@ function renderConnBadge() {
 // زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
 // freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
 function renderRefreshBtn() {
-  const dot = el('span', { style: 'position:absolute;top:2px;inset-inline-end:2px;width:9px;height:9px;border-radius:50%;background:var(--danger,#e53935);display:' + (App.state.pendingAssign ? 'block' : 'none') });
   const btn = el('button', {
-    class: 'btn btn-icon',
-    style: 'position:relative',
+    class: 'btn btn-icon refresh-btn' + (App.state.pendingAssign ? ' refresh-needed' : ''),
     title: 'تحديث الصفحة',
-    onclick: () => { App.state.pendingAssign = false; dot.style.display = 'none'; App.freshNext = true; renderRoute(); },
-  }, ['🔄', dot]);
-  btn.offEvt = App.on('assign-pending', () => { dot.style.display = App.state.pendingAssign ? 'block' : 'none'; });
+    onclick: () => { App.state.pendingAssign = false; btn.classList.remove('refresh-needed'); App.freshNext = true; renderRoute(); },
+  }, ['🔄']);
+  btn.offEvt = App.on('assign-pending', () => { btn.classList.toggle('refresh-needed', !!App.state.pendingAssign); });
   return btn;
 }
 

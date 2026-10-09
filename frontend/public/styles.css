@@ -478,3 +478,15 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   color: var(--danger);
   background: var(--danger-soft);
 }
+
+/* زر التحديث: أكبر من باقي الأزرار، ويلمع لما يكون في تحديث مطلوب (أرقام جديدة اتوزعت) */
+.refresh-btn { font-size: 22px; line-height: 1; padding: 10px 12px; min-width: 46px; min-height: 46px; }
+.refresh-btn.refresh-needed {
+  background: var(--danger, #e53935); color: #fff; border-color: var(--danger, #e53935);
+  animation: refresh-glow 1.2s ease-in-out infinite;
+}
+@keyframes refresh-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229,57,53,.75), 0 0 8px 2px rgba(229,57,53,.5); transform: scale(1); }
+  50% { box-shadow: 0 0 0 10px rgba(229,57,53,0), 0 0 18px 6px rgba(229,57,53,.8); transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) { .refresh-btn.refresh-needed { animation: none; box-shadow: 0 0 12px 4px rgba(229,57,53,.8); } }

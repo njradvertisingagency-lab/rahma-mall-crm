@@ -214,7 +214,7 @@
         return;
       }
       const showBulk = user.role === 'team_leader';
-      const headers = [showBulk ? el('input', { type: 'checkbox', onchange: (e) => toggleAll(e.target.checked, customers) }) : null, 'الكود', 'الهاتف', 'الاسم', ...(user.role === 'team_leader' ? ['الموظف'] : []), 'الحالة', 'الأولوية', 'واتساب', 'المتابعة القادمة', 'آخر تحديث', ''];
+      const headers = [showBulk ? el('input', { type: 'checkbox', onchange: (e) => toggleAll(e.target.checked, customers) }) : null, 'الكود', 'الهاتف', 'الاسم', ...(user.role === 'team_leader' ? ['الموظف'] : []), 'الحالة', 'الأولوية', 'واتساب', 'المتابعة القادمة', 'آخر تحديث', ''].filter((h) => h !== null);
       const table = el('table', { class: 'data-table' }, [
         el('thead', {}, [el('tr', {}, headers.map((h) => el('th', {}, [h])))]),
         el('tbody', {}, customers.map((c) => renderRow(c, showBulk))),

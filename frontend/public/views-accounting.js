@@ -251,36 +251,6 @@
       } }, ['تسجيل الحركة'])
     );
   }
-
-  // ===== مودال سجل حركة ملف واحد =====
-  async function showFileMovements(fileId) {
-    const { movements, file } = await api('/accounting/files/' + fileId + '/movements');
-    const list = movements.length === 0
-      ? el('div', { style: 'text-align:center;padding:24px;color:var(--muted,#888)' }, ['لا توجد حركات مسجّلة لهذا الملف.'])
-      : el('div', {}, movements.map(m => {
-          const from = LOC_MAP[m.from_location] || { label: m.from_location, icon: '📍' };
-          const to = LOC_MAP[m.to_location] || { label: m.to_location, icon: '📍' };
-          return el('div', { style: 'border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--surface,#fff)' }, [
-            el('div', { style: 'display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px' }, [
-              el('div', { style: 'display:flex;align-items:center;gap:6px;font-weight:700' }, [
-                el('span', {}, [from.icon + ' ' + from.label]),
-                el('span', { style: 'color:var(--brand,#0f766e);font-size:18px' }, ['←']),
-                el('span', {}, [to.icon + ' ' + to.label]),
-              ]),
-              el('div', { style: 'font-size:12px;color:var(--muted,#888)' }, [fmt.dateTime(m.created_at)]),
-            ]),
-            el('div', { style: 'margin-top:8px;font-size:13px;display:flex;flex-wrap:wrap;gap:16px' }, [
-              el('div', {}, [el('span', { style: 'color:var(--muted,#888)' }, ['المستلم: ']), el('strong', {}, [m.taken_by_name])]),
-              el('div', {}, [el('span', { style: 'color:var(--muted,#888)' }, ['السبب: ']), m.reason]),
-            ]),
-            m.notes ? el('div', { style: 'margin-top:4px;font-size:12px;color:var(--muted,#888)' }, ['💬 ' + m.notes]) : null,
-            el('div', { style: 'margin-top:4px;font-size:11px;color:var(--muted,#aaa)' }, ['بواسطة: ' + (m.created_by_name || '—')]),
-          ]);
-        }));
-
-    modal('📋 سجل حركات ملف ' + file.file_number + ' — ' + file.client_name, list, []);
-  }
-
   // ===== مودال سجل الدفعات الشهرية =====
   async function showPaymentHistory(fileId) {
     const { payments, file } = await api('/accounting/files/' + fileId + '/payments');
