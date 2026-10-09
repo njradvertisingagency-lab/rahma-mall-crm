@@ -15,7 +15,7 @@ analyticsRoutes.use('*', requireAuth);
 // outage shows slightly-stale numbers instead of a blank error screen.
 // Scoped per role/employee since a team_leader and an employee see different
 // numbers.
-const DASHBOARD_CACHE_TTL_MS = 30 * 1000;
+const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000; // ٥ دقايق — الزرار 🔄 بيتخطاه (?fresh=1)
 function dashboardCacheKey(user) {
   return `cache:dashboard:${user.role}:${user.employeeId ?? 'all'}`;
 }
@@ -53,7 +53,8 @@ analyticsRoutes.get('/dashboard', async (c) => {
 
   const cacheKey = dashboardCacheKey(user);
   const cached = await sessGet(c.env, cacheKey).catch(() => null);
-  if (cached && Date.now() - cached.cachedAt < DASHBOARD_CACHE_TTL_MS) {
+  const wantFresh = c.req.query('fresh') === '1';
+  if (!wantFresh && cached && Date.now() - cached.cachedAt < DASHBOARD_CACHE_TTL_MS) {
     return c.json(cached.payload);
   }
 

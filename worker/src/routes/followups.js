@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { logActivity, createNotification, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
+import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const followupRoutes = new Hono();
@@ -189,20 +189,5 @@ export async function sweepOverdueFollowups(env) {
   if (overdue.results.length === 0) return { swept: 0 };
   const statements = overdue.results.map((f) => db.prepare(`UPDATE followups SET status = 'OVERDUE' WHERE id = ?`).bind(f.id));
   await db.batch(statements);
-  for (const f of overdue.results) {
-    const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(f.employee_id).first();
-    if (emp) {
-      await createNotification(db, {
-        userId: emp.user_id,
-        type: 'FOLLOWUP_OVERDUE',
-        title: 'متابعة متأخرة',
-        message: `المتابعة المجدولة للعميل ${f.customer_id} أصبحت متأخرة الآن.`,
-        entityType: 'customer',
-        entityId: f.customer_id,
-      });
-      await broadcast(env, 'FOLLOWUP_OVERDUE', { customerId: f.customer_id, followupId: f.id }, { scope: 'user', userId: emp.user_id });
-    }
-    await broadcast(env, 'FOLLOWUP_OVERDUE', { customerId: f.customer_id, followupId: f.id }, { scope: 'role', role: 'team_leader' });
-  }
   return { swept: overdue.results.length };
 }

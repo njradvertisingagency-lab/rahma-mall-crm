@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
+import { nextCustomerId, logActivity, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
+import * as XLSX from 'xlsx';
+import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
 import { parsePastedNumbers, parseCsvToRecords, parseXlsxToRecords, buildImportPreview } from '../lib/import.js';
 import { recordSeenIfNeeded, getCustomerSeenHistory } from '../lib/seen.js';
@@ -73,8 +75,12 @@ function customerRowToJson(row) {
 /** Applies server-authoritative scoping: an employee ALWAYS sees only their own customers. */
 function scopeToUser(user, sql, binds, conds) {
   if (user.role === 'employee') {
-    conds.push('c.assigned_employee_id = ?');
-    binds.push(user.employeeId);
+    // الموظف يفتح يلاقي أرقام النهارده بس (بتوقيت القاهرة) — أي رقم اتوزع
+    // قبل كده يختفي من قائمته، إلا العميل المهتم / عليه متابعة / ما ردش / موبايله
+    // مقفول أو مشغول — عشان ما يضيعش أي رقم لسه محتاج اتصال. الأرقام القديمة فاضلة في القاعدة ويشوفها المدير.
+    const { dayStartIso } = getCairoDayBoundsUtc(getCairoNow().dateStr);
+    conds.push(`c.assigned_employee_id = ? AND (c.assigned_at >= ? OR c.status IN ('INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`);
+    binds.push(user.employeeId, dayStartIso);
   }
 }
 
@@ -245,6 +251,45 @@ customerRoutes.get('/', async (c) => {
     if (cached) return c.json({ ...cached.payload, stale: true });
     return jsonError(c, 503, 'تعذر تحميل قائمة العملاء مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
   }
+});
+
+// تنزيل أرقام اليوم (Excel) — للموظف لأرقامه هو بس: الأرقام اللي اتوزعت عليه
+// النهاردة (بتوقيت القاهرة). الغرض إنه يلاقيها على جهازه لو النت فصل.
+// أعمدة الملف: كود العميل | رقم العميل | ملاحظات (فاضية يكتب فيها) | حالة الاتصال
+// (لم يتم الاتصال = الحالة لسه "جديد"، أي حالة تانية = تم الاتصال).
+customerRoutes.get('/export-today', async (c) => {
+  const user = c.get('user');
+  if (user.role !== 'employee' || !user.employeeId) {
+    return jsonError(c, 403, 'تنزيل أرقام اليوم متاح للموظف لأرقامه فقط', 'FORBIDDEN');
+  }
+  const { dateStr } = getCairoNow();
+  const { dayStartIso, dayEndIso } = getCairoDayBoundsUtc(dateStr);
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT id, phone, status FROM customers
+       WHERE archived = 0 AND assigned_employee_id = ? AND assigned_at >= ? AND assigned_at <= ?
+       ORDER BY id`
+    )
+    .bind(user.employeeId, dayStartIso, dayEndIso)
+    .all();
+
+  const aoa = [['كود العميل', 'رقم العميل', 'ملاحظات', 'حالة الاتصال']];
+  for (const r of rows.results) {
+    aoa.push([String(r.id), String(r.phone ?? ''), '', r.status === 'NEW' ? 'لم يتم الاتصال' : 'تم الاتصال']);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 40 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'أرقام اليوم');
+  wb.Workbook = { Views: [{ RTL: true }] };
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+  return new Response(buf, {
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="numbers-${dateStr}.xlsx"`,
+      'Cache-Control': 'no-store',
+    },
+  });
 });
 
 customerRoutes.get('/:id', async (c) => {
