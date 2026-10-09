@@ -263,14 +263,14 @@ customerRoutes.get('/export-today', async (c) => {
     return jsonError(c, 403, 'تنزيل أرقام اليوم متاح للموظف لأرقامه فقط', 'FORBIDDEN');
   }
   const { dateStr } = getCairoNow();
-  const { dayStartIso, dayEndIso } = getCairoDayBoundsUtc(dateStr);
+  // نفس نطاق قائمة "عملائي" بالظبط (أرقام النهارده + اللي لسه محتاج اتصال)،
+  // عشان الملف يطابق اللي الموظف شايفه على الشاشة.
+  const conds = ['c.archived = 0'];
+  const binds = [];
+  scopeToUser(user, null, binds, conds);
   const rows = await c.env.DB
-    .prepare(
-      `SELECT id, phone, status FROM customers
-       WHERE archived = 0 AND assigned_employee_id = ? AND assigned_at >= ? AND assigned_at <= ?
-       ORDER BY id`
-    )
-    .bind(user.employeeId, dayStartIso, dayEndIso)
+    .prepare(`SELECT c.id, c.phone, c.status FROM customers c WHERE ${conds.join(' AND ')} ORDER BY c.id`)
+    .bind(...binds)
     .all();
 
   const aoa = [['كود العميل', 'رقم العميل', 'ملاحظات', 'حالة الاتصال']];
