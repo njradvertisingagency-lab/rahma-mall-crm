@@ -26,7 +26,7 @@
 // Runs once per Cairo calendar day, at/after end-of-shift (work_hours.end),
 // never on a holiday — same dedup pattern as the two ops reports
 // (lib/opsreports.js) via a key in the shared `settings` table.
-import { nowIso, logActivity, broadcast } from './db.js';
+import { nowIso, logActivity, broadcast, nextDistributionLabel } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
 
@@ -128,10 +128,10 @@ export async function sweepAutoReclaim(db, env) {
 //     online = 1), excluding the original assignee
 //   - Runs once per Cairo calendar day at/after 15:00, deduped via settings key
 // ---------------------------------------------------------------------------
-const REDISTRIBUTE_HOUR = 15; // 3 PM Cairo
+const REDISTRIBUTE_HOUR = 16; // 4 PM Cairo (كان ٣ العصر — اتغير بطلب صاحب الشركة)
 
 export async function sweepRedistribute3pm(db, env) {
-  // نفس الفكرة: قبل ٣ العصر مفيش أي قراءة من القاعدة.
+  // نفس الفكرة: قبل ٤ العصر مفيش أي قراءة من القاعدة.
   if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_HOUR * 60) return { redistributed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { redistributed: 0 };
@@ -248,4 +248,85 @@ export async function sweepRedistribute3pm(db, env) {
     .run();
 
   return { redistributed };
+}
+
+// ---------------------------------------------------------------------------
+// MORNING AUTO-DISTRIBUTE — كل يوم ١١:٣٠ الصبح، أي رقم في قائمة "غير موزع"
+// (باقي من اليوم اللي فات أو اتسحب آخر اليوم) يتوزّع تلقائيًا بالتساوي على
+// الموظفين الأونلاين وقتها. مرة واحدة في اليوم (dedup عبر settings)، وبيحاول
+// تاني كل ٥ دقايق لحد ١٣:٠٠ لو ماكانش في أي موظف أونلاين.
+// ---------------------------------------------------------------------------
+const AUTO_DIST_MIN = 11 * 60 + 30;
+const AUTO_DIST_LAST_RETRY_MIN = 13 * 60;
+
+export async function sweepAutoDistribute(db, env) {
+  const nowMin = getCairoNow().minutesSinceMidnight;
+  if (nowMin < AUTO_DIST_MIN || nowMin > AUTO_DIST_LAST_RETRY_MIN) return { distributed: 0 };
+  const status = await getWorkHoursStatus(db);
+  if (status.isHolidayToday) return { distributed: 0 };
+
+  const dedupRow = await db.prepare(`SELECT value FROM settings WHERE key = 'auto_distribute_sent'`).first();
+  let sentDate = null;
+  try {
+    sentDate = dedupRow ? JSON.parse(dedupRow.value).date : null;
+  } catch {
+    sentDate = null;
+  }
+  if (sentDate === status.dateStr) return { distributed: 0 };
+
+  const markDone = (info) =>
+    db
+      .prepare(
+        `INSERT INTO settings (key, value, updated_at) VALUES ('auto_distribute_sent', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .bind(JSON.stringify({ date: status.dateStr, ...info }), nowIso())
+      .run();
+
+  const presenceMap = await getEmployeePresenceMap(db);
+  const onlineIds = Object.entries(presenceMap)
+    .filter(([, p]) => p.online)
+    .map(([id]) => Number(id));
+  if (onlineIds.length === 0) return { distributed: 0 }; // نحاول تاني في الدورة الجاية
+
+  const pool = await db
+    .prepare(`SELECT id FROM customers WHERE assigned_employee_id IS NULL AND archived = 0 ORDER BY created_at ASC`)
+    .all();
+  const ids = pool.results.map((r) => r.id);
+  if (ids.length === 0) {
+    await markDone({ distributed: 0, reason: 'empty_pool' });
+    return { distributed: 0 };
+  }
+
+  const { label } = await nextDistributionLabel(db);
+  const dist = await db
+    .prepare(`INSERT INTO distributions (label, method, total_customers, created_by, notes) VALUES (?, 'ROUND_ROBIN', ?, NULL, 'توزيع تلقائي ١١:٣٠') RETURNING id`)
+    .bind(label, ids.length)
+    .first();
+  const ts = nowIso();
+  const counts = {};
+  const statements = [];
+  ids.forEach((cid, i) => {
+    const empId = onlineIds[i % onlineIds.length];
+    counts[empId] = (counts[empId] || 0) + 1;
+    statements.push(
+      db.prepare(`UPDATE customers SET assigned_employee_id = ?, assigned_at = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(empId, ts, ts, cid),
+      db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason, distribution_id) VALUES (?, ?, NULL, 'DISTRIBUTION', ?)`).bind(cid, empId, dist.id),
+      db.prepare(`INSERT INTO distribution_items (distribution_id, employee_id, customer_id) VALUES (?, ?, ?)`).bind(dist.id, empId, cid)
+    );
+  });
+  for (let i = 0; i < statements.length; i += 90) await db.batch(statements.slice(i, i + 90));
+
+  await markDone({ distributed: ids.length, distributionId: dist.id });
+  await logActivity(db, {
+    actor: null,
+    action: 'AUTO_DISTRIBUTE_MORNING',
+    entityType: 'distribution',
+    entityId: String(dist.id),
+    metadata: { total: ids.length, perEmployee: counts },
+  });
+  for (const [eid, count] of Object.entries(counts)) {
+    await broadcast(env, 'CUSTOMER_ASSIGNED', { count }, { scope: 'employee', employeeId: Number(eid) }).catch(() => {});
+  }
+  return { distributed: ids.length };
 }
