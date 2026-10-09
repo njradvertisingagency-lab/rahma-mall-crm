@@ -9,9 +9,9 @@
 // drift from the underlying transactions. It is completely separate from
 // customers.status (the call-team pipeline status) — nothing here ever
 // touches that column.
-import { nowIso, broadcast, createNotification, logActivity } from './db.js';
+import { nowIso, broadcast, logActivity } from './db.js';
 import { creditSaleReward, reverseSaleReward, moveSaleReward } from './rewards.js';
-import { checkFirstDealOfDayBonus, checkMonthlyGoalProgress } from './motivation.js';
+import { checkFirstDealOfDayBonus } from './motivation.js';
 
 export async function getSalesSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'sales_settings'`).first();
@@ -116,17 +116,6 @@ export async function createManualPurchase(db, env, input) {
     metadata: { purchaseId: purchase.id, amount: totalAmount, branchName: branch.name, invoiceNumber: invoiceNumber || null },
   });
 
-  const tls = await db.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all();
-  for (const tl of tls.results) {
-    await createNotification(db, {
-      userId: tl.id,
-      type: 'DEAL_DONE',
-      title: '🎉 تمت الصفقة',
-      message: `تم تسجيل عملية شراء جديدة بقيمة ${totalAmount} في ${branch.name}.`,
-      entityType: 'customer',
-      entityId: customerId,
-    });
-  }
   await broadcast(env, 'DEAL_DONE_CREATED', { customerId, purchaseId: purchase.id, amount: totalAmount, branchId, branchName: branch.name }, { scope: 'role', role: 'team_leader' });
   await broadcast(env, 'PURCHASE_CREATED', { customerId, purchaseId: purchase.id, amount: totalAmount }, { scope: 'role', role: 'team_leader' });
   if (attributedEmployeeId) await broadcast(env, 'DEAL_DONE_CREATED', { customerId, purchaseId: purchase.id, amount: totalAmount }, { scope: 'employee', employeeId: attributedEmployeeId });
@@ -168,11 +157,6 @@ export async function createManualPurchase(db, env, input) {
     await checkFirstDealOfDayBonus(db, env, { employeeId: attributedEmployeeId, purchaseId: purchase.id, customerId, createdBy });
   } catch (err) {
     console.error('checkFirstDealOfDayBonus failed (non-fatal)', err);
-  }
-  try {
-    await checkMonthlyGoalProgress(db, env, { employeeId: attributedEmployeeId });
-  } catch (err) {
-    console.error('checkMonthlyGoalProgress failed (non-fatal)', err);
   }
 
   return { id: purchase.id, purchaseAt: purchase.purchase_at, totalAmount, subtotal, discountTotal, taxTotal };

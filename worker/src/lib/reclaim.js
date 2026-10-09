@@ -26,11 +26,13 @@
 // Runs once per Cairo calendar day, at/after end-of-shift (work_hours.end),
 // never on a holiday — same dedup pattern as the two ops reports
 // (lib/opsreports.js) via a key in the shared `settings` table.
-import { nowIso, createNotification, broadcast, logActivity } from './db.js';
+import { nowIso, logActivity, broadcast } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
 
 export async function sweepAutoReclaim(db, env) {
+  // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
+  if (getCairoNow().minutesSinceMidnight < 14 * 60) return { reclaimed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { reclaimed: 0 };
   if (status.minutesSinceMidnight < status.endMin) return { reclaimed: 0 };
@@ -53,7 +55,8 @@ export async function sweepAutoReclaim(db, env) {
        WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
          AND c.assigned_at >= ? AND c.assigned_at <= ?
          AND NOT EXISTS (SELECT 1 FROM customer_status_history h WHERE h.customer_id = c.id AND h.changed_at >= c.assigned_at)
-         AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)`
+         AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)
+         AND NOT EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.created_at >= c.assigned_at)`
     )
     .bind(dayStartIso, dayEndIso)
     .all();
@@ -65,11 +68,9 @@ export async function sweepAutoReclaim(db, env) {
       (byEmployee[c.assigned_employee_id] ||= []).push(c);
     }
     const now = nowIso();
-    const owners = await db.prepare(`SELECT id FROM users WHERE is_owner = 1 AND active = 1`).all();
 
     for (const [employeeIdStr, custs] of Object.entries(byEmployee)) {
       const employeeId = Number(employeeIdStr);
-      const fromEmp = await db.prepare(`SELECT name, name_ar, user_id FROM employees WHERE id = ?`).bind(employeeId).first();
 
       for (const c of custs) {
         // يرجع "غير موزّع" بالظبط زي عميل مستورد جديد لسه ما وزّعش — يظهر
@@ -89,30 +90,8 @@ export async function sweepAutoReclaim(db, env) {
         reclaimed++;
       }
 
-      const fromLabel = fromEmp?.name_ar ? `${fromEmp.name} (${fromEmp.name_ar})` : fromEmp?.name || 'موظف';
-
-      if (fromEmp?.user_id) {
-        await createNotification(db, {
-          userId: fromEmp.user_id,
-          type: 'CUSTOMERS_AUTO_RECLAIMED',
-          title: '⚠️ تم سحب عملاء منك تلقائيًا',
-          message: `تم سحب ${custs.length} عميل لم تُسجَّل لهم حالة أو ملاحظة اليوم، ورجعوا لقائمة توزيع العملاء.`,
-        });
-        await broadcast(env, 'CUSTOMER_REASSIGNED', { customerIds: custs.map((c) => c.id) }, { scope: 'user', userId: fromEmp.user_id });
-      }
-
-      for (const o of owners.results) {
-        await createNotification(db, {
-          userId: o.id,
-          type: 'CUSTOMERS_AUTO_RECLAIMED_OWNER',
-          title: '🔁 عملاء بلا ملاحظة رجعوا لقائمة التوزيع',
-          message: `تم سحب ${custs.length} عميل من ${fromLabel} (بدون حالة/ملاحظة حتى نهاية الشيفت) ورجعوا لقائمة توزيع العملاء لإعادة توزيعهم.`,
-        });
-      }
-      if (owners.results.length > 0) {
-        await broadcast(env, 'CUSTOMERS_AUTO_RECLAIMED_OWNER', { fromEmployeeId: employeeId, count: custs.length }, { scope: 'users', userIds: owners.results.map((o) => o.id) });
-      }
-      await broadcast(env, 'CUSTOMERS_AUTO_RECLAIMED', { fromEmployeeId: employeeId, count: custs.length }, { scope: 'role', role: 'team_leader' });
+      // تنبيه لحظي بدون قراءة من القاعدة (WebSocket) — الموظف يشوف نقطة على 🔄
+      await broadcast(env, 'CUSTOMER_REASSIGNED', { count: custs.length }, { scope: 'employee', employeeId }).catch(() => {});
       await logActivity(db, {
         actor: null,
         action: 'AUTO_RECLAIM',
@@ -152,6 +131,8 @@ export async function sweepAutoReclaim(db, env) {
 const REDISTRIBUTE_HOUR = 15; // 3 PM Cairo
 
 export async function sweepRedistribute3pm(db, env) {
+  // نفس الفكرة: قبل ٣ العصر مفيش أي قراءة من القاعدة.
+  if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_HOUR * 60) return { redistributed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { redistributed: 0 };
 
@@ -214,11 +195,9 @@ export async function sweepRedistribute3pm(db, env) {
     }
 
     const now = nowIso();
-    const owners = await db.prepare(`SELECT id FROM users WHERE is_owner = 1 AND active = 1`).all();
 
     for (const [employeeIdStr, custs] of Object.entries(byEmployee)) {
       const fromEmployeeId = Number(employeeIdStr);
-      const fromEmp = await db.prepare(`SELECT name, name_ar, user_id FROM employees WHERE id = ?`).bind(fromEmployeeId).first();
 
       // Eligible targets = online employees EXCEPT the original assignee
       const targets = onlineEmployeeIds.filter((id) => id !== fromEmployeeId);
@@ -240,51 +219,15 @@ export async function sweepRedistribute3pm(db, env) {
         redistributed++;
       }
 
-      const fromLabel = fromEmp?.name_ar ? `${fromEmp.name} (${fromEmp.name_ar})` : fromEmp?.name || 'موظف';
-
-      // Notify the employee their leads were taken
-      if (fromEmp?.user_id) {
-        await createNotification(db, {
-          userId: fromEmp.user_id,
-          type: 'CUSTOMERS_AUTO_RECLAIMED',
-          title: '⚠️ تم إعادة توزيع عملاء منك تلقائيًا',
-          message: `تم سحب ${custs.length} عميل لم تُتخذ عليهم أي إجراء وإعادة توزيعهم على زملائك الأونلاين.`,
-        });
-        await broadcast(env, 'CUSTOMER_REASSIGNED', { customerIds: custs.map((c) => c.id) }, { scope: 'user', userId: fromEmp.user_id });
-      }
-
-      // Notify each target employee about their new leads
       const targetCounts = {};
       for (let i = 0; i < custs.length; i++) {
         const tid = targets[i % targets.length];
         targetCounts[tid] = (targetCounts[tid] || 0) + 1;
       }
-      for (const [targetIdStr, count] of Object.entries(targetCounts)) {
-        const targetEmp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(Number(targetIdStr)).first();
-        if (targetEmp?.user_id) {
-          await createNotification(db, {
-            userId: targetEmp.user_id,
-            type: 'CUSTOMERS_REDISTRIBUTED_TO_YOU',
-            title: '📥 تم توزيع عملاء جدد عليك',
-            message: `تم توزيع ${count} عميل جديد عليك تلقائيًا (كانوا مع ${fromLabel} ولم يُتخذ عليهم أي إجراء).`,
-          });
-          await broadcast(env, 'CUSTOMER_REASSIGNED', { count }, { scope: 'user', userId: targetEmp.user_id });
-        }
+      await broadcast(env, 'CUSTOMER_REASSIGNED', { count: custs.length }, { scope: 'employee', employeeId: fromEmployeeId }).catch(() => {});
+      for (const [tid, count] of Object.entries(targetCounts)) {
+        await broadcast(env, 'CUSTOMER_ASSIGNED', { count }, { scope: 'employee', employeeId: Number(tid) }).catch(() => {});
       }
-
-      // Notify owners (Mr. Hany)
-      for (const o of owners.results) {
-        await createNotification(db, {
-          userId: o.id,
-          type: 'CUSTOMERS_REDISTRIBUTED_OWNER',
-          title: '🔄 إعادة توزيع تلقائية الساعة 3',
-          message: `تم سحب ${custs.length} عميل بلا إجراء من ${fromLabel} وإعادة توزيعهم على ${targets.length} زملاء أونلاين.`,
-        });
-      }
-      if (owners.results.length > 0) {
-        await broadcast(env, 'CUSTOMERS_REDISTRIBUTED', { fromEmployeeId, count: custs.length }, { scope: 'users', userIds: owners.results.map((o) => o.id) });
-      }
-      await broadcast(env, 'CUSTOMERS_REDISTRIBUTED', { fromEmployeeId, count: custs.length }, { scope: 'role', role: 'team_leader' });
       await logActivity(db, {
         actor: null,
         action: 'AUTO_REDISTRIBUTE_3PM',

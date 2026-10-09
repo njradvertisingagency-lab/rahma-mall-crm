@@ -9,7 +9,7 @@
 // the existing, already-tested OVERDUE follow-up detection/notification
 // pipeline (routes/followups.js sweepOverdueFollowups) rather than duplicating
 // it here — it is exposed in computeCustomerSla() for display purposes only.
-import { nowIso, broadcast, createNotification, logActivity } from './db.js';
+import { nowIso } from './db.js';
 
 const DEFAULT_RULES = { seenWithinMinutes: 10, contactWithinMinutesAfterSeen: 15, followupWithinMinutesAfterInterested: 60, customerWaitingMinutes: 720 };
 const WARNING_FRACTION = 0.7;
@@ -148,110 +148,6 @@ const RULE_LABELS = {
   CONTACT_SLA: 'أن يتم التواصل معه',
   INTERESTED_FOLLOWUP_SLA: 'أن يحصل على متابعة',
 };
-
-async function notifyForEvent(db, env, { rule, level, customerId, employeeId }) {
-  const customer = await db.prepare(`SELECT id, name, normalized_phone FROM customers WHERE id = ?`).bind(customerId).first();
-  const label = customer?.name || customer?.normalized_phone || customerId;
-
-  let title;
-  let message;
-  let notifType;
-  let rtEvent;
-  if (rule === 'CUSTOMER_WAITING') {
-    // Employee-facing staleness nudge — deliberately distinct wording/type
-    // from a real SLA breach, and always reaches the employee themselves.
-    notifType = level === 'BREACHED' ? 'CUSTOMER_WAITING' : 'CUSTOMER_WAITING_WARNING';
-    rtEvent = notifType;
-    title = level === 'BREACHED' ? `⏳ عميل بينتظرك — ${customerId}` : `🟡 عميل يحتاج متابعة قريبًا — ${customerId}`;
-    message = `${label} لم يحدث عليه أي تحديث منذ فترة طويلة — راجعه الآن.`;
-  } else {
-    notifType = level === 'BREACHED' ? 'SLA_BREACHED' : 'SLA_WARNING';
-    rtEvent = notifType;
-    const ruleLabel = RULE_LABELS[rule] || rule;
-    title = level === 'BREACHED' ? `🔴 تجاوز لموعد الخدمة — ${customerId}` : `🟠 تحذير موعد خدمة — ${customerId}`;
-    message = `${label} كان يحتاج ${ruleLabel} خلال الموعد المحدد.`;
-  }
-
-  const employeeUser = employeeId ? await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(employeeId).first() : null;
-  if (employeeUser) {
-    await createNotification(db, { userId: employeeUser.user_id, type: notifType, title, message, entityType: 'customer', entityId: customerId });
-  }
-  if (level === 'BREACHED') {
-    const tls = await db.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all();
-    for (const tl of tls.results) {
-      await createNotification(db, { userId: tl.id, type: notifType, title, message, entityType: 'customer', entityId: customerId });
-    }
-  }
-  await broadcast(env, rtEvent, { customerId, rule, employeeId }, { scope: 'role', role: 'team_leader' });
-  if (employeeId) await broadcast(env, rtEvent, { customerId, rule }, { scope: 'employee', employeeId });
-}
-
-/** Shared sweep engine — dedups notifications via `eventsTable`, and auto-resolves events whose underlying condition cleared. Used for both real SLA rules (sla_events) and the CUSTOMER_WAITING rule (waiting_events), kept in separate tables so the live sla_events CHECK(rule IN (...)) constraint never needs touching. */
-async function sweepRuleSet(db, env, { rules, ruleDefs, eventsTable }) {
-  const now = nowIso();
-  let warned = 0;
-  let breached = 0;
-  let resolved = 0;
-
-  for (const { rule, find, thresholdKey } of ruleDefs) {
-    const candidates = await find(db);
-    const candidateByCustomer = new Map(candidates.map((r) => [r.customer_id, r]));
-
-    const openEvents = await db.prepare(`SELECT id, customer_id, level FROM ${eventsTable} WHERE ${eventsTable === 'sla_events' ? 'rule = ? AND ' : ''}resolved_at IS NULL`).bind(...(eventsTable === 'sla_events' ? [rule] : [])).all();
-    const openByCustomer = new Map(openEvents.results.map((r) => [r.customer_id, r]));
-
-    // Resolve anything no longer a candidate at all (the required action happened).
-    for (const [customerId, ev] of openByCustomer) {
-      if (!candidateByCustomer.has(customerId)) {
-        await db.prepare(`UPDATE ${eventsTable} SET resolved_at = ? WHERE id = ?`).bind(now, ev.id).run();
-        resolved++;
-      }
-    }
-
-    for (const candidate of candidates) {
-      const mins = (Date.now() - new Date(candidate.anchor_at).getTime()) / 60000;
-      const level = classify(mins, rules[thresholdKey]);
-      const existing = openByCustomer.get(candidate.customer_id);
-
-      if (level === 'OK') {
-        if (existing) {
-          await db.prepare(`UPDATE ${eventsTable} SET resolved_at = ? WHERE id = ?`).bind(now, existing.id).run();
-          resolved++;
-        }
-        continue;
-      }
-      if (existing && existing.level === level) continue; // already notified at this level
-      if (existing && existing.level === 'WARNING' && level === 'BREACHED') {
-        await db.prepare(`UPDATE ${eventsTable} SET resolved_at = ? WHERE id = ?`).bind(now, existing.id).run();
-      }
-      if (existing && existing.level === 'BREACHED' && level === 'WARNING') continue; // never de-escalate a breach
-
-      const insertCols = eventsTable === 'sla_events' ? '(customer_id, employee_id, rule, level)' : '(customer_id, employee_id, level)';
-      const insertVals = eventsTable === 'sla_events' ? [candidate.customer_id, candidate.employee_id ?? null, rule, level] : [candidate.customer_id, candidate.employee_id ?? null, level];
-      await db.prepare(`INSERT INTO ${eventsTable} ${insertCols} VALUES (${insertVals.map(() => '?').join(', ')})`).bind(...insertVals).run();
-      await notifyForEvent(db, env, { rule, level, customerId: candidate.customer_id, employeeId: candidate.employee_id });
-      if (level === 'BREACHED') breached++;
-      else warned++;
-    }
-  }
-  return { warned, breached, resolved };
-}
-
-/** Cron sweep: real SLA rules (seen/contact/interested-followup), audited in sla_events. */
-export async function sweepSlaBreaches(db, env) {
-  const rules = await getSlaRules(db);
-  return sweepRuleSet(db, env, { rules, ruleDefs: RULES, eventsTable: 'sla_events' });
-}
-
-/** Cron sweep: "customer waiting for you" — a generic staleness nudge to the employee themselves, audited in waiting_events (kept separate from sla_events). */
-export async function sweepCustomerWaiting(db, env) {
-  const rules = await getSlaRules(db);
-  return sweepRuleSet(db, env, {
-    rules,
-    ruleDefs: [{ rule: 'CUSTOMER_WAITING', find: findWaitingCandidates, thresholdKey: 'customerWaitingMinutes' }],
-    eventsTable: 'waiting_events',
-  });
-}
 
 /** Count of customers currently breaching/warning any rule — for Command Center. */
 export async function getSlaCounts(db) {

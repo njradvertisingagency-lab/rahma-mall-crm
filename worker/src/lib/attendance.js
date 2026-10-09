@@ -14,7 +14,7 @@
 // succeeds and is durably recorded — only the notification might be missed
 // — matching the same "the real mutation must never fail because a
 // side-effect hiccupped" philosophy as broadcast() in lib/db.js.
-import { nowIso, createNotification, broadcast, logActivity } from './db.js';
+import { nowIso, broadcast, logActivity } from './db.js';
 import { getWorkHoursStatus } from './workhours.js';
 import { asGet, asPut, asList, asCheckIn, asCheckOut } from './attendanceStore.js';
 
@@ -61,14 +61,6 @@ function formatHourAr(hour, minute) {
   let h12 = hour % 12;
   if (h12 === 0) h12 = 12;
   return `${h12}:${pad(minute)} ${period}`;
-}
-
-async function safeNotify(db, args) {
-  try {
-    await createNotification(db, args);
-  } catch (err) {
-    console.error('attendance: notification failed (best-effort, non-fatal)', err);
-  }
 }
 
 async function safeLog(db, args) {
@@ -148,42 +140,11 @@ export async function recordCheckIn(env, user) {
   if (isLate) {
     const month = monthOf(status.dateStr);
     const lateCount = await countLateThisMonth(env, user.id, month);
-    const label = user.displayName || user.username;
-
-    let leaders = [];
-    try {
-      leaders = (await env.DB.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all()).results;
-    } catch (err) {
-      console.error('attendance: could not load team_leader accounts to notify (best-effort, non-fatal)', err);
-    }
-    for (const tl of leaders) {
-      await safeNotify(env.DB, {
-        userId: tl.id,
-        type: 'LATE_CHECKIN',
-        title: '⏰ حضور متأخر',
-        message: `${label} سجّل حضوره متأخرًا بـ ${lateMinutes} دقيقة اليوم (${pad(status.settings.startHour)}:${pad(status.settings.startMinute)} بداية الدوام).`,
-        entityType: 'user',
-        entityId: String(user.id),
-      });
-    }
 
     if (lateCount > MONTHLY_LATE_ALLOWANCE) {
       const ts = Date.now();
       await asPut(env, penaltyKey(month, user.id, ts), { userId: user.id, month, lateCountAtPenalty: lateCount, createdAt: now });
 
-      let owners = [];
-      try {
-        owners = (await env.DB.prepare(`SELECT id FROM users WHERE is_owner = 1 AND active = 1`).all()).results;
-      } catch (err) {
-        console.error('attendance: could not load owner accounts to notify (best-effort, non-fatal)', err);
-      }
-      const penaltyMessage = `${label} تجاوز الحد المسموح (${MONTHLY_LATE_ALLOWANCE} مرات تأخير شهريًا) — هذا التأخير رقم ${lateCount} هذا الشهر.`;
-      for (const o of owners) {
-        await safeNotify(env.DB, { userId: o.id, type: 'ATTENDANCE_PENALTY', title: '🚫 مخالفة تأخير', message: penaltyMessage, entityType: 'user', entityId: String(user.id) });
-      }
-      if (owners.length > 0) {
-        await broadcast(env, 'ATTENDANCE_PENALTY', { userId: user.id, lateCount, month }, { scope: 'users', userIds: owners.map((o) => o.id) });
-      }
       penalty = { lateCount, month };
     }
   }
@@ -224,30 +185,6 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
 
   await broadcast(env, 'ATTENDANCE_CHECKED_OUT', { userId: user.id, checkedOutAt: now }, { scope: 'role', role: 'team_leader' });
   await safeLog(env.DB, { actor: user, action: 'ATTENDANCE_CHECK_OUT', entityType: 'user', entityId: String(user.id), metadata: isEarly ? { early: true, reason } : undefined });
-
-  if (isEarly && reason) {
-    const label = user.displayName || user.username;
-    const message = `${label} سجّل انصرافًا مبكرًا اليوم (قبل ${formatHourAr(status.settings.endHour, status.settings.endMinute)}) — السبب: ${reason}`;
-    let leaders = [];
-    try {
-      leaders = (await env.DB.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all()).results;
-    } catch (err) {
-      console.error('attendance: could not load team_leader accounts to notify about early checkout (best-effort, non-fatal)', err);
-    }
-    for (const tl of leaders) {
-      await safeNotify(env.DB, {
-        userId: tl.id,
-        type: 'EARLY_CHECKOUT',
-        title: '🚪 انصراف مبكر',
-        message,
-        entityType: 'user',
-        entityId: String(user.id),
-      });
-    }
-    if (leaders.length > 0) {
-      await broadcast(env, 'EARLY_CHECKOUT', { userId: user.id, reason }, { scope: 'role', role: 'team_leader' });
-    }
-  }
 
   return { checkedOutAt: now, isEarly };
 }
@@ -392,6 +329,9 @@ export async function getAttendanceDashboard(env, { date } = {}) {
       isOwner: !!p.is_owner,
       checkInAt: record?.checkInAt || null,
       checkOutAt: record?.checkOutAt || null,
+      // سبب الانصراف المبكر — كان بيوصل بإشعار للمالك/HR/قائد الفريق، والإشعارات اتلغت،
+      // فبقى بيظهر هنا في جدول الحضور بدلها.
+      earlyCheckoutReason: record?.earlyCheckoutReason || null,
       isLate: !!record?.isLate,
       lateMinutes: record?.lateMinutes ?? null,
       hoursWorkedSeconds: hoursSeconds,

@@ -6,7 +6,7 @@
 // and from lib/presence.js (the online/idle/offline signal) — this file only
 // ever touches employees.availability for the OFF-HOURS case, and only ever
 // touches employees.last_late_alert_date, never anything presence-related.
-import { nowIso, broadcast, createNotification } from './db.js';
+import { nowIso, broadcast } from './db.js';
 
 const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 18, endMinute: 0, lateAfterMinutes: 15, holidayWeekdays: ['Thursday', 'Friday'] };
 const TIMEZONE = 'Africa/Cairo';
@@ -16,7 +16,12 @@ export function getCairoWeekday() {
   return new Intl.DateTimeFormat('en-US', { timeZone: TIMEZONE, weekday: 'long' }).format(new Date());
 }
 
+let _whCache = null;
+let _whCacheAt = 0;
+const WH_CACHE_MS = 60 * 1000;
+
 export async function getWorkHoursSettings(db) {
+  if (_whCache && Date.now() - _whCacheAt < WH_CACHE_MS) return { ..._whCache };
   // Wrapped end-to-end (not just the JSON.parse) so a D1 hiccup — the free
   // tier's daily read quota has been unpredictable, even for tiny reads on
   // an existing table — degrades to sane defaults instead of throwing and
@@ -24,8 +29,9 @@ export async function getWorkHoursSettings(db) {
   // auto-reclaim all start from this).
   try {
     const row = await db.prepare(`SELECT value FROM settings WHERE key = 'work_hours'`).first();
-    if (!row) return { ...DEFAULT_WORK_HOURS };
-    return { ...DEFAULT_WORK_HOURS, ...JSON.parse(row.value) };
+    _whCache = row ? { ...DEFAULT_WORK_HOURS, ...JSON.parse(row.value) } : { ...DEFAULT_WORK_HOURS };
+    _whCacheAt = Date.now();
+    return { ..._whCache };
   } catch (err) {
     console.error('getWorkHoursSettings: D1 unavailable, using defaults', err);
     return { ...DEFAULT_WORK_HOURS };
@@ -148,42 +154,6 @@ function pad(n) {
 // an employee can be logged in without having tapped "check in" yet. Left
 // as login-based for now purely because the attendance table doesn't exist
 // in the live database yet; nothing here is blocked on that.
-// ---------------------------------------------------------------------------
-export async function sweepLateAttendance(db, env) {
-  const status = await getWorkHoursStatus(db);
-  // Only worth checking during the work day itself — never in the evening/
-  // night for a day that's already over, and never on a holiday.
-  if (!status.isPastLateCutoff || status.minutesSinceMidnight >= status.endMin) return { alerted: 0 };
-
-  const { dayStartIso } = getCairoDayBoundsUtc(status.dateStr);
-  const employees = await db
-    .prepare(
-      `SELECT e.id, e.name, e.name_ar,
-              (SELECT 1 FROM employee_sessions es WHERE es.employee_id = e.id AND es.login_at >= ? LIMIT 1) AS logged_in_today
-       FROM employees e
-       WHERE e.active = 1 AND (e.last_late_alert_date IS NULL OR e.last_late_alert_date != ?)`
-    )
-    .bind(dayStartIso, status.dateStr)
-    .all();
-  if (employees.results.length === 0) return { alerted: 0 };
-
-  const leaders = await db.prepare(`SELECT id FROM users WHERE role = 'team_leader' AND active = 1`).all();
-  let alerted = 0;
-  for (const emp of employees.results) {
-    if (emp.logged_in_today) continue; // already logged in today — nothing to alert about
-    const label = emp.name_ar ? `${emp.name} (${emp.name_ar})` : emp.name;
-    const title = '⏰ تأخر عن الحضور';
-    const message = `${label} لم يسجّل حضوره بعد رغم مرور ${status.settings.lateAfterMinutes} دقيقة على بدء الدوام (${pad(status.settings.startHour)}:${pad(status.settings.startMinute)} صباحًا).`;
-    for (const tl of leaders.results) {
-      await createNotification(db, { userId: tl.id, type: 'LATE_ATTENDANCE', title, message, entityType: 'employee', entityId: String(emp.id) });
-    }
-    await broadcast(env, 'LATE_ATTENDANCE', { employeeId: emp.id }, { scope: 'role', role: 'team_leader' });
-    await db.prepare(`UPDATE employees SET last_late_alert_date = ? WHERE id = ?`).bind(status.dateStr, emp.id).run();
-    alerted++;
-  }
-  return { alerted };
-}
-
 // ---------------------------------------------------------------------------
 // 2) AUTO OFF-HOURS AVAILABILITY — outside the work-hours window, any
 // employee still showing AVAILABLE/BUSY/ON_BREAK is automatically switched

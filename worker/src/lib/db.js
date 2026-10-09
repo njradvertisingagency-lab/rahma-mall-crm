@@ -65,17 +65,6 @@ export async function logActivity(db, { actor, action, entityType, entityId, met
     .run();
 }
 
-/** Persist a notification for one recipient user. Returns the inserted row id. */
-export async function createNotification(db, { userId, type, title, message, entityType, entityId }) {
-  const res = await db
-    .prepare(
-      `INSERT INTO notifications (user_id, type, title, message, entity_type, entity_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at`
-    )
-    .bind(userId, type, title, message, entityType ?? null, entityId ?? null)
-    .first();
-  return res;
-}
-
 /**
  * Broadcast a real-time event through the TeamRoom Durable Object.
  * `audience` selects which connected sockets receive it:

@@ -7,7 +7,7 @@
 // صرف نفس المكافأة/الخصم مرتين (idempotency)، بنفس فكرة sweepOpsReports.
 import { applyManualAdjustment } from './rewards.js';
 import { getCairoNow, getCairoDayBoundsUtc } from './workhours.js';
-import { createNotification, broadcast } from './db.js';
+import { broadcast } from './db.js';
 
 const DEFAULT_MOTIVATION_SETTINGS = {
   monthlySalesTarget: 8,
@@ -98,51 +98,6 @@ export async function checkFirstDealOfDayBonus(db, env, { employeeId, purchaseId
     title: '🥇 مكافأة أول صفقة في اليوم',
     notes: 'مكافأة أول صفقة في اليوم 🥇',
   });
-}
-
-// ---------------------------------------------------------------------------
-// 2) الهدف الشهري (٨ صفقات افتراضيًا) — تنبيه تحفيزي عند اقتراب موظف من هدفه
-// ("باقي صفقة واحدة!") ورسالة تهنئة تلقائية عند تحقيقه بالكامل. لا تحريك
-// مالي هنا أبدًا — تحفيز/تقدير فقط، فلا حاجة لقرار مالي من أستاذ هاني.
-// ---------------------------------------------------------------------------
-export async function checkMonthlyGoalProgress(db, env, { employeeId }) {
-  if (!employeeId) return;
-  const settings = await getMotivationSettings(db);
-  const target = Number(settings.monthlySalesTarget) || 0;
-  if (target <= 0) return;
-
-  const monthStr = getCairoMonthStr();
-  const count = await getEmployeeMonthlySalesCount(db, employeeId, monthStr);
-  const emp = await db.prepare(`SELECT user_id, name FROM employees WHERE id = ?`).bind(employeeId).first();
-  if (!emp?.user_id) return;
-
-  if (count === target) {
-    const claim = await claimEvent(db, { employeeId, bonusType: 'MONTHLY_GOAL_HIT', refKey: `${monthStr}_${employeeId}`, amount: 0 });
-    if (claim.claimed) {
-      await createNotification(db, {
-        userId: emp.user_id,
-        type: 'MONTHLY_GOAL_HIT',
-        title: '🎯 حققت هدفك الشهري!',
-        message: `مبروك ${emp.name}! أنجزت هدفك الشهري (${target} صفقات) — استمر في التميّز 👏`,
-        entityType: 'employee',
-        entityId: String(employeeId),
-      });
-      await broadcast(env, 'MOTIVATION_MILESTONE', { employeeId, kind: 'MONTHLY_GOAL_HIT', target }, { scope: 'employee', employeeId });
-    }
-  } else if (target - count === 1) {
-    const claim = await claimEvent(db, { employeeId, bonusType: 'MONTHLY_GOAL_NEAR', refKey: `${monthStr}_${employeeId}`, amount: 0 });
-    if (claim.claimed) {
-      await createNotification(db, {
-        userId: emp.user_id,
-        type: 'MONTHLY_GOAL_NEAR',
-        title: '🔥 باقي صفقة واحدة!',
-        message: `أنت على بُعد صفقة واحدة فقط من تحقيق هدفك الشهري (${target} صفقات) — يلا كمّل! 💪`,
-        entityType: 'employee',
-        entityId: String(employeeId),
-      });
-      await broadcast(env, 'MOTIVATION_MILESTONE', { employeeId, kind: 'MONTHLY_GOAL_NEAR', target }, { scope: 'employee', employeeId });
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
