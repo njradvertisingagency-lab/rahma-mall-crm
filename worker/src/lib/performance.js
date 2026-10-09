@@ -214,28 +214,11 @@ export async function computeBadges(db) {
     }
   }
 
-  // صفر شكاوى الشهر — موظف لديه عملاء موزّعون هذا الشهر لكن بدون أي شكوى مسجّلة.
-  const zeroComplaints = [];
-  for (const emp of employees) {
-    const [assignedRow, complaintsRow] = await Promise.all([
-      db.prepare(`SELECT COUNT(*) AS n FROM customers WHERE assigned_employee_id = ? AND archived = 0`).bind(emp.id).first(),
-      db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM complaints
-           WHERE employee_id = ? AND created_at >= ? AND NOT EXISTS (SELECT 1 FROM soft_deletes sd WHERE sd.entity_type = 'complaint' AND sd.entity_id = complaints.id)`
-        )
-        .bind(emp.id, monthStart)
-        .first(),
-    ]);
-    if (assignedRow.n > 0 && complaintsRow.n === 0) zeroComplaints.push(emp);
-  }
-
   const weekly = [];
   const monthly = [];
   if (fastestResponse) weekly.push({ key: 'FASTEST_RESPONSE_WEEK', icon: '⚡', label: 'أسرع استجابة الأسبوع', employeeId: fastestResponse.emp.id, employeeName: fastestResponse.emp.name, detail: `${Math.round(fastestResponse.avgMinutes)} دقيقة في المتوسط` });
   if (followupChampion) weekly.push({ key: 'FOLLOWUP_CHAMPION_WEEK', icon: '🎯', label: 'الأكثر التزامًا بالمتابعات', employeeId: followupChampion.emp.id, employeeName: followupChampion.emp.name, detail: `${followupChampion.done}/${followupChampion.total} هذا الأسبوع` });
   if (topCloser) monthly.push({ key: 'TOP_CLOSER_MONTH', icon: '🥇', label: 'أعلى إغلاق الشهر', employeeId: topCloser.emp.id, employeeName: topCloser.emp.name, detail: `${topCloser.count} عميل مغلق` });
-  zeroComplaints.forEach((emp) => monthly.push({ key: 'ZERO_COMPLAINTS_MONTH', icon: '🌟', label: 'صفر شكاوى هذا الشهر', employeeId: emp.id, employeeName: emp.name, detail: 'سجل نظيف هذا الشهر' }));
 
   return { weekly, monthly };
 }
