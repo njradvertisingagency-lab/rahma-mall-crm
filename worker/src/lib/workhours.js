@@ -6,7 +6,7 @@
 // and from lib/presence.js (the online/idle/offline signal) — this file only
 // ever touches employees.availability for the OFF-HOURS case, and only ever
 // touches employees.last_late_alert_date, never anything presence-related.
-import { nowIso, broadcast, createNotification } from './db.js';
+import { nowIso, broadcast } from './db.js';
 
 const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 18, endMinute: 0, lateAfterMinutes: 15, holidayWeekdays: ['Thursday', 'Friday'] };
 const TIMEZONE = 'Africa/Cairo';

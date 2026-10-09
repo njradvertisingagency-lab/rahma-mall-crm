@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { nextCustomerId, logActivity, createNotification, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
+import { nextCustomerId, logActivity, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
 import * as XLSX from 'xlsx';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';

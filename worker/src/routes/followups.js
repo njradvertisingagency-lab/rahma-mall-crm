@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireRole } from '../lib/auth.js';
-import { logActivity, createNotification, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
+import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const followupRoutes = new Hono();

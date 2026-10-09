@@ -6,8 +6,6 @@ const App = (window.App = {
     user: null,
     theme: localStorage.getItem('rm_theme') || 'light',
     wsStatus: 'OFFLINE', // LIVE | RECONNECTING | OFFLINE
-    soundEnabled: localStorage.getItem('rm_sound_enabled') !== 'false',
-    notifications: [],
     unreadCount: 0,
     chatUnread: 0,
     employees: [],
@@ -277,7 +275,6 @@ async function api(path, opts) {
   // الخادم يرد بآخر نسخة معروفة من البيانات إذا تعذّر الوصول لقاعدة البيانات،
   // ويضع stale: true. لا يصح أن يتصرّف الفريق في بيانات عميل دون أن يعرف أنها
   // قد تكون قديمة — ننبّه مرة واحدة كل دقيقة حتى لا يتحوّل التنبيه إلى إزعاج.
-  if (data && data.stale === true) notifyStaleData();
   return data;
 }
 
@@ -323,13 +320,6 @@ function showShiftClosedScreen(err) {
 }
 App.showShiftClosedScreen = showShiftClosedScreen;
 
-let lastStaleNoticeAt = 0;
-function notifyStaleData() {
-  const now = Date.now();
-  if (now - lastStaleNoticeAt < 60 * 1000) return;
-  lastStaleNoticeAt = now;
-  toast('البيانات المعروضة قد تكون غير محدَّثة — قاعدة البيانات تحت ضغط مؤقت', 'warn');
-}
 App.api = api;
 App.apiBase = API_BASE; // مُستخدم لبناء روابط مباشرة (مثل تصدير CSV) تعمل حتى لو اختلف النطاق
 
@@ -375,45 +365,6 @@ function toast(message, type) {
 }
 App.toast = toast;
 
-// ---------------------------------------------------------------------------
-// صوت التنبيهات — نغمة قصيرة تُولَّد برمجيًا (بدون ملف صوتي خارجي) لتنبيه
-// الموظف حتى لو كانت التبويبة في الخلفية. تُشغَّل فقط مع تنبيهات فورية حقيقية
-// (وليس مع كل رسالة تأكيد عادية)، ويمكن كتمها من الجرس بجوار الإشعارات.
-// ---------------------------------------------------------------------------
-let audioCtx = null;
-function playNotificationSound() {
-  if (!App.state.soundEnabled) return;
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.setValueAtTime(1175, now + 0.11);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.4);
-  } catch (e) { /* الصوت غير أساسي — تجاهل أي فشل (مثل منع المتصفح للتشغيل التلقائي) */ }
-}
-App.playNotificationSound = playNotificationSound;
-App.toggleSound = () => {
-  App.state.soundEnabled = !App.state.soundEnabled;
-  localStorage.setItem('rm_sound_enabled', String(App.state.soundEnabled));
-  App.emit('sound-toggled');
-  if (App.state.soundEnabled) playNotificationSound();
-};
-
-/** إشعار فوري حقيقي: رسالة منبثقة + نغمة تنبيه معًا. */
-function pushAlert(message, type) {
-  toast(message, type);
-  playNotificationSound();
-}
 
 // ---------------------------------------------------------------------------
 // المظهر (فاتح / داكن)
@@ -481,29 +432,8 @@ const RT = {
 };
 App.rt = RT;
 
-// إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
-App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
-App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
-App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
-App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
-
-// مكافأة صفقة — تصل للموظف صاحب الصفقة فقط (السيرفر يحدد المستلم بالبث
-// الموجَّه scope:'employee'). تنبيه احتفالي واضح بدل توست عادي — الهدف
-// تحفيز الموظف فعليًا، وليس مجرد إعلامه.
-App.on('rt:REWARD_EARNED', (p) => { pushAlert(`🎉💰 مبروك! حصلت على مكافأة ${p.amount} ج.م — رصيدك الآن ${p.balance} ج.م`, 'success'); });
-// خصم شفاف من رصيد المكافآت (مثل تأخير كتابة ملاحظة) — نفس وضوح تنبيه
-// المكافأة، بالسالب، حتى لا يفاجأ الموظف لاحقًا برصيد أقل من غير سبب واضح.
-App.on('rt:REWARD_REVERSED', (p) => { if (p.amount < 0) pushAlert(`⚠️ تم خصم ${Math.abs(p.amount)} ج.م من رصيد مكافآتك — رصيدك الآن ${p.balance} ج.م`, 'warn'); });
-// إنجازات تحفيزية بلا مقابل مالي (اقتراب من الهدف الشهري / تحقيقه بالكامل).
-App.on('rt:MOTIVATION_MILESTONE', (p) => {
-  if (p.kind === 'MONTHLY_GOAL_HIT') pushAlert(`🎯 مبروك! حققت هدفك الشهري (${p.target} صفقات) 👏`, 'success');
-  else if (p.kind === 'MONTHLY_GOAL_NEAR') pushAlert('🔥 باقي صفقة واحدة فقط لتحقيق هدفك الشهري!', 'info');
-});
-
 // تم إلغاء خاصية الإشعارات بالكامل (الجرس/الصفحة/التنبيهات) لتوفير قراءات قاعدة البيانات.
 // الدالة فاضلة كـ no-op عشان أي استدعاء قديم ما يكسرش.
-async function refreshNotifications() {}
-App.refreshNotifications = refreshNotifications;
 
 // ---------------------------------------------------------------------------
 // الموجّه (Router)
@@ -790,7 +720,6 @@ const NAV_EMPLOYEE = [
 function renderOwnerShell() {
   const user = App.state.user;
   const connBadge = renderConnBadge();
-  const soundToggle = renderSoundToggle();
   // Pure read-only report modal (start-of-day / end-of-shift snapshots) —
   // no action on any data, just viewing, so it belongs here same as it did
   // in the old sidebar's topbar. renderAdminReportsButton() already checks
@@ -808,7 +737,6 @@ function renderOwnerShell() {
     el('div', { class: 'topbar-actions' }, [
       connBadge,
       renderRefreshBtn(),
-      soundToggle,
       adminReportsBtn,
       el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -821,7 +749,7 @@ function renderOwnerShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
   const root = el('div', { class: 'shell owner-shell' }, [main]);
-  const cleanups = [connBadge.offEvt, soundToggle.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -867,7 +795,6 @@ function renderShell() {
   ]);
 
   const connBadge = renderConnBadge();
-  const soundToggle = renderSoundToggle();
   const adminReportsBtn = renderAdminReportsButton();
   const attendanceBtn = renderAttendanceButton();
   const topbar = el('div', { class: 'topbar', style: isAdmin ? 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' : '' }, [
@@ -883,7 +810,6 @@ function renderShell() {
     el('div', { class: 'topbar-actions' }, [
       connBadge,
       renderRefreshBtn(),
-      soundToggle,
       attendanceBtn,
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -897,7 +823,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, soundToggle.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -916,18 +842,6 @@ function renderConnBadge() {
   return wrap;
 }
 
-function renderSoundToggle() {
-  const btn = el('button', {
-    class: 'btn btn-icon',
-    title: App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات',
-    onclick: App.toggleSound,
-  }, [App.state.soundEnabled ? '🔊' : '🔇']);
-  btn.offEvt = App.on('sound-toggled', () => {
-    btn.textContent = App.state.soundEnabled ? '🔊' : '🔇';
-    btn.title = App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات';
-  });
-  return btn;
-}
 
 // زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
 // freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
@@ -1341,7 +1255,6 @@ async function boot() {
   if (App.state.user) {
     RT.connect();
     App.startPresenceHeartbeat();
-    refreshNotifications();
     refreshAttendanceStatus();
   }
   renderRoute();
