@@ -63,7 +63,15 @@
             el('button', { class: 'btn btn-outline', onclick: () => App.navigate('#/import') }, ['📥 استيراد']),
             el('button', { class: 'btn btn-primary', onclick: () => App.navigate('#/distribute') }, ['🔀 توزيع']),
           ])
-        : null,
+        : el('div', { class: 'page-actions' }, [
+            el('button', { class: 'btn btn-primary', onclick: async () => {
+              try {
+                await App.downloadFile('/customers/export-today', 'numbers.xlsx');
+              } catch (err) {
+                App.toast(err.message || 'فشل تنزيل الملف', 'error');
+              }
+            } }, ['📥 تنزيل أرقام اليوم (Excel)']),
+          ]),
     ]));
 
     let employees = [];
