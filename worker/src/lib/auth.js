@@ -2,7 +2,6 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { randomToken } from './passwords.js';
 import { nowIso, jsonError, backgroundWrite } from './db.js';
 import { sessGet, sessPut, sessDelete } from './sessionStore.js';
-import { getWorkHoursStatus } from './workhours.js';
 
 export const SESSION_COOKIE = 'rm_session';
 const SHORT_SESSION_HOURS = 12;
@@ -88,26 +87,7 @@ export async function requireAuth(c, next) {
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
-  // بوابة الفتح العام للنظام — طلب لاحق صريح من صاحب الشركة (بعد الإغلاق
-  // الكامل اللي كان هنا قبل كده): حساب الموظف العادي (role='employee', مش
-  // مالك) ميقدرش يستخدم أي API قبل الساعة (بداية الشيفت - 30 دقيقة، افتراضيًا
-  // 9:30ص) — لكن مفيش أي إغلاق مساءً خالص، النظام فاضل شغال لحد آخر اليوم
-  // مهما كان الوقت (الانصراف بالذات لازم يفضل متاح دايمًا). قائد الفريق/الـHR
-  // (نفس role='team_leader') والمالك مستثنيين تمامًا ومتاح ليهم النظام 24
-  // ساعة، مطابقةً لسلوك بوابة getShiftGate القديمة المحذوفة. القيد الزمني
-  // التاني المنفصل تمامًا هو منع تسجيل الحضور نفسه (البصمة) قبل معاد بداية
-  // الشيفت بالظبط، وقفله الساعة 8م (انظر lib/attendance.js).
-  if (session.role === 'employee' && !session.isOwner) {
-    const status = await getWorkHoursStatus(c.env.DB);
-    if (!status.isSystemOpenNow) {
-      const openH = Math.floor(status.generalOpenMin / 60);
-      const openM = status.generalOpenMin % 60;
-      const period = openH < 12 ? 'صباحًا' : 'مساءً';
-      const h12raw = openH % 12;
-      const h12 = h12raw === 0 ? 12 : h12raw;
-      return jsonError(c, 403, `النظام هيفتح الساعة ${h12}:${String(openM).padStart(2, '0')} ${period}`, 'SYSTEM_NOT_OPEN_YET');
-    }
-  }
+  // النظام شغال ٢٤ ساعة لكل الحسابات — القيد الزمني الوحيد هو البصمة (انظر lib/attendance.js).
 
   // Touching lastSeenAt is bookkeeping. It runs on EVERY authenticated
   // request, so if it could throw it would take the whole app down with it.
