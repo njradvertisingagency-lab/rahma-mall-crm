@@ -1238,6 +1238,10 @@ let deviceGuardStarted = false;
 let deviceViolationHandled = false;
 async function handleDeviceViolation(reason) {
   if (deviceViolationHandled) return;
+  // جهاز كمبيوتر فعلي (ماوس دقيق + hover) حتى لو عنده شاشة لمس (لابتوب تاتش) أو
+  // نافذة ضيقة بسبب لوحة جانبية — مفيش داعي نقفل الجلسة. الموبايل/التابلت
+  // (pointer:coarse وبدون hover) لسه بيتقفلوا زي الأول.
+  if (isLikelyDesktopDevice()) return;
   deviceViolationHandled = true;
   if (App.state.user) {
     try { await api('/auth/logout', { method: 'POST' }); } catch {}
