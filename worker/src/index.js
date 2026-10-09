@@ -24,7 +24,7 @@ import { sweepPresence } from './lib/presence.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
 import { sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
-import { sweepAutoReclaim, sweepRedistribute3pm } from './lib/reclaim.js';
+import { sweepAutoReclaim, sweepRedistribute3pm, sweepAutoDistribute } from './lib/reclaim.js';
 import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
@@ -240,8 +240,12 @@ export default {
       // (والدقيقتين اللي بعدها كاحتياط لو تأخر الـ cron). بعد أول نجاح
       // الـ dedup بيمنع التكرار، والـ */5 فاضل كشبكة أمان لو فات الموعد.
       const nowMin = getCairoNow().minutesSinceMidnight;
-      if (nowMin >= 15 * 60 && nowMin <= 15 * 60 + 2) {
+      if (nowMin >= 16 * 60 && nowMin <= 16 * 60 + 2) {
         ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
+      }
+      // التوزيع التلقائي الصبح ١١:٣٠ (نفس فكرة الدقيقتين الاحتياط).
+      if (nowMin >= 11 * 60 + 30 && nowMin <= 11 * 60 + 32) {
+        ctx.waitUntil(sweepAutoDistribute(env.DB, env).catch((e) => console.error('sweepAutoDistribute failed', e)));
       }
       return;
     }
@@ -260,6 +264,7 @@ export default {
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
     ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
+    ctx.waitUntil(sweepAutoDistribute(env.DB, env).catch((e) => console.error('sweepAutoDistribute failed', e)));
     // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
     // كل ١٥ دقيقة بدل ٥ يقلل ثلثي مرات فحص العملاء المتأخرين.
     if (isDueEvery(15, 5)) {
