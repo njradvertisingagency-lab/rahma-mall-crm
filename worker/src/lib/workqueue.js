@@ -5,7 +5,7 @@
 // database or executes a reassignment/follow-up on its own — the Team Leader
 // (or the employee, for their own queue) always takes the actual action
 // through the existing, already-audited endpoints.
-import { getEmployeePresenceMap, getPresenceThresholds } from './presence.js';
+import { getEmployeePresenceMap } from './presence.js';
 
 // Ranks an employee's open customers so the busiest/most-urgent ones surface
 // first. Every signal used is real (priority flag, an actually-overdue
@@ -75,31 +75,22 @@ export async function getFollowupSuggestions(db, employeeId = null) {
 }
 
 // Suggest-only reassignment candidates: employees who are offline / on a long
-// break / racking up repeated SLA breaches while still holding open
+// break while still holding open
 // customers. Execution always requires the Team Leader to use the existing
 // manual reassignment endpoint (POST /api/reassignments) — nothing here
 // changes an assignment.
 export async function getReassignmentSuggestions(db) {
-  const [presenceMap, employees, breachRows] = await Promise.all([
+  const [presenceMap, employees] = await Promise.all([
     getEmployeePresenceMap(db),
     db.prepare(`SELECT id, name, availability FROM employees WHERE active = 1`).all(),
-    db
-      .prepare(
-        `SELECT employee_id, COUNT(*) AS breach_count FROM sla_events
-         WHERE level = 'BREACHED' AND resolved_at IS NULL AND employee_id IS NOT NULL
-         GROUP BY employee_id HAVING breach_count >= 3`
-      )
-      .all(),
   ]);
 
   const suggestions = [];
-  const breachByEmployee = Object.fromEntries(breachRows.results.map((r) => [r.employee_id, r.breach_count]));
 
   for (const e of employees.results) {
     const p = presenceMap[e.id] || { online: false, activityState: 'OFFLINE' };
     const isOfflineOrBreak = !p.online || e.availability === 'ON_BREAK' || e.availability === 'UNAVAILABLE';
-    const hasBreaches = !!breachByEmployee[e.id];
-    if (!isOfflineOrBreak && !hasBreaches) continue;
+    if (!isOfflineOrBreak) continue;
 
     const openCustomers = await db
       .prepare(`SELECT COUNT(*) AS n FROM customers WHERE assigned_employee_id = ? AND archived = 0 AND status NOT IN ('CLOSED', 'NOT_INTERESTED')`)
@@ -111,7 +102,6 @@ export async function getReassignmentSuggestions(db) {
     if (!p.online) reasons.push('غير متصل');
     else if (e.availability === 'ON_BREAK') reasons.push('في استراحة');
     else if (e.availability === 'UNAVAILABLE') reasons.push('غير متاح');
-    if (hasBreaches) reasons.push(`${breachByEmployee[e.id]} تجاوز غير محلول لموعد الخدمة`);
 
     suggestions.push({
       employeeId: e.id,

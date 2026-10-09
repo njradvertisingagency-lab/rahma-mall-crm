@@ -7,7 +7,6 @@
 // صرف نفس المكافأة/الخصم مرتين (idempotency)، بنفس فكرة sweepOpsReports.
 import { applyManualAdjustment } from './rewards.js';
 import { getCairoNow, getCairoDayBoundsUtc } from './workhours.js';
-import { broadcast } from './db.js';
 
 const DEFAULT_MOTIVATION_SETTINGS = {
   monthlySalesTarget: 8,

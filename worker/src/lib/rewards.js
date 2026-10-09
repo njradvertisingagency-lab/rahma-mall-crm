@@ -4,7 +4,7 @@
 // (lib/sales.js): كل صفقة مكتملة منسوبة لموظف تمنحه مكافأة ثابتة (مُعدّة من
 // الإعدادات)، وأي إبطال/استرجاع كامل/إعادة نسب يعكسها بحركة جديدة معاكسة
 // بدل حذف أو تعديل الحركة الأصلية، فيبقى تاريخ المكافآت قابلًا للتدقيق دائمًا.
-import { nowIso, broadcast, logActivity } from './db.js';
+import { broadcast, logActivity } from './db.js';
 
 export async function getRewardsSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'rewards_settings'`).first();

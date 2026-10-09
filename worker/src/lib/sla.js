@@ -9,7 +9,6 @@
 // the existing, already-tested OVERDUE follow-up detection/notification
 // pipeline (routes/followups.js sweepOverdueFollowups) rather than duplicating
 // it here — it is exposed in computeCustomerSla() for display purposes only.
-import { nowIso } from './db.js';
 
 const DEFAULT_RULES = { seenWithinMinutes: 10, contactWithinMinutesAfterSeen: 15, followupWithinMinutesAfterInterested: 60, customerWaitingMinutes: 720 };
 const WARNING_FRACTION = 0.7;
