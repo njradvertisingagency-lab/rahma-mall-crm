@@ -10,10 +10,9 @@
 // topbar button that only renders for an owner account), and automatically
 // once a day as an in-app notification (the cron sweep below), sent ONLY to
 // is_owner accounts.
-import { nowIso, createNotification, broadcast } from './db.js';
 import { getNeedsAttentionQueue, getSalesToday } from './commandcenter.js';
 import { getEmployeePresenceMap } from './presence.js';
-import { getWorkHoursStatus } from './workhours.js';
+import { nowIso } from './db.js';
 
 function todayStartIso() {
   const d = new Date();
@@ -94,57 +93,4 @@ export function formatEndOfShiftMessage(report) {
   const parts = [`📞 ${report.totalCallsToday} مكالمة`, `✅ ${report.totalClosedToday} عميل مغلق`, `💰 ${report.netRevenueToday.toLocaleString()} ج.م`];
   if (report.topPerformer) parts.push(`🏆 الأفضل اليوم: ${report.topPerformer.name} (${report.topPerformer.closedToday} مغلق)`);
   return parts.join(' — ');
-}
-
-async function notifyOwners(db, env, { type, title, message }) {
-  const owners = await db.prepare(`SELECT id FROM users WHERE is_owner = 1 AND active = 1`).all();
-  for (const o of owners.results) {
-    await createNotification(db, { userId: o.id, type, title, message });
-  }
-  if (owners.results.length > 0) {
-    await broadcast(env, type, { title, message }, { scope: 'users', userIds: owners.results.map((o) => o.id) });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cron sweep — fires each report once per Cairo calendar day, on the first
-// tick at/after its trigger time (work_hours.start / work_hours.end), and
-// ONLY to is_owner accounts (Mr. Hany's admin — never the regular Team
-// Leader). Dedup state lives in the generic `settings` table so a missed or
-// delayed cron tick still catches up correctly instead of double-firing.
-// ---------------------------------------------------------------------------
-export async function sweepOpsReports(db, env) {
-  const status = await getWorkHoursStatus(db);
-  if (status.isHolidayToday) return {}; // Thursday/Friday (by default) — nobody's expected to work, so no reports either
-  const row = await db.prepare(`SELECT value FROM settings WHERE key = 'ops_reports_sent'`).first();
-  let sent = {};
-  try {
-    sent = row ? JSON.parse(row.value) : {};
-  } catch {
-    sent = {};
-  }
-  let changed = false;
-
-  if (status.minutesSinceMidnight >= status.startMin && sent.startOfDay !== status.dateStr) {
-    const report = await getStartOfDayReport(db);
-    await notifyOwners(db, env, { type: 'START_OF_DAY_REPORT', title: '🌅 تقرير بداية اليوم', message: formatStartOfDayMessage(report) });
-    sent.startOfDay = status.dateStr;
-    changed = true;
-  }
-  if (status.minutesSinceMidnight >= status.endMin && sent.endOfShift !== status.dateStr) {
-    const report = await getEndOfShiftReport(db);
-    await notifyOwners(db, env, { type: 'END_OF_SHIFT_REPORT', title: '🌙 تقرير نهاية الشيفت', message: formatEndOfShiftMessage(report) });
-    sent.endOfShift = status.dateStr;
-    changed = true;
-  }
-  if (changed) {
-    await db
-      .prepare(
-        `INSERT INTO settings (key, value, updated_at) VALUES ('ops_reports_sent', ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
-      )
-      .bind(JSON.stringify(sent), nowIso())
-      .run();
-  }
-  return sent;
 }

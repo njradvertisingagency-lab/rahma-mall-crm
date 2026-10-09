@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { nextDistributionLabel, logActivity, createNotification, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
+import { nextDistributionLabel, logActivity, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 
 export const distributionRoutes = new Hono();
@@ -194,21 +194,7 @@ distributionRoutes.post('/', async (c) => {
   for (const [employeeId, ids] of plan) {
     if (ids.length === 0) continue;
     const emp = employees.find((e) => e.id === employeeId);
-    await createNotification(db, {
-      userId: emp.user_id,
-      type: 'ASSIGNMENT',
-      title: 'تم تعيين عملاء جدد لك',
-      message: `تم تعيين ${ids.length} عميل جديد لك.`,
-      entityType: 'distribution',
-      entityId: String(distributionId),
-    });
     await broadcast(c.env, 'CUSTOMER_ASSIGNED', { customerIds: ids, distributionId }, { scope: 'user', userId: emp.user_id });
-    await broadcast(
-      c.env,
-      'NOTIFICATION_CREATED',
-      { title: 'تم تعيين عملاء جدد لك', message: `تم تعيين ${ids.length} عميل جديد لك.` },
-      { scope: 'user', userId: emp.user_id }
-    );
   }
   await broadcast(c.env, 'DISTRIBUTION_COMPLETED', { distributionId, label, total: totalAssigned }, { scope: 'role', role: 'team_leader' });
 
@@ -242,12 +228,6 @@ reassignmentRoutes.post('/', async (c) => {
     await db.batch(statements);
 
     await logActivity(db, { actor: user, action: 'CUSTOMER_REASSIGNED', entityType: 'customer', entityId: null, metadata: { customerIds, toEmployeeId: employeeId } });
-    await createNotification(db, {
-      userId: emp.user_id,
-      type: 'REASSIGNMENT',
-      title: 'تم إعادة تعيين عملاء لك',
-      message: `تم إعادة تعيين ${customerIds.length} عميل لك.`,
-    });
     await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds, employeeId }, { scope: 'user', userId: emp.user_id });
     await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds, employeeId }, { scope: 'role', role: 'team_leader' });
     return c.json({ ok: true, reassigned: customerIds.length });
@@ -270,7 +250,6 @@ reassignmentRoutes.post('/', async (c) => {
     for (const [employeeId, ids] of plan) {
       if (!ids.length) continue;
       const emp = employees.find((e) => e.id === employeeId);
-      await createNotification(db, { userId: emp.user_id, type: 'REASSIGNMENT', title: 'تم إعادة تعيين عملاء لك', message: `تم إعادة تعيين ${ids.length} عميل لك.` });
       await broadcast(c.env, 'CUSTOMER_REASSIGNED', { customerIds: ids, employeeId }, { scope: 'user', userId: emp.user_id });
     }
     await logActivity(db, { actor: user, action: 'CUSTOMER_REASSIGNED', entityType: 'customer', entityId: null, metadata: { customerIds, mode: 'REDISTRIBUTE' } });

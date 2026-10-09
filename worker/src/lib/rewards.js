@@ -4,7 +4,7 @@
 // (lib/sales.js): كل صفقة مكتملة منسوبة لموظف تمنحه مكافأة ثابتة (مُعدّة من
 // الإعدادات)، وأي إبطال/استرجاع كامل/إعادة نسب يعكسها بحركة جديدة معاكسة
 // بدل حذف أو تعديل الحركة الأصلية، فيبقى تاريخ المكافآت قابلًا للتدقيق دائمًا.
-import { nowIso, broadcast, createNotification, logActivity } from './db.js';
+import { nowIso, broadcast, logActivity } from './db.js';
 
 export async function getRewardsSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'rewards_settings'`).first();
@@ -47,18 +47,7 @@ export async function creditSaleReward(db, env, { employeeId, purchaseId, custom
   await insertTransaction(db, { employeeId, purchaseId, customerId, amount, reason: 'SALE_BONUS', createdBy });
   const balance = await getEmployeeBalance(db, employeeId);
 
-  const emp = await db.prepare(`SELECT user_id, name FROM employees WHERE id = ?`).bind(employeeId).first();
-  if (emp?.user_id) {
-    await createNotification(db, {
-      userId: emp.user_id,
-      type: 'REWARD_EARNED',
-      title: '🎉 مكافأة صفقة جديدة',
-      message: `مبروك! حصلت على مكافأة ${amount} ج.م لتسجيل صفقة جديدة. رصيدك الآن ${balance} ج.م.`,
-      entityType: 'customer',
-      entityId: customerId || null,
-    });
-    await broadcast(env, 'REWARD_EARNED', { amount, balance, purchaseId, customerId }, { scope: 'employee', employeeId });
-  }
+  await broadcast(env, 'REWARD_EARNED', { amount, balance, purchaseId, customerId }, { scope: 'employee', employeeId });
   await logActivity(db, { actor: { id: createdBy }, action: 'REWARD_EARNED', entityType: 'employee', entityId: String(employeeId), metadata: { amount, purchaseId, customerId } });
   await broadcast(env, 'REWARDS_UPDATED', { employeeId }, { scope: 'role', role: 'team_leader' });
   return { amount, balance };
@@ -124,18 +113,7 @@ export async function moveSaleReward(db, env, purchaseId, { previousEmployeeId, 
     if (amount > 0) {
       await insertTransaction(db, { employeeId: newEmployeeId, purchaseId, customerId, amount, reason: 'ATTRIBUTION_MOVED_IN', createdBy: changedBy });
       const balance = await getEmployeeBalance(db, newEmployeeId);
-      const empNew = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(newEmployeeId).first();
-      if (empNew?.user_id) {
-        await createNotification(db, {
-          userId: empNew.user_id,
-          type: 'REWARD_EARNED',
-          title: '🎉 مكافأة صفقة منسوبة إليك',
-          message: `تم نسب صفقة إليك — حصلت على مكافأة ${amount} ج.م. رصيدك الآن ${balance} ج.م.`,
-          entityType: 'customer',
-          entityId: customerId || null,
-        });
-        await broadcast(env, 'REWARD_EARNED', { amount, balance, purchaseId, customerId }, { scope: 'employee', employeeId: newEmployeeId });
-      }
+      await broadcast(env, 'REWARD_EARNED', { amount, balance, purchaseId, customerId }, { scope: 'employee', employeeId: newEmployeeId });
     }
   }
   await logActivity(db, { actor: { id: changedBy }, action: 'REWARD_MOVED', entityType: 'purchase', entityId: String(purchaseId), metadata: { previousEmployeeId, newEmployeeId } });
@@ -175,19 +153,8 @@ export async function applyManualAdjustment(db, env, { employeeId, amount, notes
   if (!employeeId || !amount) return null;
   await insertTransaction(db, { employeeId, purchaseId, customerId, amount, reason: 'MANUAL_ADJUSTMENT', notes, createdBy });
   const balance = await getEmployeeBalance(db, employeeId);
-  const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(employeeId).first();
-  if (emp?.user_id) {
-    const positive = amount >= 0;
-    await createNotification(db, {
-      userId: emp.user_id,
-      type: positive ? 'REWARD_EARNED' : 'REWARD_REVERSED',
-      title: title || (positive ? '🎉 مكافأة جديدة' : '⚠️ خصم من رصيد المكافآت'),
-      message: `${notes || ''} — ${positive ? 'أُضيف' : 'خُصم'} ${Math.abs(amount)} ج.م. رصيدك الآن ${balance} ج.م.`,
-      entityType: customerId ? 'customer' : 'employee',
-      entityId: customerId || String(employeeId),
-    });
-    await broadcast(env, positive ? 'REWARD_EARNED' : 'REWARD_REVERSED', { amount, balance, notes }, { scope: 'employee', employeeId });
-  }
+  const positive = amount >= 0;
+  await broadcast(env, positive ? 'REWARD_EARNED' : 'REWARD_REVERSED', { amount, balance, notes }, { scope: 'employee', employeeId });
   await logActivity(db, { actor: { id: createdBy }, action: amount >= 0 ? 'REWARD_EARNED' : 'REWARD_REVERSED', entityType: 'employee', entityId: String(employeeId), metadata: { amount, notes } });
   await broadcast(env, 'REWARDS_UPDATED', { employeeId }, { scope: 'role', role: 'team_leader' });
   return { amount, balance };
