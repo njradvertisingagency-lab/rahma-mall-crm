@@ -9,7 +9,6 @@ import { notificationRoutes } from './routes/notifications.js';
 import { activityRoutes } from './routes/activity.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { reportRoutes } from './routes/reports.js';
-import { aiRoutes } from './routes/ai.js';
 import { employeeRoutes } from './routes/employees.js';
 import { settingsRoutes } from './routes/settings.js';
 import { whatsappRoutes } from './routes/whatsapp.js';
@@ -17,8 +16,6 @@ import { presenceRoutes } from './routes/presence.js';
 import { salesRoutes } from './routes/sales.js';
 import { commandCenterRoutes } from './routes/command-center.js';
 import { savedFilterRoutes } from './routes/saved-filters.js';
-import { complaintRoutes } from './routes/complaints.js';
-import { favoriteRoutes } from './routes/favorites.js';
 import { opsReportRoutes } from './routes/opsreports.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { rewardsRoutes } from './routes/rewards.js';
@@ -86,7 +83,6 @@ api.route('/notifications', notificationRoutes);
 api.route('/activity', activityRoutes);
 api.route('/analytics', analyticsRoutes);
 api.route('/reports', reportRoutes);
-api.route('/ai', aiRoutes);
 api.route('/employees', employeeRoutes);
 api.route('/settings', settingsRoutes);
 api.route('/whatsapp', whatsappRoutes);
@@ -94,9 +90,7 @@ api.route('/presence', presenceRoutes);
 api.route('/sales', salesRoutes);
 api.route('/command-center', commandCenterRoutes);
 api.route('/saved-filters', savedFilterRoutes);
-api.route('/complaints', complaintRoutes);
 api.route('/rewards', rewardsRoutes);
-api.route('/favorites', favoriteRoutes);
 api.route('/ops-reports', opsReportRoutes);
 api.route('/attendance', attendanceRoutes);
 api.route('/accounting', accountingRoutes);
@@ -255,11 +249,13 @@ export default {
     // أكبر مستهلك لحصة القراءة اليومية بالكامل. البيانات دي لرسم بياني
     // تاريخي (trend chart) مش شاشة لايف، فمرة كل ساعة كافية تمامًا وبتوفر
     // ٩٢٪ من قراءات هذا الجزء تحديدًا.
-    if (isDueEvery(60, 5)) {
+    if (isDueEvery(180, 5)) {
       ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
     }
     ctx.waitUntil(sweepDnd(env.DB, env).catch((e) => console.error('sweepDnd failed', e)));
-    ctx.waitUntil(sweepLateAttendance(env.DB, env).catch((e) => console.error('sweepLateAttendance failed', e)));
+    if (isDueEvery(15, 5)) {
+      ctx.waitUntil(sweepLateAttendance(env.DB, env).catch((e) => console.error('sweepLateAttendance failed', e)));
+    }
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
@@ -269,6 +265,8 @@ export default {
     if (isDueEvery(15, 5)) {
       ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
     }
-    ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
+    if (isDueEvery(60, 5)) {
+      ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
+    }
   },
 };

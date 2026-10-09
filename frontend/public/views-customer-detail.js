@@ -51,7 +51,6 @@
     let isFavorite = false;
     async function load() {
       data = await api('/customers/' + id);
-      try { isFavorite = (await api('/favorites/' + id + '/check')).isFavorite; } catch {}
     }
     await load();
 
@@ -96,7 +95,6 @@
           el('div', { class: 'muted mono' }, [c.phone]),
         ]),
         el('div', { class: 'page-actions' }, [
-          el('button', { class: 'btn btn-outline', title: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة', onclick: toggleFavorite }, [isFavorite ? '⭐ في المفضلة' : '☆ إضافة للمفضلة']),
           user.role === 'team_leader' ? el('button', { class: 'btn btn-outline', onclick: toggleVip }, [c.isVip ? '👑 إلغاء VIP' : '👑 تمييز VIP']) : null,
           el('button', { class: 'btn btn-outline', onclick: () => App.navigate('#/customers') }, ['← رجوع']),
         ]),

@@ -31,6 +31,8 @@ import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhou
 import { getEmployeePresenceMap } from './presence.js';
 
 export async function sweepAutoReclaim(db, env) {
+  // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
+  if (getCairoNow().minutesSinceMidnight < 14 * 60) return { reclaimed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { reclaimed: 0 };
   if (status.minutesSinceMidnight < status.endMin) return { reclaimed: 0 };
@@ -152,6 +154,8 @@ export async function sweepAutoReclaim(db, env) {
 const REDISTRIBUTE_HOUR = 15; // 3 PM Cairo
 
 export async function sweepRedistribute3pm(db, env) {
+  // نفس الفكرة: قبل ٣ العصر مفيش أي قراءة من القاعدة.
+  if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_HOUR * 60) return { redistributed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { redistributed: 0 };
 

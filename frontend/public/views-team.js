@@ -337,8 +337,6 @@
       });
     }
     await load();
-    const off = App.on('rt:EMPLOYEE_AVAILABILITY_CHANGED', load);
-    container.cleanup = () => off();
     return container;
   }, { roles: ['team_leader'] });
 

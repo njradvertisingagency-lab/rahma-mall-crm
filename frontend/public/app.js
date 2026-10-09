@@ -48,27 +48,10 @@ App.emit = (evt, payload) => {
 // واحدة كل minIntervalMs (مع تحديث أخير مضمون بعد آخر حدث، فالشاشة
 // متفضلش قديمة لفترة طويلة) — التحديث نفسه لسه لحظي كفاية للعمل اليومي،
 // بس بسقف معقول بدل ما يتكرر مع كل حدث فردي.
-App.onRealtime = (handler, minIntervalMs = 5000) => {
-  let lastRun = 0;
-  let timer = null;
-  function run() {
-    lastRun = Date.now();
-    timer = null;
-    try {
-      handler();
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  return App.on('rt:*', () => {
-    const elapsed = Date.now() - lastRun;
-    if (elapsed >= minIntervalMs) {
-      run();
-    } else if (!timer) {
-      timer = setTimeout(run, minIntervalMs - elapsed);
-    }
-  });
-};
+// التحديث التلقائي اتلغى بالكامل لتوفير قراءات قاعدة البيانات — التحديث بقى يدوي
+// بزرار 🔄 في الشريط العلوي. الدالة فاضلة كـ no-op عشان كل الصفحات اللي بتناديها
+// ما تتكسرش (بترجع دالة إلغاء فاضية).
+App.onRealtime = () => () => {};
 
 // ---------------------------------------------------------------------------
 // أدوات مساعدة لبناء عناصر الصفحة
@@ -726,15 +709,11 @@ const NAV_TL = [
   ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
-  ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['complaints', '🚩', 'الشكاوى'],
-  ['analytics', '📈', 'التحليلات'],
-  ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['file-movements', '📂', 'حركة الملفات'],
 ];
 
@@ -759,20 +738,14 @@ const NAV_ADMIN = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
-  ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['followups', '⏰', 'المتابعات'],
-  ['calendar', '🗓️', 'تقويم المتابعات'],
-  ['complaints', '🚩', 'الشكاوى'],
-  ['analytics', '📈', 'التحليلات'],
-  ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['reports', '🧾', 'التقارير'],
   ['activity', '🕒', 'سجل الأنشطة'],
-  ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
 // موظفو الحسابات (department='accounting') — قائمة خاصة بقسم الحسابات فقط:
@@ -805,9 +778,7 @@ const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['my-files', '🗃️', 'ملفاتي'],
   ['my-customers', '👥', 'عملائي'],
-  ['favorites', '⭐', 'المفضلة'],
   ['followups', '⏰', 'المتابعات'],
-  ['calendar', '🗓️', 'تقويم المتابعات'],
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
@@ -836,6 +807,7 @@ function renderOwnerShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
+      renderRefreshBtn(),
       soundToggle,
       adminReportsBtn,
       el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
@@ -910,6 +882,7 @@ function renderShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
+      renderRefreshBtn(),
       soundToggle,
       attendanceBtn,
       adminReportsBtn,
@@ -956,6 +929,12 @@ function renderSoundToggle() {
   return btn;
 }
 
+// زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
+// freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
+function renderRefreshBtn() {
+  return el('button', { class: 'btn btn-icon', title: 'تحديث الصفحة', onclick: () => { App.freshNext = true; renderRoute(); } }, ['🔄']);
+}
+
 async function doLogout() {
   try { await api('/auth/logout', { method: 'POST' }); } catch {}
   App.state.user = null;
@@ -989,7 +968,7 @@ App.startPresenceHeartbeat = function () {
   presenceHeartbeatStarted = true;
   lastUserActivityAt = Date.now(); // أول نبضة فورية عند تسجيل الدخول/فتح الصفحة، دون انتظار دقيقة كاملة
   sendPresenceHeartbeatIfActive();
-  setInterval(sendPresenceHeartbeatIfActive, 60 * 1000);
+  setInterval(sendPresenceHeartbeatIfActive, 180 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sendPresenceHeartbeatIfActive(); });
 };
 
