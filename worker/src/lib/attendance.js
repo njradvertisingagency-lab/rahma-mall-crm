@@ -392,6 +392,9 @@ export async function getAttendanceDashboard(env, { date } = {}) {
       isOwner: !!p.is_owner,
       checkInAt: record?.checkInAt || null,
       checkOutAt: record?.checkOutAt || null,
+      // سبب الانصراف المبكر — كان بيوصل بإشعار للمالك/HR/قائد الفريق، والإشعارات اتلغت،
+      // فبقى بيظهر هنا في جدول الحضور بدلها.
+      earlyCheckoutReason: record?.earlyCheckoutReason || null,
       isLate: !!record?.isLate,
       lateMinutes: record?.lateMinutes ?? null,
       hoursWorkedSeconds: hoursSeconds,

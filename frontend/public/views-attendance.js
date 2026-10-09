@@ -157,7 +157,10 @@
                 : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد']),
             ]),
             el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
-            el('td', {}, [p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—')]),
+            el('td', {}, [
+              p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—'),
+              p.earlyCheckoutReason ? el('div', { style: 'font-size:11.5px;color:var(--danger);margin-top:2px' }, ['🚪 انصراف مبكر — ' + p.earlyCheckoutReason]) : null,
+            ]),
             hoursTd,
             el('td', {}, [cell(p.seenToday)]),
             el('td', {}, [cell(p.callsToday)]),
