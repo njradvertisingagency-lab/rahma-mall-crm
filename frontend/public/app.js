@@ -725,6 +725,7 @@ function renderOwnerShell() {
   // in the old sidebar's topbar. renderAdminReportsButton() already checks
   // isOwner internally and returns the button for this account.
   const adminReportsBtn = renderAdminReportsButton();
+  const refreshBtn = renderRefreshBtn();
   // مظهر مميز لحساب المالك — شريط علوي بتدرّج ذهبي وشارة "المالك"، حتى
   // يكون واضحًا من أول لحظة إن هذا الحساب مختلف عن أي حساب موظف أو حتى
   // قائد الفريق العادي (بناءً على طلبه صراحةً).
@@ -736,7 +737,7 @@ function renderOwnerShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
-      renderRefreshBtn(),
+      refreshBtn,
       adminReportsBtn,
       el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -749,7 +750,7 @@ function renderOwnerShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
   const root = el('div', { class: 'shell owner-shell' }, [main]);
-  const cleanups = [connBadge.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, refreshBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -796,6 +797,7 @@ function renderShell() {
 
   const connBadge = renderConnBadge();
   const adminReportsBtn = renderAdminReportsButton();
+  const refreshBtn = renderRefreshBtn();
   const attendanceBtn = renderAttendanceButton();
   const topbar = el('div', { class: 'topbar', style: isAdmin ? 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' : '' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
@@ -809,7 +811,7 @@ function renderShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
-      renderRefreshBtn(),
+      refreshBtn,
       attendanceBtn,
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -823,7 +825,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, refreshBtn.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -846,8 +848,29 @@ function renderConnBadge() {
 // زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
 // freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
 function renderRefreshBtn() {
-  return el('button', { class: 'btn btn-icon', title: 'تحديث الصفحة', onclick: () => { App.freshNext = true; renderRoute(); } }, ['🔄']);
+  const dot = el('span', { style: 'position:absolute;top:2px;inset-inline-end:2px;width:9px;height:9px;border-radius:50%;background:var(--danger,#e53935);display:' + (App.state.pendingAssign ? 'block' : 'none') });
+  const btn = el('button', {
+    class: 'btn btn-icon',
+    style: 'position:relative',
+    title: 'تحديث الصفحة',
+    onclick: () => { App.state.pendingAssign = false; dot.style.display = 'none'; App.freshNext = true; renderRoute(); },
+  }, ['🔄', dot]);
+  btn.offEvt = App.on('assign-pending', () => { dot.style.display = App.state.pendingAssign ? 'block' : 'none'; });
+  return btn;
 }
+
+// تنبيه خفيف بدون أي قراءة من القاعدة: السيرفر بيبعت حدث لحظي (WebSocket)
+// للموظف لما يتوزع عليه أرقام، فبنظهر نقطة حمراء على 🔄 ورسالة مرة واحدة.
+// مفيش تحميل للقائمة إلا لما الموظف نفسه يضغط 🔄.
+function onAssignmentEvent() {
+  if (App.state.user?.role !== 'employee') return;
+  const first = !App.state.pendingAssign;
+  App.state.pendingAssign = true;
+  App.emit('assign-pending');
+  if (first) toast('📥 اتوزع عليك أرقام جديدة — اضغط 🔄 لتحديث القائمة', 'success');
+}
+App.on('rt:CUSTOMER_ASSIGNED', onAssignmentEvent);
+App.on('rt:CUSTOMER_REASSIGNED', onAssignmentEvent);
 
 async function doLogout() {
   try { await api('/auth/logout', { method: 'POST' }); } catch {}

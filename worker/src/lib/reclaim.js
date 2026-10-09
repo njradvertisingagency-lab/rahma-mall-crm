@@ -26,7 +26,7 @@
 // Runs once per Cairo calendar day, at/after end-of-shift (work_hours.end),
 // never on a holiday — same dedup pattern as the two ops reports
 // (lib/opsreports.js) via a key in the shared `settings` table.
-import { nowIso, logActivity } from './db.js';
+import { nowIso, logActivity, broadcast } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
 
@@ -90,6 +90,8 @@ export async function sweepAutoReclaim(db, env) {
         reclaimed++;
       }
 
+      // تنبيه لحظي بدون قراءة من القاعدة (WebSocket) — الموظف يشوف نقطة على 🔄
+      await broadcast(env, 'CUSTOMER_REASSIGNED', { count: custs.length }, { scope: 'employee', employeeId }).catch(() => {});
       await logActivity(db, {
         actor: null,
         action: 'AUTO_RECLAIM',
@@ -217,6 +219,15 @@ export async function sweepRedistribute3pm(db, env) {
         redistributed++;
       }
 
+      const targetCounts = {};
+      for (let i = 0; i < custs.length; i++) {
+        const tid = targets[i % targets.length];
+        targetCounts[tid] = (targetCounts[tid] || 0) + 1;
+      }
+      await broadcast(env, 'CUSTOMER_REASSIGNED', { count: custs.length }, { scope: 'employee', employeeId: fromEmployeeId }).catch(() => {});
+      for (const [tid, count] of Object.entries(targetCounts)) {
+        await broadcast(env, 'CUSTOMER_ASSIGNED', { count }, { scope: 'employee', employeeId: Number(tid) }).catch(() => {});
+      }
       await logActivity(db, {
         actor: null,
         action: 'AUTO_REDISTRIBUTE_3PM',
