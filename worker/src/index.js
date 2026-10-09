@@ -264,7 +264,6 @@ export default {
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
     ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
-    ctx.waitUntil(sweepAutoDistribute(env.DB, env).catch((e) => console.error('sweepAutoDistribute failed', e)));
     // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
     // كل ١٥ دقيقة بدل ٥ يقلل ثلثي مرات فحص العملاء المتأخرين.
     if (isDueEvery(15, 5)) {

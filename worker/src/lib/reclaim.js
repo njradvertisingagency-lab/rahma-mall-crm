@@ -253,11 +253,11 @@ export async function sweepRedistribute3pm(db, env) {
 // ---------------------------------------------------------------------------
 // MORNING AUTO-DISTRIBUTE — كل يوم ١١:٣٠ الصبح، أي رقم في قائمة "غير موزع"
 // (باقي من اليوم اللي فات أو اتسحب آخر اليوم) يتوزّع تلقائيًا بالتساوي على
-// الموظفين الأونلاين وقتها. مرة واحدة في اليوم (dedup عبر settings)، وبيحاول
-// تاني كل ٥ دقايق لحد ١٣:٠٠ لو ماكانش في أي موظف أونلاين.
+// الموظفين الأونلاين وقتها. مرة واحدة بس في اليوم (dedup عبر settings) من غير
+// أي إعادة محاولة — ١١:٣٠ وقت الشغل والموظفين المفروض أونلاين.
 // ---------------------------------------------------------------------------
 const AUTO_DIST_MIN = 11 * 60 + 30;
-const AUTO_DIST_LAST_RETRY_MIN = 13 * 60;
+const AUTO_DIST_LAST_RETRY_MIN = 11 * 60 + 32; // احتياط لو الـ cron اتأخر دقيقتين بس
 
 export async function sweepAutoDistribute(db, env) {
   const nowMin = getCairoNow().minutesSinceMidnight;
@@ -287,7 +287,10 @@ export async function sweepAutoDistribute(db, env) {
   const onlineIds = Object.entries(presenceMap)
     .filter(([, p]) => p.online)
     .map(([id]) => Number(id));
-  if (onlineIds.length === 0) return { distributed: 0 }; // نحاول تاني في الدورة الجاية
+  if (onlineIds.length === 0) {
+    await markDone({ distributed: 0, reason: 'no_online_employees' });
+    return { distributed: 0 };
+  }
 
   const pool = await db
     .prepare(`SELECT id FROM customers WHERE assigned_employee_id IS NULL AND archived = 0 ORDER BY created_at ASC`)
