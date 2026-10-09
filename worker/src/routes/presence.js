@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../lib/auth.js';
 import { recordHeartbeat, getEmployeePresence, getEmployeeOnlineTimeSummary } from '../lib/presence.js';
-import { jsonError } from '../lib/db.js';
 
 export const presenceRoutes = new Hono();
 presenceRoutes.use('*', requireAuth);

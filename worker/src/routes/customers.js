@@ -263,6 +263,8 @@ customerRoutes.get('/export-today', async (c) => {
     return jsonError(c, 403, 'تنزيل أرقام اليوم متاح للموظف لأرقامه فقط', 'FORBIDDEN');
   }
   const { dateStr } = getCairoNow();
+  // أرقام اليوم فقط (اللي اتوزعت على الموظف النهارده بتوقيت القاهرة) — بدون
+  // الأرقام القديمة اللي لسه محتاجة متابعة (دي بتظهر في القائمة بس).
   const { dayStartIso, dayEndIso } = getCairoDayBoundsUtc(dateStr);
   const rows = await c.env.DB
     .prepare(

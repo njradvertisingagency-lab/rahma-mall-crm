@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { jsonError } from '../lib/db.js';
 import { computeAllEmployeeStats } from '../lib/performance.js';
 import { getSeenSummaryByEmployee } from '../lib/seen.js';
 import { getSlaRules, findSeenSlaCandidates, findContactSlaCandidates, findInterestedFollowupSlaCandidates } from '../lib/sla.js';
 import { computeLeadScore, getLeadScoreWeights } from '../lib/leadscore.js';
-import { getCustomerLifetimeValue } from '../lib/sales.js';
 
 export const reportRoutes = new Hono();
 reportRoutes.use('*', requireAuth, requireSalesLead);

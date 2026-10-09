@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireHR, requireSalesLead } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
-import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore, getPerformanceHistory, computeBadges } from '../lib/performance.js';
+import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceHistory, computeBadges } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
 import { hashPassword, randomSaltHex } from '../lib/passwords.js';
@@ -232,17 +232,12 @@ employeeRoutes.get('/team-leader-performance', async (c) => {
 
   const rows = [];
   for (const tl of leaders.results) {
-    const [customersCreated, customersImported, distributions, deals, employeesManaged, complaintsLogged, chatMessages, lastLogin, loginCount] = await Promise.all([
+    const [customersCreated, customersImported, distributions, deals, employeesManaged, lastLogin, loginCount] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'CUSTOMER_CREATED'`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'CUSTOMERS_IMPORTED'`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'DISTRIBUTION_CREATED'`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'DEAL_DONE_CREATED'`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action IN ('EMPLOYEE_CREATED','EMPLOYEE_USERNAME_CHANGED','EMPLOYEE_PASSWORD_RESET')`).bind(tl.id).first(),
-      db.prepare(`SELECT COUNT(*) AS n FROM complaints WHERE created_by = ?`).bind(tl.id).first(),
-      // مجموع النظام القديم (موظف <-> قائد الفريق) + النظام الجديد (دردشة شخص
-      // لشخص، dm_messages) — عشان الرقم يفضل مستمر تاريخيًا بدل ما يترجع للصفر
-      // فجأة لأي قائد فريق كان نشط قبل التحويل.
-      db.prepare(`SELECT (SELECT COUNT(*) FROM chat_messages WHERE sender_user_id = ?1) + (SELECT COUNT(*) FROM dm_messages WHERE sender_id = ?1) AS n`).bind(tl.id).first(),
       db.prepare(`SELECT created_at FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN' ORDER BY created_at DESC LIMIT 1`).bind(tl.id).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE actor_id = ? AND action = 'LOGIN'`).bind(tl.id).first(),
     ]);
@@ -256,8 +251,6 @@ employeeRoutes.get('/team-leader-performance', async (c) => {
       distributionsCreated: distributions.n,
       dealsRecorded: deals.n,
       employeesManaged: employeesManaged.n,
-      complaintsLogged: complaintsLogged.n,
-      chatMessagesSent: chatMessages.n,
       loginCount: loginCount.n,
       lastLoginAt: lastLogin?.created_at ?? null,
     });

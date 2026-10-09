@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { jsonError, nowIso, logActivity, broadcast } from '../lib/db.js';
+import { jsonError, nowIso, logActivity } from '../lib/db.js';
 import {
   createBranchVisit,
   createManualPurchase,
