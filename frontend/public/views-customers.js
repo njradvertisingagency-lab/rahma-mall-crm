@@ -78,16 +78,6 @@
     if (user.role === 'team_leader') {
       try { employees = (await api('/employees')).employees; } catch {}
     }
-    let favoriteIds = new Set();
-    async function loadFavorites() {
-    }
-    async function toggleFavorite(c) {
-      try {
-        if (favoriteIds.has(c.id)) { await api('/favorites/' + c.id, { method: 'DELETE' }); favoriteIds.delete(c.id); }
-        else { await api('/favorites/' + c.id, { method: 'POST' }); favoriteIds.add(c.id); }
-        load();
-      } catch (e) { toast(e.message, 'error'); }
-    }
     async function toggleVip(c) {
       try {
         await api('/customers/' + c.id + '/vip', { method: 'POST', body: { isVip: !c.isVip } });
