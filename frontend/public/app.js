@@ -498,13 +498,6 @@ const RT = {
 };
 App.rt = RT;
 
-// الدردشة الداخلية — رسالة جديدة تُحدّث شارة العداد فورًا وتُظهر تنبيهًا صوتيًا.
-App.on('rt:CHAT_MESSAGE', (p) => {
-  refreshChatUnread();
-  const onChatPage = (location.hash || '').startsWith('#/chat');
-  if (!onChatPage) pushAlert(`💬 رسالة جديدة من ${p?.senderName || ''}`, 'info');
-});
-
 // إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
 App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
 App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
@@ -528,16 +521,6 @@ App.on('rt:MOTIVATION_MILESTONE', (p) => {
 // الدالة فاضلة كـ no-op عشان أي استدعاء قديم ما يكسرش.
 async function refreshNotifications() {}
 App.refreshNotifications = refreshNotifications;
-
-async function refreshChatUnread() {
-  if (!App.state.user) return;
-  try {
-    const data = await api('/chat/unread-count', { background: true });
-    App.state.chatUnread = data.unread;
-    App.emit('chat-unread-updated');
-  } catch {}
-}
-App.refreshChatUnread = refreshChatUnread;
 
 // ---------------------------------------------------------------------------
 // الموجّه (Router)
@@ -751,7 +734,6 @@ const NAV_TL = [
   ['leaves', '🗓️', 'الإجازات والغياب'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
   ['complaints', '🚩', 'الشكاوى'],
-  ['chat', '💬', 'الدردشة'],
   ['analytics', '📈', 'التحليلات'],
   ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['file-movements', '📂', 'حركة الملفات'],
@@ -772,7 +754,6 @@ const NAV_HR = [
   ['documents', '📁', 'المستندات والعقود'],
   ['benefits', '💰', 'المزايا والمكافآت'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
   ['file-movements', '📂', 'حركة الملفات'],
 ];
 
@@ -802,7 +783,6 @@ const NAV_ADMIN = [
   ['followups', '⏰', 'المتابعات'],
   ['calendar', '🗓️', 'تقويم المتابعات'],
   ['complaints', '🚩', 'الشكاوى'],
-  ['chat', '💬', 'الدردشة'],
   ['analytics', '📈', 'التحليلات'],
   ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['reports', '🧾', 'التقارير'],
@@ -826,7 +806,6 @@ const NAV_ACCOUNTING = [
   ['payroll-runs', '📋', 'دورات المرتبات'],
   ['leaves', '🗓️', 'إجازاتي'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 
@@ -838,26 +817,16 @@ const NAV_LEGAL = [
   ['file-movements', '📂', 'حركة الملفات'],
   ['leaves', '🗓️', 'إجازاتي'],
   ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['my-files', '🗃️', 'ملفاتي'],
-  ['work-queue', '🎯', 'قائمة مهامي'],
   ['my-customers', '👥', 'عملائي'],
   ['favorites', '⭐', 'المفضلة'],
   ['followups', '⏰', 'المتابعات'],
   ['calendar', '🗓️', 'تقويم المتابعات'],
-  ['leaves', '🗓️', 'إجازاتي'],
-  ['evaluations', '📝', 'تقييماتي'],
-  ['violations', '⚠️', 'مخالفاتي'],
-  ['trainings', '🎓', 'تدريباتي'],
-  ['documents', '📁', 'مستنداتي'],
-  ['benefits', '💰', 'مزاياي ومكافآتي'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
@@ -915,7 +884,6 @@ function renderShell() {
        : user.department === 'legal' ? NAV_LEGAL
        : NAV_EMPLOYEE);
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
-  const chatNavBadge = renderChatNavBadge();
 
   // مظهر مميز (ذهبي) لحساب الأدمن فقط — عشان يبان من أول لحظة إنه حساب
   // مختلف تمامًا عن أي حساب تاني، مش بس شارة زي القديم، لكن الشريط الجانبي
@@ -935,7 +903,7 @@ function renderShell() {
         class: 'nav-item' + (currentPath === path ? ' active' : ''),
         onclick: () => { App.navigate('#/' + path); document.getElementById('sidebar').classList.remove('open'); },
       }, [
-        el('span', { class: 'nav-icon', style: 'position:relative' }, [icon, path === 'chat' ? chatNavBadge : null]),
+        el('span', { class: 'nav-icon', style: 'position:relative' }, [icon]),
         label,
       ])
     )),
@@ -975,7 +943,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, chatNavBadge.offEvt, soundToggle.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, soundToggle.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -1005,21 +973,6 @@ function renderSoundToggle() {
     btn.title = App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات';
   });
   return btn;
-}
-
-function renderChatNavBadge() {
-  const badge = el('span', {
-    style: 'position:absolute;top:-4px;inset-inline-end:-8px;background:var(--danger);color:#fff;border-radius:10px;font-size:9px;padding:1px 4px;display:none;line-height:1.4',
-  });
-  function update() {
-    if (App.state.chatUnread > 0) {
-      badge.style.display = 'inline';
-      badge.textContent = App.state.chatUnread > 9 ? '9+' : App.state.chatUnread;
-    } else badge.style.display = 'none';
-  }
-  badge.offEvt = App.on('chat-unread-updated', update);
-  update();
-  return badge;
 }
 
 async function doLogout() {
@@ -1429,7 +1382,6 @@ async function boot() {
     RT.connect();
     App.startPresenceHeartbeat();
     refreshNotifications();
-    refreshChatUnread();
     refreshAttendanceStatus();
   }
   renderRoute();
