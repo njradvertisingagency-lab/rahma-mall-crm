@@ -75,8 +75,12 @@ function customerRowToJson(row) {
 /** Applies server-authoritative scoping: an employee ALWAYS sees only their own customers. */
 function scopeToUser(user, sql, binds, conds) {
   if (user.role === 'employee') {
-    conds.push('c.assigned_employee_id = ?');
-    binds.push(user.employeeId);
+    // الموظف يفتح يلاقي أرقام النهارده بس (بتوقيت القاهرة) — أي رقم اتوزع
+    // قبل كده يختفي من قائمته، إلا العميل المهتم / اللي عليه متابعة عشان
+    // ما يضيعش عميل جاد. الأرقام القديمة فاضلة في القاعدة ويشوفها المدير.
+    const { dayStartIso } = getCairoDayBoundsUtc(getCairoNow().dateStr);
+    conds.push(`c.assigned_employee_id = ? AND (c.assigned_at >= ? OR c.status IN ('INTERESTED','FOLLOW_UP'))`);
+    binds.push(user.employeeId, dayStartIso);
   }
 }
 
