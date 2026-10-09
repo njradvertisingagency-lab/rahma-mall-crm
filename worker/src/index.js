@@ -5,11 +5,9 @@ import { authRoutes } from './routes/auth.js';
 import { customerRoutes } from './routes/customers.js';
 import { distributionRoutes, reassignmentRoutes } from './routes/distributions.js';
 import { followupRoutes, sweepOverdueFollowups } from './routes/followups.js';
-import { notificationRoutes } from './routes/notifications.js';
 import { activityRoutes } from './routes/activity.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { reportRoutes } from './routes/reports.js';
-import { aiRoutes } from './routes/ai.js';
 import { employeeRoutes } from './routes/employees.js';
 import { settingsRoutes } from './routes/settings.js';
 import { whatsappRoutes } from './routes/whatsapp.js';
@@ -17,27 +15,15 @@ import { presenceRoutes } from './routes/presence.js';
 import { salesRoutes } from './routes/sales.js';
 import { commandCenterRoutes } from './routes/command-center.js';
 import { savedFilterRoutes } from './routes/saved-filters.js';
-import { complaintRoutes } from './routes/complaints.js';
-import { favoriteRoutes } from './routes/favorites.js';
-import { chatRoutes } from './routes/chat.js';
 import { opsReportRoutes } from './routes/opsreports.js';
 import { attendanceRoutes } from './routes/attendance.js';
-import { leaveRoutes } from './routes/leaves.js';
-import { evaluationRoutes } from './routes/evaluations.js';
-import { violationRoutes } from './routes/violations.js';
-import { trainingRoutes } from './routes/trainings.js';
-import { documentRoutes } from './routes/documents.js';
-import { benefitRoutes } from './routes/benefits.js';
-import { announcementRoutes } from './routes/announcements.js';
 import { rewardsRoutes } from './routes/rewards.js';
 import { accountingRoutes } from './routes/accounting.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
-import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
-import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
-import { sweepOpsReports } from './lib/opsreports.js';
+import { sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
 import { sweepAutoReclaim, sweepRedistribute3pm } from './lib/reclaim.js';
 import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
 
@@ -91,11 +77,9 @@ api.route('/customers', customerRoutes);
 api.route('/distributions', distributionRoutes);
 api.route('/reassignments', reassignmentRoutes);
 api.route('/followups', followupRoutes);
-api.route('/notifications', notificationRoutes);
 api.route('/activity', activityRoutes);
 api.route('/analytics', analyticsRoutes);
 api.route('/reports', reportRoutes);
-api.route('/ai', aiRoutes);
 api.route('/employees', employeeRoutes);
 api.route('/settings', settingsRoutes);
 api.route('/whatsapp', whatsappRoutes);
@@ -103,19 +87,9 @@ api.route('/presence', presenceRoutes);
 api.route('/sales', salesRoutes);
 api.route('/command-center', commandCenterRoutes);
 api.route('/saved-filters', savedFilterRoutes);
-api.route('/complaints', complaintRoutes);
 api.route('/rewards', rewardsRoutes);
-api.route('/favorites', favoriteRoutes);
-api.route('/chat', chatRoutes);
 api.route('/ops-reports', opsReportRoutes);
 api.route('/attendance', attendanceRoutes);
-api.route('/leaves', leaveRoutes);
-api.route('/evaluations', evaluationRoutes);
-api.route('/violations', violationRoutes);
-api.route('/trainings', trainingRoutes);
-api.route('/documents', documentRoutes);
-api.route('/benefits', benefitRoutes);
-api.route('/announcements', announcementRoutes);
 api.route('/accounting', accountingRoutes);
 app.route('/api', api);
 
@@ -262,24 +236,28 @@ export default {
       if (isDueEvery(3, 1)) {
         ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
       }
+      // إعادة التوزيع الساعة ٣ بالظبط: التشغيل الأول في أول دقيقة من الساعة ٣
+      // (والدقيقتين اللي بعدها كاحتياط لو تأخر الـ cron). بعد أول نجاح
+      // الـ dedup بيمنع التكرار، والـ */5 فاضل كشبكة أمان لو فات الموعد.
+      const nowMin = getCairoNow().minutesSinceMidnight;
+      if (nowMin >= 15 * 60 && nowMin <= 15 * 60 + 2) {
+        ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
+      }
       return;
     }
     // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
     // future trigger never silently runs nothing).
+    // sweeps الـ SLA والـ CUSTOMER_WAITING اتشالت — كانت موجودة للإشعارات بس (الحالة الحية بتتحسب من الطوابع الزمنية مباشرة).
     ctx.waitUntil(sweepOverdueFollowups(env).catch((e) => console.error('sweepOverdueFollowups failed', e)));
-    ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
-    ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
     // كانت بتشتغل كل ٥ دقايق وبتعمل ٤ استعلامات لكل موظف نشط في كل تشغيلة —
     // أكبر مستهلك لحصة القراءة اليومية بالكامل. البيانات دي لرسم بياني
     // تاريخي (trend chart) مش شاشة لايف، فمرة كل ساعة كافية تمامًا وبتوفر
     // ٩٢٪ من قراءات هذا الجزء تحديدًا.
-    if (isDueEvery(60, 5)) {
+    if (isDueEvery(180, 5)) {
       ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
     }
     ctx.waitUntil(sweepDnd(env.DB, env).catch((e) => console.error('sweepDnd failed', e)));
-    ctx.waitUntil(sweepLateAttendance(env.DB, env).catch((e) => console.error('sweepLateAttendance failed', e)));
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
-    ctx.waitUntil(sweepOpsReports(env.DB, env).catch((e) => console.error('sweepOpsReports failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
     ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
     // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
@@ -287,6 +265,8 @@ export default {
     if (isDueEvery(15, 5)) {
       ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
     }
-    ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
+    if (isDueEvery(60, 5)) {
+      ctx.waitUntil(sweepMonthlyTopSales(env.DB, env).catch((e) => console.error('sweepMonthlyTopSales failed', e)));
+    }
   },
 };
