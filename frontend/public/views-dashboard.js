@@ -108,7 +108,6 @@
         ['موزّعين', kpis.assigned, 'info', '#/customers'],
         ['جديد', kpis.new, 'info', '#/customers?status=NEW'],
         ['لم يُفتح بعد', kpis.unopened || 0, 'danger', '#/customers?seen=not_seen'],
-        ['جارِ الاتصال', kpis.calling, 'brand', '#/customers?status=CALLING'],
         ['لا يوجد رد', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
         ['متابعة', kpis.followUp, 'warning', '#/customers?status=FOLLOW_UP'],
         ['مهتم', kpis.interested, 'success', '#/customers?status=INTERESTED'],
