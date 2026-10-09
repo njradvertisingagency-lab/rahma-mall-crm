@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { getCommandCenterSnapshot, getNeedsAttentionQueue } from '../lib/commandcenter.js';
+import { getCommandCenterSnapshot } from '../lib/commandcenter.js';
 import { getEmployeePresenceMap } from '../lib/presence.js';
 import { computeAllEmployeeStats } from '../lib/performance.js';
-import { getSeenSummaryByEmployee, getNotSeenCustomers } from '../lib/seen.js';
+import { getSeenSummaryByEmployee } from '../lib/seen.js';
 import { getReassignmentSuggestions } from '../lib/workqueue.js';
 
 export const commandCenterRoutes = new Hono();
@@ -37,16 +37,6 @@ commandCenterRoutes.get('/', async (c) => {
   }));
 
   return c.json({ ...snapshot, liveEmployeeTable, seenSummary });
-});
-
-commandCenterRoutes.get('/needs-attention', async (c) => {
-  const items = await getNeedsAttentionQueue(c.env.DB);
-  return c.json({ items });
-});
-
-commandCenterRoutes.get('/not-seen/:employeeId', async (c) => {
-  const customers = await getNotSeenCustomers(c.env.DB, Number(c.req.param('employeeId')));
-  return c.json({ customers });
 });
 
 // Suggest-only reassignment candidates (offline/on-break/repeated-SLA-breach

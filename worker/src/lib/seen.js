@@ -25,16 +25,6 @@ export async function getCustomerSeenHistory(db, customerId) {
   return rows.results;
 }
 
-/** Whether the CURRENTLY assigned employee has seen this customer since the current assignment began. */
-export async function isSeenByCurrentAssignee(db, customerId, assignedEmployeeId, assignedAt) {
-  if (!assignedEmployeeId || !assignedAt) return null;
-  const row = await db
-    .prepare(`SELECT seen_at FROM customer_seen WHERE customer_id = ? AND employee_id = ? AND seen_at >= ?`)
-    .bind(customerId, assignedEmployeeId, assignedAt)
-    .first();
-  return row ? row.seen_at : null;
-}
-
 /** Team Leader dashboard — Assigned/Seen/Not-Seen per employee (section 5). */
 export async function getSeenSummaryByEmployee(db) {
   const rows = await db
