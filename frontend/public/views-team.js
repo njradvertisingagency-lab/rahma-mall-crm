@@ -272,16 +272,7 @@
     const grid = el('div', { class: 'kpi-grid' });
     container.appendChild(grid);
 
-    let badgesByEmployee = {};
-    async function loadBadges() {
-      try {
-        const { weekly, monthly } = await api('/employees/badges');
-        badgesByEmployee = {};
-        [...weekly, ...monthly].forEach((b) => { (badgesByEmployee[b.employeeId] = badgesByEmployee[b.employeeId] || []).push(b); });
-      } catch {}
-    }
     async function load() {
-      await loadBadges();
       const { employees, weights } = await api('/employees');
       grid.innerHTML = '';
       employees.forEach((e) => {
@@ -293,9 +284,6 @@
           badges.availability(e.availability),
           e.dndUntil && new Date(e.dndUntil) > new Date() ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning);margin-inline-start:6px' }, ['🔕 حتى ' + new Date(e.dndUntil).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })]) : null,
         ]));
-        if (badgesByEmployee[e.id] && badgesByEmployee[e.id].length) {
-          card.appendChild(el('div', { class: 'flex gap-8 wrap mt-8' }, badgesByEmployee[e.id].map((b) => el('span', { class: 'badge', style: 'background:var(--brand-soft)', title: b.detail || '' }, [b.icon + ' ' + b.label]))));
-        }
         card.appendChild(el('div', { class: 'mt-12', style: 'font-size:12.5px' }, [
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['موزّع']), String(e.assigned)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['مغلق']), String(e.closed)]),
@@ -303,13 +291,6 @@
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['متأخر']), String(e.followupsOverdue)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['النقاط']), String(e.performanceScore)]),
         ]));
-        const rewardsLine = el('div', { class: 'flex-between mt-8', style: 'font-size:12.5px' }, [el('span', { class: 'muted' }, ['🏆 مكافآت المبيعات']), el('span', { class: 'muted' }, ['…'])]);
-        card.appendChild(rewardsLine);
-        api('/rewards/employees/' + e.id).then((r) => {
-          rewardsLine.lastChild.textContent = `${r.balance} ج.م (${r.salesCount} صفقة)`;
-          rewardsLine.lastChild.style.fontWeight = '800';
-          rewardsLine.lastChild.style.color = 'var(--success)';
-        }).catch(() => { rewardsLine.lastChild.textContent = '—'; });
         if (isSalesLead) {
           card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
             const data = await api('/rewards/employees/' + e.id);
