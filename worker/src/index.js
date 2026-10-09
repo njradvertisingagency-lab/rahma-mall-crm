@@ -236,6 +236,13 @@ export default {
       if (isDueEvery(3, 1)) {
         ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
       }
+      // إعادة التوزيع الساعة ٣ بالظبط: التشغيل الأول في أول دقيقة من الساعة ٣
+      // (والدقيقتين اللي بعدها كاحتياط لو تأخر الـ cron). بعد أول نجاح
+      // الـ dedup بيمنع التكرار، والـ */5 فاضل كشبكة أمان لو فات الموعد.
+      const nowMin = getCairoNow().minutesSinceMidnight;
+      if (nowMin >= 15 * 60 && nowMin <= 15 * 60 + 2) {
+        ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
+      }
       return;
     }
     // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
