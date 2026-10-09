@@ -135,7 +135,7 @@
           App.state.user = data.user;
           App.rt.connect();
           App.startPresenceHeartbeat();
-          App.refreshNotifications();
+          App.refreshAttendanceStatus();
           App.navigate('#/dashboard');
         } catch (e) {
           errorBox.textContent = e.message || 'اسم المستخدم أو كلمة المرور غير صحيحة';

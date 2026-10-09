@@ -24,7 +24,7 @@
     container.appendChild(
       el('div', { class: 'page-header' }, [
         el('div', { class: 'page-title' }, ['📊 كل حاجة عن الشركة']),
-        el('div', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['🔴 مباشر — يتحدّث أول ما حاجة تحصل']),
+        el('div', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['اضغط 🔄 فوق لتحديث الأرقام']),
       ])
     );
 
@@ -157,7 +157,10 @@
                 : el('span', { class: 'badge', style: 'background:var(--success-soft);color:var(--success)' }, ['في الميعاد']),
             ]),
             el('td', {}, [p.checkInAt ? fmt.dateTime(p.checkInAt) : '—']),
-            el('td', {}, [p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—')]),
+            el('td', {}, [
+              p.checkOutAt ? fmt.dateTime(p.checkOutAt) : (p.checkInAt ? 'لا يزال في العمل' : '—'),
+              p.earlyCheckoutReason ? el('div', { style: 'font-size:11.5px;color:var(--danger);margin-top:2px' }, ['🚪 انصراف مبكر — ' + p.earlyCheckoutReason]) : null,
+            ]),
             hoursTd,
             el('td', {}, [cell(p.seenToday)]),
             el('td', {}, [cell(p.callsToday)]),
@@ -212,15 +215,6 @@
     container.appendChild(subCard(commandCenterWrap));
 
     // -------------------------------------------------------------------
-    // القسم ٢: تحليلات الفريق
-    // -------------------------------------------------------------------
-    container.appendChild(sectionHeading('📈', 'تحليلات الفريق', 'تحليل تفصيلي لكل موظف على حدة — اليوم / آخر ٧ أيام / آخر ٣٠ يوم.'));
-    const analyticsWrap = el('div');
-    const leaderboardWrap = el('div');
-    container.appendChild(subCard(analyticsWrap));
-    container.appendChild(subCard(leaderboardWrap));
-
-    // -------------------------------------------------------------------
     // القسم ٣: باقي الأقسام (عرض فقط — بدون أي صفحة إدخال بيانات أو تنفيذ
     // إجراء، مثل استيراد العملاء أو توزيعهم أو إدارة الموظفين أو الإعدادات)
     // -------------------------------------------------------------------
@@ -231,18 +225,14 @@
     container.appendChild(subCard(activityWrap));
 
     async function loadEmbeddedSections() {
-      const [dashboardEl, commandCenterEl, analyticsEl, leaderboardEl, reportsEl, activityEl] = await Promise.all([
+      const [dashboardEl, commandCenterEl, reportsEl, activityEl] = await Promise.all([
         embed('/dashboard'),
         embed('/command-center'),
-        embed('/analytics'),
-        embed('/leaderboard'),
         embed('/reports'),
         embed('/activity'),
       ]);
       dashboardWrap.innerHTML = ''; if (dashboardEl) dashboardWrap.appendChild(dashboardEl);
       commandCenterWrap.innerHTML = ''; if (commandCenterEl) commandCenterWrap.appendChild(commandCenterEl);
-      analyticsWrap.innerHTML = ''; if (analyticsEl) analyticsWrap.appendChild(analyticsEl);
-      leaderboardWrap.innerHTML = ''; if (leaderboardEl) leaderboardWrap.appendChild(leaderboardEl);
       reportsWrap.innerHTML = ''; if (reportsEl) reportsWrap.appendChild(reportsEl);
       activityWrap.innerHTML = ''; if (activityEl) activityWrap.appendChild(activityEl);
     }

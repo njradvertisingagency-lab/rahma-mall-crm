@@ -6,8 +6,6 @@ const App = (window.App = {
     user: null,
     theme: localStorage.getItem('rm_theme') || 'light',
     wsStatus: 'OFFLINE', // LIVE | RECONNECTING | OFFLINE
-    soundEnabled: localStorage.getItem('rm_sound_enabled') !== 'false',
-    notifications: [],
     unreadCount: 0,
     chatUnread: 0,
     employees: [],
@@ -48,27 +46,10 @@ App.emit = (evt, payload) => {
 // واحدة كل minIntervalMs (مع تحديث أخير مضمون بعد آخر حدث، فالشاشة
 // متفضلش قديمة لفترة طويلة) — التحديث نفسه لسه لحظي كفاية للعمل اليومي،
 // بس بسقف معقول بدل ما يتكرر مع كل حدث فردي.
-App.onRealtime = (handler, minIntervalMs = 5000) => {
-  let lastRun = 0;
-  let timer = null;
-  function run() {
-    lastRun = Date.now();
-    timer = null;
-    try {
-      handler();
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  return App.on('rt:*', () => {
-    const elapsed = Date.now() - lastRun;
-    if (elapsed >= minIntervalMs) {
-      run();
-    } else if (!timer) {
-      timer = setTimeout(run, minIntervalMs - elapsed);
-    }
-  });
-};
+// التحديث التلقائي اتلغى بالكامل لتوفير قراءات قاعدة البيانات — التحديث بقى يدوي
+// بزرار 🔄 في الشريط العلوي. الدالة فاضلة كـ no-op عشان كل الصفحات اللي بتناديها
+// ما تتكسرش (بترجع دالة إلغاء فاضية).
+App.onRealtime = () => () => {};
 
 // ---------------------------------------------------------------------------
 // أدوات مساعدة لبناء عناصر الصفحة
@@ -294,7 +275,6 @@ async function api(path, opts) {
   // الخادم يرد بآخر نسخة معروفة من البيانات إذا تعذّر الوصول لقاعدة البيانات،
   // ويضع stale: true. لا يصح أن يتصرّف الفريق في بيانات عميل دون أن يعرف أنها
   // قد تكون قديمة — ننبّه مرة واحدة كل دقيقة حتى لا يتحوّل التنبيه إلى إزعاج.
-  if (data && data.stale === true) notifyStaleData();
   return data;
 }
 
@@ -340,13 +320,6 @@ function showShiftClosedScreen(err) {
 }
 App.showShiftClosedScreen = showShiftClosedScreen;
 
-let lastStaleNoticeAt = 0;
-function notifyStaleData() {
-  const now = Date.now();
-  if (now - lastStaleNoticeAt < 60 * 1000) return;
-  lastStaleNoticeAt = now;
-  toast('البيانات المعروضة قد تكون غير محدَّثة — قاعدة البيانات تحت ضغط مؤقت', 'warn');
-}
 App.api = api;
 App.apiBase = API_BASE; // مُستخدم لبناء روابط مباشرة (مثل تصدير CSV) تعمل حتى لو اختلف النطاق
 
@@ -392,45 +365,6 @@ function toast(message, type) {
 }
 App.toast = toast;
 
-// ---------------------------------------------------------------------------
-// صوت التنبيهات — نغمة قصيرة تُولَّد برمجيًا (بدون ملف صوتي خارجي) لتنبيه
-// الموظف حتى لو كانت التبويبة في الخلفية. تُشغَّل فقط مع تنبيهات فورية حقيقية
-// (وليس مع كل رسالة تأكيد عادية)، ويمكن كتمها من الجرس بجوار الإشعارات.
-// ---------------------------------------------------------------------------
-let audioCtx = null;
-function playNotificationSound() {
-  if (!App.state.soundEnabled) return;
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const now = audioCtx.currentTime;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.setValueAtTime(1175, now + 0.11);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.4);
-  } catch (e) { /* الصوت غير أساسي — تجاهل أي فشل (مثل منع المتصفح للتشغيل التلقائي) */ }
-}
-App.playNotificationSound = playNotificationSound;
-App.toggleSound = () => {
-  App.state.soundEnabled = !App.state.soundEnabled;
-  localStorage.setItem('rm_sound_enabled', String(App.state.soundEnabled));
-  App.emit('sound-toggled');
-  if (App.state.soundEnabled) playNotificationSound();
-};
-
-/** إشعار فوري حقيقي: رسالة منبثقة + نغمة تنبيه معًا. */
-function pushAlert(message, type) {
-  toast(message, type);
-  playNotificationSound();
-}
 
 // ---------------------------------------------------------------------------
 // المظهر (فاتح / داكن)
@@ -498,64 +432,8 @@ const RT = {
 };
 App.rt = RT;
 
-// الإشعارات المباشرة: أي حدث تعيين/حالة جديد يُحدّث الجرس فورًا.
-App.on('rt:NOTIFICATION_CREATED', () => { pushAlert('🔔 لديك إشعار جديد', 'info'); refreshNotifications(); });
-App.on('rt:CUSTOMER_ASSIGNED', () => refreshNotifications());
-App.on('rt:FOLLOWUP_OVERDUE', () => refreshNotifications());
-App.on('rt:CUSTOMER_REASSIGNED', () => refreshNotifications());
-// تنبيهات فورية (Push) لتجاوز مواعيد الخدمة — بدل الاكتفاء بتحديث الجرس بصمت،
-// تظهر رسالة منبثقة فورية مع نغمة تنبيه لحظة تجاوز العميل للموعد المسموح.
-App.on('rt:SLA_BREACHED', (p) => { pushAlert(`🔴 تجاوز موعد خدمة — العميل ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
-App.on('rt:SLA_WARNING', (p) => { pushAlert(`🟠 اقترب موعد خدمة — العميل ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
-// "عميل بينتظرك" — تنبيه للموظف نفسه (وليس فقط قائد الفريق) عند مرور وقت طويل بدون أي تحديث على عميله.
-App.on('rt:CUSTOMER_WAITING', (p) => { pushAlert(`⏳ عميل بينتظرك — ${p?.customerId || ''}`, 'error'); refreshNotifications(); });
-App.on('rt:CUSTOMER_WAITING_WARNING', (p) => { pushAlert(`🟡 عميل يحتاج متابعة قريبًا — ${p?.customerId || ''}`, 'info'); refreshNotifications(); });
-// الدردشة الداخلية — رسالة جديدة تُحدّث شارة العداد فورًا وتُظهر تنبيهًا صوتيًا.
-App.on('rt:CHAT_MESSAGE', (p) => {
-  refreshChatUnread();
-  const onChatPage = (location.hash || '').startsWith('#/chat');
-  if (!onChatPage) pushAlert(`💬 رسالة جديدة من ${p?.senderName || ''}`, 'info');
-});
-
-// إشعارات الصفقات — يراها قائد الفريق فقط (السيرفر يحدد من يستقبل البث).
-App.on('rt:DEAL_DONE_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🎉 تمت صفقة — ${p.customerId} — ${p.amount} ج.م في ${p.branchName || ''}`, 'success'); });
-App.on('rt:BRANCH_VISIT_CREATED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`🏪 زيارة فرع — ${p.customerId} في ${p.branchName || ''}`, 'info'); });
-App.on('rt:PURCHASE_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ تم تسجيل استرجاع — ${p.customerId}`, 'info'); });
-App.on('rt:PURCHASE_PARTIALLY_REFUNDED', (p) => { if (App.state.user?.role === 'team_leader') pushAlert(`↩ استرجاع جزئي — ${p.customerId}`, 'info'); });
-
-// مكافأة صفقة — تصل للموظف صاحب الصفقة فقط (السيرفر يحدد المستلم بالبث
-// الموجَّه scope:'employee'). تنبيه احتفالي واضح بدل توست عادي — الهدف
-// تحفيز الموظف فعليًا، وليس مجرد إعلامه.
-App.on('rt:REWARD_EARNED', (p) => { pushAlert(`🎉💰 مبروك! حصلت على مكافأة ${p.amount} ج.م — رصيدك الآن ${p.balance} ج.م`, 'success'); });
-// خصم شفاف من رصيد المكافآت (مثل تأخير كتابة ملاحظة) — نفس وضوح تنبيه
-// المكافأة، بالسالب، حتى لا يفاجأ الموظف لاحقًا برصيد أقل من غير سبب واضح.
-App.on('rt:REWARD_REVERSED', (p) => { if (p.amount < 0) pushAlert(`⚠️ تم خصم ${Math.abs(p.amount)} ج.م من رصيد مكافآتك — رصيدك الآن ${p.balance} ج.م`, 'warn'); });
-// إنجازات تحفيزية بلا مقابل مالي (اقتراب من الهدف الشهري / تحقيقه بالكامل).
-App.on('rt:MOTIVATION_MILESTONE', (p) => {
-  if (p.kind === 'MONTHLY_GOAL_HIT') pushAlert(`🎯 مبروك! حققت هدفك الشهري (${p.target} صفقات) 👏`, 'success');
-  else if (p.kind === 'MONTHLY_GOAL_NEAR') pushAlert('🔥 باقي صفقة واحدة فقط لتحقيق هدفك الشهري!', 'info');
-});
-
-async function refreshNotifications() {
-  if (!App.state.user) return;
-  try {
-    const data = await api('/notifications', { background: true });
-    App.state.notifications = data.notifications;
-    App.state.unreadCount = data.unreadCount;
-    App.emit('notifications-updated');
-  } catch {}
-}
-App.refreshNotifications = refreshNotifications;
-
-async function refreshChatUnread() {
-  if (!App.state.user) return;
-  try {
-    const data = await api('/chat/unread-count', { background: true });
-    App.state.chatUnread = data.unread;
-    App.emit('chat-unread-updated');
-  } catch {}
-}
-App.refreshChatUnread = refreshChatUnread;
+// تم إلغاء خاصية الإشعارات بالكامل (الجرس/الصفحة/التنبيهات) لتوفير قراءات قاعدة البيانات.
+// الدالة فاضلة كـ no-op عشان أي استدعاء قديم ما يكسرش.
 
 // ---------------------------------------------------------------------------
 // الموجّه (Router)
@@ -761,19 +639,12 @@ const NAV_TL = [
   ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
-  ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
-  ['leaves', '🗓️', 'الإجازات والغياب'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['complaints', '🚩', 'الشكاوى'],
-  ['chat', '💬', 'الدردشة'],
-  ['analytics', '📈', 'التحليلات'],
-  ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['file-movements', '📂', 'حركة الملفات'],
-  ['notifications', '🔔', 'الإشعارات'],
 ];
 
 // حساب الموارد البشرية (isHr=1) — نفس role='team_leader' في قاعدة البيانات،
@@ -784,16 +655,7 @@ const NAV_HR = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['leaves', '🗓️', 'الإجازات والغياب'],
-  ['evaluations', '📝', 'الأداء والتقييم'],
-  ['violations', '⚠️', 'المخالفات والإجراءات'],
-  ['trainings', '🎓', 'التدريب والتطوير'],
-  ['documents', '📁', 'المستندات والعقود'],
-  ['benefits', '💰', 'المزايا والمكافآت'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
   ['file-movements', '📂', 'حركة الملفات'],
-  ['notifications', '🔔', 'الإشعارات'],
 ];
 
 // حساب "admin" (👑 الرؤية الشاملة، is_owner=1) — god-view كامل للشركة:
@@ -806,29 +668,14 @@ const NAV_ADMIN = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
-  ['favorites', '⭐', 'المفضلة'],
   ['import', '📥', 'استيراد عملاء'],
   ['distribute', '🔀', 'توزيع العملاء'],
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['leaves', '🗓️', 'الإجازات والغياب'],
-  ['evaluations', '📝', 'الأداء والتقييم'],
-  ['violations', '⚠️', 'المخالفات والإجراءات'],
-  ['trainings', '🎓', 'التدريب والتطوير'],
-  ['documents', '📁', 'المستندات والعقود'],
-  ['benefits', '💰', 'المزايا والمكافآت'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
   ['followups', '⏰', 'المتابعات'],
-  ['calendar', '🗓️', 'تقويم المتابعات'],
-  ['complaints', '🚩', 'الشكاوى'],
-  ['chat', '💬', 'الدردشة'],
-  ['analytics', '📈', 'التحليلات'],
-  ['leaderboard', '🏆', 'لوحة الصدارة'],
   ['reports', '🧾', 'التقارير'],
   ['activity', '🕒', 'سجل الأنشطة'],
-  ['notifications', '🔔', 'الإشعارات'],
-  ['ai', '🤖', 'المساعد الذكي'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
 // موظفو الحسابات (department='accounting') — قائمة خاصة بقسم الحسابات فقط:
@@ -845,10 +692,6 @@ const NAV_ACCOUNTING = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['payroll-salaries', '💰', 'تكوين الرواتب'],
   ['payroll-runs', '📋', 'دورات المرتبات'],
-  ['leaves', '🗓️', 'إجازاتي'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
-  ['notifications', '🔔', 'الإشعارات'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 
@@ -858,30 +701,14 @@ const NAV_LEGAL = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['file-movements', '📂', 'حركة الملفات'],
-  ['leaves', '🗓️', 'إجازاتي'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
-  ['notifications', '🔔', 'الإشعارات'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['my-files', '🗃️', 'ملفاتي'],
-  ['work-queue', '🎯', 'قائمة مهامي'],
   ['my-customers', '👥', 'عملائي'],
-  ['favorites', '⭐', 'المفضلة'],
   ['followups', '⏰', 'المتابعات'],
-  ['calendar', '🗓️', 'تقويم المتابعات'],
-  ['leaves', '🗓️', 'إجازاتي'],
-  ['evaluations', '📝', 'تقييماتي'],
-  ['violations', '⚠️', 'مخالفاتي'],
-  ['trainings', '🎓', 'تدريباتي'],
-  ['documents', '📁', 'مستنداتي'],
-  ['benefits', '💰', 'مزاياي ومكافآتي'],
-  ['announcements', '📢', 'الإعلانات الداخلية'],
-  ['chat', '💬', 'الدردشة'],
-  ['notifications', '🔔', 'الإشعارات'],
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
@@ -893,12 +720,12 @@ const NAV_EMPLOYEE = [
 function renderOwnerShell() {
   const user = App.state.user;
   const connBadge = renderConnBadge();
-  const soundToggle = renderSoundToggle();
   // Pure read-only report modal (start-of-day / end-of-shift snapshots) —
   // no action on any data, just viewing, so it belongs here same as it did
   // in the old sidebar's topbar. renderAdminReportsButton() already checks
   // isOwner internally and returns the button for this account.
   const adminReportsBtn = renderAdminReportsButton();
+  const refreshBtn = renderRefreshBtn();
   // مظهر مميز لحساب المالك — شريط علوي بتدرّج ذهبي وشارة "المالك"، حتى
   // يكون واضحًا من أول لحظة إن هذا الحساب مختلف عن أي حساب موظف أو حتى
   // قائد الفريق العادي (بناءً على طلبه صراحةً).
@@ -910,7 +737,7 @@ function renderOwnerShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
-      soundToggle,
+      refreshBtn,
       adminReportsBtn,
       el('button', { class: 'btn btn-outline btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️' : '🌙']),
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
@@ -923,7 +750,7 @@ function renderOwnerShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main', style: 'width:100%' }, [topbar, content]);
   const root = el('div', { class: 'shell owner-shell' }, [main]);
-  const cleanups = [connBadge.offEvt, soundToggle.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, refreshBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -939,7 +766,6 @@ function renderShell() {
        : user.department === 'legal' ? NAV_LEGAL
        : NAV_EMPLOYEE);
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
-  const chatNavBadge = renderChatNavBadge();
 
   // مظهر مميز (ذهبي) لحساب الأدمن فقط — عشان يبان من أول لحظة إنه حساب
   // مختلف تمامًا عن أي حساب تاني، مش بس شارة زي القديم، لكن الشريط الجانبي
@@ -959,7 +785,7 @@ function renderShell() {
         class: 'nav-item' + (currentPath === path ? ' active' : ''),
         onclick: () => { App.navigate('#/' + path); document.getElementById('sidebar').classList.remove('open'); },
       }, [
-        el('span', { class: 'nav-icon', style: 'position:relative' }, [icon, path === 'chat' ? chatNavBadge : null]),
+        el('span', { class: 'nav-icon', style: 'position:relative' }, [icon]),
         label,
       ])
     )),
@@ -970,9 +796,8 @@ function renderShell() {
   ]);
 
   const connBadge = renderConnBadge();
-  const notifBell = renderNotifBell();
-  const soundToggle = renderSoundToggle();
   const adminReportsBtn = renderAdminReportsButton();
+  const refreshBtn = renderRefreshBtn();
   const attendanceBtn = renderAttendanceButton();
   const topbar = el('div', { class: 'topbar', style: isAdmin ? 'background:linear-gradient(90deg,var(--surface-2),var(--brand-soft));border-bottom:2px solid #d4a017' : '' }, [
     el('button', { class: 'btn btn-icon sidebar-toggle', onclick: () => document.getElementById('sidebar').classList.toggle('open') }, ['☰']),
@@ -986,9 +811,8 @@ function renderShell() {
     ]),
     el('div', { class: 'topbar-actions' }, [
       connBadge,
-      soundToggle,
+      refreshBtn,
       attendanceBtn,
-      notifBell,
       adminReportsBtn,
       el('div', { class: 'flex gap-8', style: 'align-items:center' }, [
         App.avatar({ url: user.avatarUrl, name: user.displayName, sizeClass: 'avatar-sm' }),
@@ -1001,7 +825,7 @@ function renderShell() {
   const content = el('div', { class: 'content' });
   const main = el('div', { class: 'main' }, [topbar, content]);
   const root = el('div', { class: 'shell' }, [sidebar, main]);
-  const cleanups = [connBadge.offEvt, notifBell.offEvt, chatNavBadge.offEvt, soundToggle.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
+  const cleanups = [connBadge.offEvt, refreshBtn.offEvt, attendanceBtn && attendanceBtn.offEvt].filter(Boolean);
   return { root, content, cleanup: () => cleanups.forEach((off) => off()) };
 }
 
@@ -1020,50 +844,33 @@ function renderConnBadge() {
   return wrap;
 }
 
-function renderSoundToggle() {
+
+// زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
+// freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
+function renderRefreshBtn() {
+  const dot = el('span', { style: 'position:absolute;top:2px;inset-inline-end:2px;width:9px;height:9px;border-radius:50%;background:var(--danger,#e53935);display:' + (App.state.pendingAssign ? 'block' : 'none') });
   const btn = el('button', {
     class: 'btn btn-icon',
-    title: App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات',
-    onclick: App.toggleSound,
-  }, [App.state.soundEnabled ? '🔊' : '🔇']);
-  btn.offEvt = App.on('sound-toggled', () => {
-    btn.textContent = App.state.soundEnabled ? '🔊' : '🔇';
-    btn.title = App.state.soundEnabled ? 'كتم صوت التنبيهات' : 'تفعيل صوت التنبيهات';
-  });
+    style: 'position:relative',
+    title: 'تحديث الصفحة',
+    onclick: () => { App.state.pendingAssign = false; dot.style.display = 'none'; App.freshNext = true; renderRoute(); },
+  }, ['🔄', dot]);
+  btn.offEvt = App.on('assign-pending', () => { dot.style.display = App.state.pendingAssign ? 'block' : 'none'; });
   return btn;
 }
 
-function renderChatNavBadge() {
-  const badge = el('span', {
-    style: 'position:absolute;top:-4px;inset-inline-end:-8px;background:var(--danger);color:#fff;border-radius:10px;font-size:9px;padding:1px 4px;display:none;line-height:1.4',
-  });
-  function update() {
-    if (App.state.chatUnread > 0) {
-      badge.style.display = 'inline';
-      badge.textContent = App.state.chatUnread > 9 ? '9+' : App.state.chatUnread;
-    } else badge.style.display = 'none';
-  }
-  badge.offEvt = App.on('chat-unread-updated', update);
-  update();
-  return badge;
+// تنبيه خفيف بدون أي قراءة من القاعدة: السيرفر بيبعت حدث لحظي (WebSocket)
+// للموظف لما يتوزع عليه أرقام، فبنظهر نقطة حمراء على 🔄 ورسالة مرة واحدة.
+// مفيش تحميل للقائمة إلا لما الموظف نفسه يضغط 🔄.
+function onAssignmentEvent() {
+  if (App.state.user?.role !== 'employee') return;
+  const first = !App.state.pendingAssign;
+  App.state.pendingAssign = true;
+  App.emit('assign-pending');
+  if (first) toast('📥 اتوزع عليك أرقام جديدة — اضغط 🔄 لتحديث القائمة', 'success');
 }
-
-function renderNotifBell() {
-  const btn = el('button', { class: 'btn btn-icon', style: 'position:relative', onclick: () => App.navigate('#/notifications') }, ['🔔']);
-  const badge = el('span', {
-    style: 'position:absolute;top:2px;inset-inline-end:2px;background:var(--danger);color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;display:none',
-  });
-  btn.appendChild(badge);
-  function update() {
-    if (App.state.unreadCount > 0) {
-      badge.style.display = 'inline';
-      badge.textContent = App.state.unreadCount > 9 ? '9+' : App.state.unreadCount;
-    } else badge.style.display = 'none';
-  }
-  btn.offEvt = App.on('notifications-updated', update);
-  update();
-  return btn;
-}
+App.on('rt:CUSTOMER_ASSIGNED', onAssignmentEvent);
+App.on('rt:CUSTOMER_REASSIGNED', onAssignmentEvent);
 
 async function doLogout() {
   try { await api('/auth/logout', { method: 'POST' }); } catch {}
@@ -1098,7 +905,7 @@ App.startPresenceHeartbeat = function () {
   presenceHeartbeatStarted = true;
   lastUserActivityAt = Date.now(); // أول نبضة فورية عند تسجيل الدخول/فتح الصفحة، دون انتظار دقيقة كاملة
   sendPresenceHeartbeatIfActive();
-  setInterval(sendPresenceHeartbeatIfActive, 60 * 1000);
+  setInterval(sendPresenceHeartbeatIfActive, 180 * 1000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sendPresenceHeartbeatIfActive(); });
 };
 
@@ -1471,8 +1278,6 @@ async function boot() {
   if (App.state.user) {
     RT.connect();
     App.startPresenceHeartbeat();
-    refreshNotifications();
-    refreshChatUnread();
     refreshAttendanceStatus();
   }
   renderRoute();

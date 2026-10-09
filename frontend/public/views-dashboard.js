@@ -95,7 +95,9 @@
     container.appendChild(kpiGrid);
 
     async function loadKpis() {
-      const { kpis } = await api('/analytics/dashboard');
+      const fresh = App.freshNext;
+      App.freshNext = false;
+      const { kpis } = await api('/analytics/dashboard' + (fresh ? '?fresh=1' : ''));
       kpiGrid.innerHTML = '';
       // Compute today's start in Cairo timezone for date-filtered links
       const cairoToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
@@ -106,7 +108,6 @@
         ['موزّعين', kpis.assigned, 'info', '#/customers'],
         ['جديد', kpis.new, 'info', '#/customers?status=NEW'],
         ['لم يُفتح بعد', kpis.unopened || 0, 'danger', '#/customers?seen=not_seen'],
-        ['جارِ الاتصال', kpis.calling, 'brand', '#/customers?status=CALLING'],
         ['لا يوجد رد', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
         ['متابعة', kpis.followUp, 'warning', '#/customers?status=FOLLOW_UP'],
         ['مهتم', kpis.interested, 'success', '#/customers?status=INTERESTED'],
@@ -116,7 +117,7 @@
         ['عملاء اليوم', kpis.todayCustomers, 'brand', '#/customers?dateFrom=' + todayFrom],
         ['مغلق اليوم', kpis.todayClosed, 'success', '#/customers?status=CLOSED&dateFrom=' + todayFrom],
         ['متابعات اليوم', kpis.todayFollowups, 'warning', '#/followups'],
-        ['نسبة الإنجاز', Math.round(kpis.completionRate * 100) + '%', 'brand', '#/analytics'],
+        ['نسبة الإنجاز', Math.round(kpis.completionRate * 100) + '%', 'brand', null],
         ['واتساب اليوم', kpis.whatsappToday, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
         ['واتساب هذا الأسبوع', kpis.whatsappWeek, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
       ];
@@ -148,25 +149,6 @@
         });
       }
       await loadTeam();
-      offTeamListeners = [
-        App.on('rt:EMPLOYEE_AVAILABILITY_CHANGED', loadTeam),
-        App.on('rt:CUSTOMER_STATUS_CHANGED', loadTeam),
-        App.on('rt:DISTRIBUTION_COMPLETED', loadTeam),
-      ];
-
-      container.appendChild(el('div', { class: 'section-title' }, ['ملاحظات تشغيلية']));
-      const insightsBox = el('div', { class: 'card card-pad' });
-      container.appendChild(insightsBox);
-      try {
-        const { insights } = await api('/ai/insights');
-        if (insights.length === 0) {
-          insightsBox.textContent = 'لا توجد ملاحظات تشغيلية حاليًا.';
-        } else {
-          insightsBox.appendChild(el('div', {}, insights.map((i) => el('div', { class: 'checklist-item' }, ['💡 ' + (typeof i === 'string' ? i : i.text)]))));
-        }
-      } catch {
-        insightsBox.textContent = 'تعذّر عرض الملاحظات حاليًا.';
-      }
     } else {
       container.appendChild(el('div', { class: 'section-title' }, ['متابعات اليوم']));
       const fw = el('div');

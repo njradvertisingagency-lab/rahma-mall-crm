@@ -48,20 +48,11 @@
     const user = App.state.user;
     const container = el('div');
     let data;
-    let isFavorite = false;
     async function load() {
       data = await api('/customers/' + id);
-      try { isFavorite = (await api('/favorites/' + id + '/check')).isFavorite; } catch {}
     }
     await load();
 
-    async function toggleFavorite() {
-      try {
-        if (isFavorite) { await api('/favorites/' + id, { method: 'DELETE' }); isFavorite = false; }
-        else { await api('/favorites/' + id, { method: 'POST' }); isFavorite = true; }
-        render();
-      } catch (e) { toast(e.message, 'error'); }
-    }
     async function toggleVip() {
       try {
         await api('/customers/' + id + '/vip', { method: 'POST', body: { isVip: !data.customer.isVip } });
@@ -70,23 +61,6 @@
         render();
       } catch (e) { toast(e.message, 'error'); }
     }
-    function logComplaint() {
-      const textInput = el('textarea', { placeholder: 'تفاصيل الشكوى…' });
-      const body = el('div', {}, [el('div', { class: 'field' }, [el('label', {}, ['نص الشكوى']), textInput])]);
-      const dlg = modal('🚩 تسجيل شكوى', body, []);
-      dlg.el.querySelector('.modal-footer').append(
-        el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
-        el('button', { class: 'btn btn-danger', onclick: async () => {
-          if (!textInput.value.trim()) { toast('نص الشكوى مطلوب', 'error'); return; }
-          try {
-            await api('/complaints/customers/' + id, { method: 'POST', body: { text: textInput.value.trim() } });
-            toast('تم تسجيل الشكوى', 'success');
-            dlg.close();
-          } catch (e) { toast(e.message, 'error'); }
-        } }, ['تسجيل الشكوى'])
-      );
-    }
-
     function render() {
       container.innerHTML = '';
       const c = data.customer;
@@ -96,7 +70,6 @@
           el('div', { class: 'muted mono' }, [c.phone]),
         ]),
         el('div', { class: 'page-actions' }, [
-          el('button', { class: 'btn btn-outline', title: isFavorite ? 'إزالة من المفضلة' : 'إضافة للمفضلة', onclick: toggleFavorite }, [isFavorite ? '⭐ في المفضلة' : '☆ إضافة للمفضلة']),
           user.role === 'team_leader' ? el('button', { class: 'btn btn-outline', onclick: toggleVip }, [c.isVip ? '👑 إلغاء VIP' : '👑 تمييز VIP']) : null,
           el('button', { class: 'btn btn-outline', onclick: () => App.navigate('#/customers') }, ['← رجوع']),
         ]),
@@ -583,7 +556,6 @@
       }
 
       card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => scheduleFollowup(c) }, ['📅 جدولة متابعة']));
-      card.appendChild(el('button', { class: 'btn btn-outline btn-block', style: 'color:var(--danger)', onclick: () => logComplaint() }, ['🚩 تسجيل شكوى']));
       return card;
     }
 

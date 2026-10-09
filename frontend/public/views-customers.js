@@ -10,7 +10,7 @@
   }
 
   function statusOptions() {
-    return ['', 'NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
+    return ['', 'NEW', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
   }
 
   const SEGMENTS = ['', 'NEW', 'INTERESTED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
@@ -63,24 +63,20 @@
             el('button', { class: 'btn btn-outline', onclick: () => App.navigate('#/import') }, ['📥 استيراد']),
             el('button', { class: 'btn btn-primary', onclick: () => App.navigate('#/distribute') }, ['🔀 توزيع']),
           ])
-        : null,
+        : el('div', { class: 'page-actions' }, [
+            el('button', { class: 'btn btn-primary', onclick: async () => {
+              try {
+                await App.downloadFile('/customers/export-today', 'numbers.xlsx');
+              } catch (err) {
+                App.toast(err.message || 'فشل تنزيل الملف', 'error');
+              }
+            } }, ['📥 تنزيل أرقام اليوم (Excel)']),
+          ]),
     ]));
 
     let employees = [];
     if (user.role === 'team_leader') {
       try { employees = (await api('/employees')).employees; } catch {}
-    }
-    let favoriteIds = new Set();
-    async function loadFavorites() {
-      try { favoriteIds = new Set((await api('/favorites')).favorites.map((f) => f.customerId)); } catch {}
-    }
-    await loadFavorites();
-    async function toggleFavorite(c) {
-      try {
-        if (favoriteIds.has(c.id)) { await api('/favorites/' + c.id, { method: 'DELETE' }); favoriteIds.delete(c.id); }
-        else { await api('/favorites/' + c.id, { method: 'POST' }); favoriteIds.add(c.id); }
-        load();
-      } catch (e) { toast(e.message, 'error'); }
     }
     async function toggleVip(c) {
       try {
@@ -256,7 +252,6 @@
       cells.push(c.nextFollowUpAt ? fmt.date(c.nextFollowUpAt) : '—');
       cells.push(fmt.ago(c.updatedAt));
       const rowActions = [
-        el('button', { class: 'btn btn-sm btn-outline', title: favoriteIds.has(c.id) ? 'إزالة من المفضلة' : 'إضافة للمفضلة', onclick: () => toggleFavorite(c) }, [favoriteIds.has(c.id) ? '⭐' : '☆']),
         el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/customers/' + c.id) }, ['فتح']),
       ];
       if (user.role === 'team_leader') {
@@ -287,7 +282,6 @@
         user.role === 'team_leader' ? el('div', { class: 'row' }, [el('span', { class: 'muted' }, ['الموظف']), c.assignedEmployeeName || 'غير موزّع']) : null,
         el('div', { class: 'row' }, [el('span', { class: 'muted' }, ['واتساب']), badges.whatsapp(c.whatsappContactStatus)]),
         el('div', { class: 'actions' }, [
-          el('button', { class: 'btn btn-sm btn-outline', onclick: () => toggleFavorite(c) }, [favoriteIds.has(c.id) ? '⭐' : '☆']),
           el('a', { class: 'btn btn-sm btn-outline', href: 'tel:' + c.normalizedPhone }, ['📞 اتصال']),
           state.archived && user.role === 'team_leader'
             ? el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة'])
@@ -349,43 +343,4 @@
   App.route('/customers', customersListView);
   App.route('/my-customers', customersListView);
 
-  // --- قائمة "المفضلة الخاصة بي" — الموظف/قائد الفريق يعلّم عملاء مهمين للرجوع إليهم بسرعة ---
-  App.route('/favorites', async () => {
-    const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['⭐ المفضلة الخاصة بي'])]));
-    const box = el('div');
-    container.appendChild(box);
-
-    async function load() {
-      const { favorites } = await api('/favorites');
-      box.innerHTML = '';
-      if (favorites.length === 0) {
-        box.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['☆']), 'لا يوجد عملاء في المفضلة بعد — اضغط ☆ بجانب أي عميل لإضافته هنا.']));
-        return;
-      }
-      box.appendChild(el('div', { class: 'table-wrap' }, [
-        el('table', { class: 'data-table' }, [
-          el('thead', {}, [el('tr', {}, ['الكود', 'الاسم', 'الهاتف', 'الحالة', 'الأولوية', ...(App.state.user.role === 'team_leader' ? ['الموظف'] : []), ''].map((h) => el('th', {}, [h])))]),
-          el('tbody', {}, favorites.map((f) => el('tr', {}, [
-            el('td', {}, [el('a', { href: '#/customers/' + f.customerId, style: 'font-weight:700' }, [f.customerId])]),
-            el('td', {}, [f.name || '—']),
-            el('td', { class: 'mono' }, [f.phone || '']),
-            el('td', {}, [badges.status(f.status)]),
-            el('td', {}, [badges.priority(f.priority)]),
-            ...(App.state.user.role === 'team_leader' ? [el('td', {}, [f.assignedEmployeeName || '—'])] : []),
-            el('td', {}, [
-              el('div', { class: 'flex gap-8 wrap' }, [
-                el('button', { class: 'btn btn-sm btn-outline', onclick: () => App.navigate('#/customers/' + f.customerId) }, ['فتح']),
-                el('button', { class: 'btn btn-sm btn-danger', onclick: async () => { await api('/favorites/' + f.customerId, { method: 'DELETE' }); load(); } }, ['إزالة']),
-              ]),
-            ]),
-          ]))),
-        ]),
-      ]));
-    }
-    await load();
-    const off = App.onRealtime(load, 6000);
-    container.cleanup = () => off();
-    return container;
-  });
 })();

@@ -272,16 +272,7 @@
     const grid = el('div', { class: 'kpi-grid' });
     container.appendChild(grid);
 
-    let badgesByEmployee = {};
-    async function loadBadges() {
-      try {
-        const { weekly, monthly } = await api('/employees/badges');
-        badgesByEmployee = {};
-        [...weekly, ...monthly].forEach((b) => { (badgesByEmployee[b.employeeId] = badgesByEmployee[b.employeeId] || []).push(b); });
-      } catch {}
-    }
     async function load() {
-      await loadBadges();
       const { employees, weights } = await api('/employees');
       grid.innerHTML = '';
       employees.forEach((e) => {
@@ -293,9 +284,6 @@
           badges.availability(e.availability),
           e.dndUntil && new Date(e.dndUntil) > new Date() ? el('span', { class: 'badge', style: 'background:var(--warning-soft);color:var(--warning);margin-inline-start:6px' }, ['🔕 حتى ' + new Date(e.dndUntil).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })]) : null,
         ]));
-        if (badgesByEmployee[e.id] && badgesByEmployee[e.id].length) {
-          card.appendChild(el('div', { class: 'flex gap-8 wrap mt-8' }, badgesByEmployee[e.id].map((b) => el('span', { class: 'badge', style: 'background:var(--brand-soft)', title: b.detail || '' }, [b.icon + ' ' + b.label]))));
-        }
         card.appendChild(el('div', { class: 'mt-12', style: 'font-size:12.5px' }, [
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['موزّع']), String(e.assigned)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['مغلق']), String(e.closed)]),
@@ -303,13 +291,6 @@
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['متأخر']), String(e.followupsOverdue)]),
           el('div', { class: 'flex-between' }, [el('span', { class: 'muted' }, ['النقاط']), String(e.performanceScore)]),
         ]));
-        const rewardsLine = el('div', { class: 'flex-between mt-8', style: 'font-size:12.5px' }, [el('span', { class: 'muted' }, ['🏆 مكافآت المبيعات']), el('span', { class: 'muted' }, ['…'])]);
-        card.appendChild(rewardsLine);
-        api('/rewards/employees/' + e.id).then((r) => {
-          rewardsLine.lastChild.textContent = `${r.balance} ج.م (${r.salesCount} صفقة)`;
-          rewardsLine.lastChild.style.fontWeight = '800';
-          rewardsLine.lastChild.style.color = 'var(--success)';
-        }).catch(() => { rewardsLine.lastChild.textContent = '—'; });
         if (isSalesLead) {
           card.appendChild(el('button', { class: 'btn btn-sm btn-outline btn-block mt-8', onclick: async () => {
             const data = await api('/rewards/employees/' + e.id);
@@ -356,8 +337,6 @@
       });
     }
     await load();
-    const off = App.on('rt:EMPLOYEE_AVAILABILITY_CHANGED', load);
-    container.cleanup = () => off();
     return container;
   }, { roles: ['team_leader'] });
 
@@ -405,29 +384,6 @@
     container.cleanup = () => off();
     return container;
   }, { denyIfPlainSalesLead: true });
-
-  App.route('/notifications', async () => {
-    const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['الإشعارات']),
-      el('button', { class: 'btn btn-outline', onclick: async () => { await api('/notifications/mark-all-read', { method: 'POST' }); App.refreshNotifications(); load(); } }, ['تحديد الكل كمقروء']),
-    ]));
-    const box = el('div');
-    container.appendChild(box);
-    async function load() {
-      const { notifications } = await api('/notifications');
-      box.innerHTML = '';
-      if (notifications.length === 0) { box.appendChild(el('div', { class: 'empty-state' }, ['لا توجد إشعارات.'])); return; }
-      box.appendChild(el('div', { class: 'card' }, notifications.map((n) => el('div', {
-        class: 'checklist-item', style: n.read ? '' : 'background:var(--brand-soft)',
-        onclick: async () => { if (!n.read) { await api('/notifications/' + n.id + '/read', { method: 'PATCH' }); App.refreshNotifications(); load(); } },
-      }, [el('div', {}, [el('div', { style: 'font-weight:700' }, [n.title]), el('div', { class: 'muted', style: 'font-size:13px' }, [n.message]), el('div', { class: 'faint' }, [fmt.ago(n.created_at)])])]))));
-    }
-    await load();
-    const off = App.onRealtime(load, 5000);
-    container.cleanup = () => off();
-    return container;
-  });
 
   // مشتركة مع صفحة "أدائي" — انظر App.labels.activity / App.labels.role في app.js.
   const ACTION_LABELS = App.labels.activity;
