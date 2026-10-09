@@ -33,7 +33,6 @@ import { rewardsRoutes } from './routes/rewards.js';
 import { accountingRoutes } from './routes/accounting.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
-import { sweepSlaBreaches, sweepCustomerWaiting } from './lib/sla.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
 import { sweepLateAttendance, sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
@@ -266,9 +265,8 @@ export default {
     }
     // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
     // future trigger never silently runs nothing).
+    // sweeps الـ SLA والـ CUSTOMER_WAITING اتشالت — كانت موجودة للإشعارات بس (الحالة الحية بتتحسب من الطوابع الزمنية مباشرة).
     ctx.waitUntil(sweepOverdueFollowups(env).catch((e) => console.error('sweepOverdueFollowups failed', e)));
-    ctx.waitUntil(sweepSlaBreaches(env.DB, env).catch((e) => console.error('sweepSlaBreaches failed', e)));
-    ctx.waitUntil(sweepCustomerWaiting(env.DB, env).catch((e) => console.error('sweepCustomerWaiting failed', e)));
     // كانت بتشتغل كل ٥ دقايق وبتعمل ٤ استعلامات لكل موظف نشط في كل تشغيلة —
     // أكبر مستهلك لحصة القراءة اليومية بالكامل. البيانات دي لرسم بياني
     // تاريخي (trend chart) مش شاشة لايف، فمرة كل ساعة كافية تمامًا وبتوفر

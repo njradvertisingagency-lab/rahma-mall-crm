@@ -66,14 +66,12 @@ export async function logActivity(db, { actor, action, entityType, entityId, met
 }
 
 /** Persist a notification for one recipient user. Returns the inserted row id. */
-export async function createNotification(db, { userId, type, title, message, entityType, entityId }) {
-  const res = await db
-    .prepare(
-      `INSERT INTO notifications (user_id, type, title, message, entity_type, entity_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id, created_at`
-    )
-    .bind(userId, type, title, message, entityType ?? null, entityId ?? null)
-    .first();
-  return res;
+// تم إلغاء خاصية الإشعارات بالكامل بناءً على طلب صاحب الشركة (كانت سبب عاصفة
+// قراءات D1 يوم ٧ أكتوبر). الدالة فاضلة كـ no-op عشان كل الأماكن اللي بتناديها
+// (حضور، مكافآت، توزيع...) تفضل شغالة من غير ما تكتب أي صف في جدول notifications.
+// الجدول القديم وبياناته متتحذفوش — بس مبقاش يتكتب فيه ولا يتقرا منه.
+export async function createNotification() {
+  return null;
 }
 
 /**

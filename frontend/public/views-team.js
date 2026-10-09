@@ -406,29 +406,6 @@
     return container;
   }, { denyIfPlainSalesLead: true });
 
-  App.route('/notifications', async () => {
-    const container = el('div');
-    container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['الإشعارات']),
-      el('button', { class: 'btn btn-outline', onclick: async () => { await api('/notifications/mark-all-read', { method: 'POST' }); App.refreshNotifications(); load(); } }, ['تحديد الكل كمقروء']),
-    ]));
-    const box = el('div');
-    container.appendChild(box);
-    async function load() {
-      const { notifications } = await api('/notifications');
-      box.innerHTML = '';
-      if (notifications.length === 0) { box.appendChild(el('div', { class: 'empty-state' }, ['لا توجد إشعارات.'])); return; }
-      box.appendChild(el('div', { class: 'card' }, notifications.map((n) => el('div', {
-        class: 'checklist-item', style: n.read ? '' : 'background:var(--brand-soft)',
-        onclick: async () => { if (!n.read) { await api('/notifications/' + n.id + '/read', { method: 'PATCH' }); App.refreshNotifications(); load(); } },
-      }, [el('div', {}, [el('div', { style: 'font-weight:700' }, [n.title]), el('div', { class: 'muted', style: 'font-size:13px' }, [n.message]), el('div', { class: 'faint' }, [fmt.ago(n.created_at)])])]))));
-    }
-    await load();
-    const off = App.onRealtime(load, 5000);
-    container.cleanup = () => off();
-    return container;
-  });
-
   // مشتركة مع صفحة "أدائي" — انظر App.labels.activity / App.labels.role في app.js.
   const ACTION_LABELS = App.labels.activity;
   const ROLE_LABELS = App.labels.role;
