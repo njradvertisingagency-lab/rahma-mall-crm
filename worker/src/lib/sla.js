@@ -92,19 +92,6 @@ export async function findInterestedFollowupSlaCandidates(db, customerId) {
 // reuses the same anchor/threshold/dedup machinery but is swept into its
 // own `waiting_events` table (see sweepCustomerWaiting below) and always
 // alerts the employee themselves, not just the Team Leader.
-export async function findWaitingCandidates(db, customerId) {
-  const { results } = await db
-    .prepare(
-      `SELECT c.id AS customer_id, c.assigned_employee_id AS employee_id, c.updated_at AS anchor_at
-       FROM customers c
-       WHERE c.archived = 0 AND c.status != 'CLOSED' AND c.assigned_employee_id IS NOT NULL
-         ${customerId ? 'AND c.id = ?' : ''}`
-    )
-    .bind(...(customerId ? [customerId] : []))
-    .all();
-  return results;
-}
-
 const RULES = [
   { rule: 'SEEN_SLA', find: findSeenSlaCandidates, thresholdKey: 'seenWithinMinutes' },
   { rule: 'CONTACT_SLA', find: findContactSlaCandidates, thresholdKey: 'contactWithinMinutesAfterSeen' },
@@ -149,30 +136,3 @@ const RULE_LABELS = {
   INTERESTED_FOLLOWUP_SLA: 'أن يحصل على متابعة',
 };
 
-/** Count of customers currently breaching/warning any rule — for Command Center. */
-export async function getSlaCounts(db) {
-  const rules = await getSlaRules(db);
-  const [seen, contact, interested] = await Promise.all([
-    findSeenSlaCandidates(db),
-    findContactSlaCandidates(db),
-    findInterestedFollowupSlaCandidates(db),
-  ]);
-  let warning = 0;
-  let breached = 0;
-  const seenIds = new Set();
-  for (const [rows, key] of [
-    [seen, 'seenWithinMinutes'],
-    [contact, 'contactWithinMinutesAfterSeen'],
-    [interested, 'followupWithinMinutesAfterInterested'],
-  ]) {
-    for (const r of rows) {
-      const mins = (Date.now() - new Date(r.anchor_at).getTime()) / 60000;
-      const level = classify(mins, rules[key]);
-      if (level === 'OK') continue;
-      seenIds.add(r.customer_id);
-      if (level === 'BREACHED') breached++;
-      else warning++;
-    }
-  }
-  return { warning, breached, customersAffected: seenIds.size };
-}

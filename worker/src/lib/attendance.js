@@ -189,11 +189,6 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
   return { checkedOutAt: now, isEarly };
 }
 
-/** Fewest late check-ins this month for a user — used by lib/reclaim.js's "best teammate" ranking. */
-export async function getLateCountThisMonth(env, userId, month) {
-  return countLateThisMonth(env, userId, month);
-}
-
 /**
  * Mr. Hany's big single-page dashboard: every team_leader/employee account's
  * arrival time, departure time, a same-day activity summary (calls made,
