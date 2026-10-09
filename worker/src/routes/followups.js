@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
+import { requireAuth } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
 

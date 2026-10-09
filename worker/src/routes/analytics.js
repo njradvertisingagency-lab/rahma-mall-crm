@@ -18,32 +18,11 @@ const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000; // ٥ دقايق — الزرار 
 function dashboardCacheKey(user) {
   return `cache:dashboard:${user.role}:${user.employeeId ?? 'all'}`;
 }
-
-function round2(n) {
-  return Math.round(n * 100) / 100;
-}
-
 function todayStartIso() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.toISOString();
 }
-
-function rangeToDates(range, from, to) {
-  const now = new Date();
-  if (range === 'custom' && from && to) return { from, to };
-  const end = now.toISOString();
-  let start = new Date(now);
-  if (range === 'today') start.setHours(0, 0, 0, 0);
-  else if (range === 'yesterday') {
-    start.setDate(start.getDate() - 1);
-    start.setHours(0, 0, 0, 0);
-  } else if (range === '7d') start.setDate(start.getDate() - 7);
-  else if (range === '30d') start.setDate(start.getDate() - 30);
-  else start.setDate(start.getDate() - 7);
-  return { from: start.toISOString(), to: end };
-}
-
 analyticsRoutes.get('/dashboard', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;

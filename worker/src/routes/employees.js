@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, requireHR, requireSalesLead } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
-import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceWeights, computeScore, getPerformanceHistory, computeBadges } from '../lib/performance.js';
+import { computeAllEmployeeStats, computeEmployeeCounters, getPerformanceHistory, computeBadges } from '../lib/performance.js';
 import { getEmployeeWorkQueue, getFollowupSuggestions } from '../lib/workqueue.js';
 import { setDailyGoal, getDailyGoalProgress } from '../lib/dailygoals.js';
 import { hashPassword, randomSaltHex } from '../lib/passwords.js';

@@ -5,7 +5,7 @@
 // database or executes a reassignment/follow-up on its own — the Team Leader
 // (or the employee, for their own queue) always takes the actual action
 // through the existing, already-audited endpoints.
-import { getEmployeePresenceMap, getPresenceThresholds } from './presence.js';
+import { getEmployeePresenceMap } from './presence.js';
 
 // Ranks an employee's open customers so the busiest/most-urgent ones surface
 // first. Every signal used is real (priority flag, an actually-overdue

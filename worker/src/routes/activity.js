@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { requireAuth, requireRole } from '../lib/auth.js';
-import { jsonError } from '../lib/db.js';
+import { requireAuth } from '../lib/auth.js';
 
 export const activityRoutes = new Hono();
 activityRoutes.use('*', requireAuth);

@@ -131,11 +131,6 @@ export async function getWorkHoursStatus(db) {
     isSystemOpenNow: isHolidayToday || minutesSinceMidnight >= generalOpenMin,
   };
 }
-
-function pad(n) {
-  return String(n).padStart(2, '0');
-}
-
 // ---------------------------------------------------------------------------
 // 1) LATE ATTENDANCE — once per employee per Cairo calendar day, and never
 // on a holiday. Fires on the first cron tick after the cutoff (start +

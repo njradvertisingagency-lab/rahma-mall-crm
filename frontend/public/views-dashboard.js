@@ -141,7 +141,7 @@
                 el('div', { class: 'flex gap-8', style: 'align-items:center' }, [App.avatar({ url: e.avatarUrl, name: e.name, sizeClass: 'avatar-sm' }), el('div', { style: 'font-weight:700' }, [e.name])]),
                 badges.availability(e.availability),
               ]),
-              el('div', { class: 'mt-12 muted', style: 'font-size:12.5px' }, [`موزّع: ${e.assigned} · مغلق: ${e.closed} · متأخر: ${e.followupsOverdue}`]),
+              el('div', { class: 'mt-12 muted', style: 'font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px 10px' }, [el('span', {}, [`موزّع: ${e.assigned}`]), el('span', {}, [`مغلق: ${e.closed}`]), el('span', {}, [`متأخر: ${e.followupsOverdue}`])]),
               el('div', { class: 'progress-bar mt-8' }, [el('div', { style: `width:${Math.round(e.completionRate * 100)}%` })]),
               el('div', { class: 'faint mt-8' }, [`النقاط: ${e.performanceScore}`]),
             ])
@@ -173,7 +173,7 @@
       : (user.role === 'team_leader' ? 'لوحة تحكم الفريق' : `أهلاً بك، ${user.displayName}`);
     const header = el('div', { class: 'page-header' }, [
       el('div', {}, [
-        el('div', { class: 'page-title' }, [titleText]),
+        el('div', { class: 'page-title' }, user.department !== 'accounting' && user.role !== 'team_leader' ? ['أهلاً بك، ', el('bdi', {}, [user.displayName])] : [titleText]),
         el('div', { class: 'muted' }, [new Date().toLocaleDateString('ar-EG-u-nu-latn', { timeZone: 'Africa/Cairo', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })]),
       ]),
     ]);
