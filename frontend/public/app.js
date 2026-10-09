@@ -848,14 +848,12 @@ function renderConnBadge() {
 // زرار التحديث اليدوي — بديل التحديث التلقائي اللي اتلغى لتوفير القراءات.
 // freshNext بتخلي لوحة التحكم تتخطى الكاش المؤقت وتجيب أرقام جديدة.
 function renderRefreshBtn() {
-  const dot = el('span', { style: 'position:absolute;top:2px;inset-inline-end:2px;width:9px;height:9px;border-radius:50%;background:var(--danger,#e53935);display:' + (App.state.pendingAssign ? 'block' : 'none') });
   const btn = el('button', {
-    class: 'btn btn-icon',
-    style: 'position:relative',
+    class: 'btn btn-icon refresh-btn' + (App.state.pendingAssign ? ' refresh-needed' : ''),
     title: 'تحديث الصفحة',
-    onclick: () => { App.state.pendingAssign = false; dot.style.display = 'none'; App.freshNext = true; renderRoute(); },
-  }, ['🔄', dot]);
-  btn.offEvt = App.on('assign-pending', () => { dot.style.display = App.state.pendingAssign ? 'block' : 'none'; });
+    onclick: () => { App.state.pendingAssign = false; btn.classList.remove('refresh-needed'); App.freshNext = true; renderRoute(); },
+  }, ['🔄']);
+  btn.offEvt = App.on('assign-pending', () => { btn.classList.toggle('refresh-needed', !!App.state.pendingAssign); });
   return btn;
 }
 
