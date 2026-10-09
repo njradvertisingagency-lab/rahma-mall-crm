@@ -55,7 +55,8 @@ export async function sweepAutoReclaim(db, env) {
        WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
          AND c.assigned_at >= ? AND c.assigned_at <= ?
          AND NOT EXISTS (SELECT 1 FROM customer_status_history h WHERE h.customer_id = c.id AND h.changed_at >= c.assigned_at)
-         AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)`
+         AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)
+         AND NOT EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.created_at >= c.assigned_at)`
     )
     .bind(dayStartIso, dayEndIso)
     .all();

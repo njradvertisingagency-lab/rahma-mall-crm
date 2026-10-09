@@ -76,10 +76,10 @@ function customerRowToJson(row) {
 function scopeToUser(user, sql, binds, conds) {
   if (user.role === 'employee') {
     // الموظف يفتح يلاقي أرقام النهارده بس (بتوقيت القاهرة) — أي رقم اتوزع
-    // قبل كده يختفي من قائمته، إلا العميل المهتم / اللي عليه متابعة عشان
-    // ما يضيعش عميل جاد. الأرقام القديمة فاضلة في القاعدة ويشوفها المدير.
+    // قبل كده يختفي من قائمته، إلا العميل المهتم / عليه متابعة / ما ردش / موبايله
+    // مقفول أو مشغول — عشان ما يضيعش أي رقم لسه محتاج اتصال. الأرقام القديمة فاضلة في القاعدة ويشوفها المدير.
     const { dayStartIso } = getCairoDayBoundsUtc(getCairoNow().dateStr);
-    conds.push(`c.assigned_employee_id = ? AND (c.assigned_at >= ? OR c.status IN ('INTERESTED','FOLLOW_UP'))`);
+    conds.push(`c.assigned_employee_id = ? AND (c.assigned_at >= ? OR c.status IN ('INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`);
     binds.push(user.employeeId, dayStartIso);
   }
 }
