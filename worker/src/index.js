@@ -24,7 +24,7 @@ import { sweepPresence } from './lib/presence.js';
 import { recordDailySnapshots } from './lib/performance.js';
 import { sweepDnd } from './lib/dnd.js';
 import { sweepOffHoursAvailability, getCairoNow, getCairoWeekday, isDueEvery } from './lib/workhours.js';
-import { sweepAutoReclaim, sweepRedistribute3pm, sweepAutoDistribute } from './lib/reclaim.js';
+import { sweepAutoReclaim, sweepRedistribute3pm, sweepAutoDistribute, sweepPurgeNotInterested } from './lib/reclaim.js';
 import { sweepLateNotePenalty, sweepMonthlyTopSales } from './lib/motivation.js';
 
 export { TeamRoom } from './durable-objects/team-room.js';
@@ -227,6 +227,13 @@ export default {
     // exact minute: each one already carries its own same-day dedup guard,
     // and the states they set (off-hours DND, availability) simply persist
     // overnight untouched, which is the correct resting state anyway.
+    // تنظيف الخميس ١٢:٠٠: حذف العملاء "غير مهتم" (الخميس إجازة فالـ sweeps العادية واقفة).
+    if (event.cron === '* * * * *' && getCairoWeekday() === 'Thursday') {
+      const m = getCairoNow().minutesSinceMidnight;
+      if (m >= 12 * 60 && m <= 12 * 60 + 2) {
+        ctx.waitUntil(sweepPurgeNotInterested(env.DB).catch((e) => console.error('sweepPurgeNotInterested failed', e)));
+      }
+    }
     if (!sweepsShouldRunNow()) return;
 
     if (event.cron === '* * * * *') {
