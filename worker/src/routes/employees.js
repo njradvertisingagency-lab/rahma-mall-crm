@@ -150,14 +150,16 @@ employeeRoutes.post('/:id/reset-password', requireHR, async (c) => {
 // the app. A short cache keeps it cheap during normal traffic, and the cached
 // copy doubles as the fallback when D1 is unreachable, so the team still sees
 // who is on shift instead of an error.
-const EMPLOYEES_CACHE_TTL_MS = 15 * 1000;
+const EMPLOYEES_CACHE_TTL_MS = 15 * 1000; // قائد الفريق: حالة التواجد لازم تكون قريبة من الحقيقة
+const EMPLOYEE_SELF_CACHE_TTL_MS = 120 * 1000; // الموظف: عدّاداته الشخصية بس — تأخير دقيقتين مقبول
 
 employeeRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const cacheKey = `cache:employees:${user.role === 'employee' ? `emp:${user.employeeId}` : 'tl'}`;
   const cached = await sessGet(c.env, cacheKey).catch(() => null);
-  if (cached && Date.now() - cached.cachedAt < EMPLOYEES_CACHE_TTL_MS) {
+  const ttl = user.role === 'employee' ? EMPLOYEE_SELF_CACHE_TTL_MS : EMPLOYEES_CACHE_TTL_MS;
+  if (cached && Date.now() - cached.cachedAt < ttl) {
     return c.json(cached.payload);
   }
 

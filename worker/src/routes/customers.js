@@ -201,11 +201,6 @@ customerRoutes.get('/', async (c) => {
   const offset = (page - 1) * pageSize;
 
   const where = conds.join(' AND ');
-  const countRow = await db
-    .prepare(`SELECT COUNT(*) AS n FROM customers c WHERE ${where}`)
-    .bind(...binds)
-    .first();
-
   const sortMap = {
     createdAt: 'c.created_at',
     updatedAt: 'c.updated_at',
@@ -240,9 +235,21 @@ customerRoutes.get('/', async (c) => {
     .bind(...binds, pageSize, offset)
     .all();
 
+  // الصفحة مش مليانة => العدد الكلي معروف من غير استعلام COUNT (بيوفر قراءة كل الصفوف المطابقة تاني).
+  let total;
+  if (rows.results.length < pageSize && (offset === 0 || rows.results.length > 0)) {
+    total = offset + rows.results.length;
+  } else {
+    const countRow = await db
+      .prepare(`SELECT COUNT(*) AS n FROM customers c WHERE ${where}`)
+      .bind(...binds)
+      .first();
+    total = countRow.n;
+  }
+
   const payload = {
     customers: rows.results.map(customerRowToJson),
-    pagination: { page, pageSize, total: countRow.n },
+    pagination: { page, pageSize, total },
   };
   backgroundWrite(c, () => sessPut(c.env, cacheKey, { payload, cachedAt: Date.now() }), 'customers list: could not update cache (non-fatal)');
   return c.json(payload);
@@ -349,6 +356,7 @@ customerRoutes.get('/:id', async (c) => {
     needsNoteOverride = !!nn.needs_note;
   }
 
+  const slaPromise = computeCustomerSla(db, id);
   const [notes, followups, statusHistory, assignments, callAttempts, branchVisits, purchases, products, seenHistory, sla, leadScore] = await Promise.all([
     db.prepare(`SELECT * FROM customer_notes WHERE customer_id = ? ORDER BY created_at ASC`).bind(id).all(),
     db.prepare(`SELECT f.*, e.name AS employee_name FROM followups f LEFT JOIN employees e ON e.id = f.employee_id WHERE f.customer_id = ? ORDER BY f.scheduled_for ASC`).bind(id).all(),
@@ -359,8 +367,8 @@ customerRoutes.get('/:id', async (c) => {
     db.prepare(`SELECT p.*, br.name AS branch_name, e.name AS employee_name FROM purchase_transactions p JOIN branches br ON br.id = p.branch_id LEFT JOIN employees e ON e.id = p.attributed_employee_id WHERE p.customer_id = ? ORDER BY p.purchase_at DESC`).bind(id).all(),
     db.prepare(`SELECT product FROM customer_products WHERE customer_id = ? ORDER BY created_at ASC`).bind(id).all(),
     getCustomerSeenHistory(db, id),
-    computeCustomerSla(db, id),
-    computeLeadScore(db, id),
+    slaPromise,
+    computeLeadScore(db, id, { slaPromise }),
   ]);
 
   const purchaseIds = purchases.results.map((p) => p.id);
