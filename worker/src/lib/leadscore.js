@@ -35,7 +35,8 @@ export async function computeLeadScore(db, customerId, opts = {}) {
     db.prepare(`SELECT outcome, created_at FROM call_attempts WHERE customer_id = ? ORDER BY created_at DESC`).bind(customerId).all(),
     db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE customer_id = ?`).bind(customerId).first(),
     db.prepare(`SELECT id FROM followups WHERE customer_id = ? AND status IN ('UPCOMING','DUE','OVERDUE') LIMIT 1`).bind(customerId).first(),
-    computeCustomerSla(db, customerId).catch(() => null),
+    // opts.slaPromise: الـ SLA اتحسب بالفعل في نفس الطلب (صفحة تفاصيل العميل) — نعيد استخدامه بدل ما نحسبه مرة تانية (٥ استعلامات زيادة).
+    (opts.slaPromise || computeCustomerSla(db, customerId)).catch(() => null),
   ]);
   const attempts = callAttemptsRes.results;
 
