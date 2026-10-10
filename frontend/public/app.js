@@ -892,10 +892,11 @@ const moneyFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 function calcInstallment(amount, plan) {
   const down = amount * INSTALLMENT_DOWN_PCT;
   const base = plan.deductDown ? amount - down : amount; // المبلغ اللي الأقساط بتتحسب عليه
-  const interest = base * plan.rate;
-  const totalInstallments = base + interest;
   const months = plan.years * 12;
-  return { down, base, interest, months, totalInstallments, monthly: totalInstallments / months, grandTotal: down + totalInstallments };
+  // القسط الشهري بيتقفل دايمًا لأقرب ١٠ جنيه لفوق (12031 => 12040). الـ round بـ 1e-6 عشان أخطاء الكسور العشرية ما تقفلش رقم صحيح لفوق.
+  const monthly = Math.ceil(Math.round((base * (1 + plan.rate)) / months * 1e6) / 1e6 / 10) * 10;
+  const totalInstallments = monthly * months;
+  return { down, base, interest: totalInstallments - base, months, totalInstallments, monthly, grandTotal: down + totalInstallments };
 }
 
 // بيقبل أرقام عربية وفواصل (٥٠٬٠٠٠ أو 50,000) ويرجّع رقم أو 0.
