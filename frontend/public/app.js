@@ -877,11 +877,12 @@ App.startPresenceHeartbeat = function () {
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // حاسبة أقساط العملاء — حساب لحظي في المتصفح بس (مفيش أي قراءة/كتابة في القاعدة).
-// المقدم ٢٠٪ من المبلغ، والفايدة نسبة كلية على المتبقي (بعد المقدم) عن المدة كلها.
+// المقدم ٢٠٪ من المبلغ بيتاخد من العميل في كل الخطط. الفايدة نسبة كلية عن المدة كلها.
+// خطة السنة بس: القسط بيتحسب على المتبقي بعد المقدم. السنتين/٣/٤: القسط بيتحسب على المبلغ كله (المقدم مش بيتخصم).
 // ---------------------------------------------------------------------------
 const INSTALLMENT_DOWN_PCT = 0.2;
 const INSTALLMENT_PLANS = [
-  { years: 1, rate: 0.3, label: 'سنة' },
+  { years: 1, rate: 0.3, label: 'سنة', deductDown: true },
   { years: 2, rate: 0.45, label: 'سنتين' },
   { years: 3, rate: 0.55, label: '٣ سنين' },
   { years: 4, rate: 0.65, label: '٤ سنين' },
@@ -890,10 +891,11 @@ const moneyFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 function calcInstallment(amount, plan) {
   const down = amount * INSTALLMENT_DOWN_PCT;
-  const financed = amount - down;
-  const totalFinanced = financed * (1 + plan.rate);
+  const base = plan.deductDown ? amount - down : amount; // المبلغ اللي الأقساط بتتحسب عليه
+  const interest = base * plan.rate;
+  const totalInstallments = base + interest;
   const months = plan.years * 12;
-  return { down, financed, months, totalFinanced, monthly: totalFinanced / months, grandTotal: down + totalFinanced };
+  return { down, base, interest, months, totalInstallments, monthly: totalInstallments / months, grandTotal: down + totalInstallments };
 }
 
 // بيقبل أرقام عربية وفواصل (٥٠٬٠٠٠ أو 50,000) ويرجّع رقم أو 0.
@@ -935,8 +937,8 @@ function openInstallmentCalculator() {
       el('div', { class: 'calc-monthly-sub' }, ['لمدة ' + plan.label + ' (' + r.months + ' شهر)']),
     ]));
     result.appendChild(row('المقدم (٢٠٪)', moneyFmt.format(Math.round(r.down)) + ' ج'));
-    result.appendChild(row('المتبقي بعد المقدم', moneyFmt.format(Math.round(r.financed)) + ' ج'));
-    result.appendChild(row('الفايدة (' + Math.round(plan.rate * 100) + '٪)', moneyFmt.format(Math.round(r.financed * plan.rate)) + ' ج'));
+    result.appendChild(row(plan.deductDown ? 'المتبقي بعد المقدم' : 'الأقساط محسوبة على كامل المبلغ', moneyFmt.format(Math.round(r.base)) + ' ج'));
+    result.appendChild(row('الفايدة (' + Math.round(plan.rate * 100) + '٪)', moneyFmt.format(Math.round(r.interest)) + ' ج'));
     result.appendChild(row('إجمالي اللي هيتدفع (مع المقدم)', moneyFmt.format(Math.round(r.grandTotal)) + ' ج', 'calc-total'));
     compare.appendChild(el('div', { class: 'calc-compare-title' }, ['مقارنة كل المدد']));
     INSTALLMENT_PLANS.forEach((p) => {
