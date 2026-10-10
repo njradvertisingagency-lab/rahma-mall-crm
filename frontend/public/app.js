@@ -738,7 +738,10 @@ function renderShell() {
         ]),
       ]),
     ]),
-    el('div', { class: 'nav' }, nav.map(([path, icon, label]) =>
+    el('div', { class: 'nav' }, [el('div', { class: 'nav-item nav-calc', onclick: () => { openInstallmentCalculator(); document.getElementById('sidebar').classList.remove('open'); } }, [
+      el('span', { class: 'nav-icon' }, ['🧮']),
+      'حاسبة الأقساط',
+    ])].concat(nav.map(([path, icon, label]) =>
       el('div', {
         class: 'nav-item' + (currentPath === path ? ' active' : ''),
         onclick: () => { App.navigate('#/' + path); document.getElementById('sidebar').classList.remove('open'); },
@@ -746,7 +749,7 @@ function renderShell() {
         el('span', { class: 'nav-icon', style: 'position:relative' }, [icon]),
         label,
       ])
-    )),
+    ))),
     el('div', { class: 'sidebar-footer' }, [
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
       el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
@@ -768,6 +771,7 @@ function renderShell() {
       }),
     ]),
     el('div', { class: 'topbar-actions' }, [
+      el('button', { class: 'btn btn-outline btn-sm calc-topbtn', title: 'حاسبة الأقساط', onclick: openInstallmentCalculator }, ['🧮 حاسبة الأقساط']),
       connBadge,
       refreshBtn,
       attendanceBtn,
@@ -871,6 +875,98 @@ App.startPresenceHeartbeat = function () {
 // العادي. البيانات تُحسب حيًّا من الخادم في كل ضغطة، بالإضافة لإشعار تلقائي
 // يومي مرة عند بداية الدوام ومرة عند نهايته (انظر worker/src/lib/opsreports.js).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// حاسبة أقساط العملاء — حساب لحظي في المتصفح بس (مفيش أي قراءة/كتابة في القاعدة).
+// المقدم ٢٠٪ من المبلغ، والفايدة نسبة كلية على المتبقي (بعد المقدم) عن المدة كلها.
+// ---------------------------------------------------------------------------
+const INSTALLMENT_DOWN_PCT = 0.2;
+const INSTALLMENT_PLANS = [
+  { years: 1, rate: 0.3, label: 'سنة' },
+  { years: 2, rate: 0.45, label: 'سنتين' },
+  { years: 3, rate: 0.55, label: '٣ سنين' },
+  { years: 4, rate: 0.65, label: '٤ سنين' },
+];
+const moneyFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+
+function calcInstallment(amount, plan) {
+  const down = amount * INSTALLMENT_DOWN_PCT;
+  const financed = amount - down;
+  const totalFinanced = financed * (1 + plan.rate);
+  const months = plan.years * 12;
+  return { down, financed, months, totalFinanced, monthly: totalFinanced / months, grandTotal: down + totalFinanced };
+}
+
+// بيقبل أرقام عربية وفواصل (٥٠٬٠٠٠ أو 50,000) ويرجّع رقم أو 0.
+function parseAmountInput(raw) {
+  const latin = String(raw || '')
+    .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+    .replace(/[,٬،\s]/g, '')
+    .replace(/٫/g, '.');
+  const n = parseFloat(latin);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function openInstallmentCalculator() {
+  if (document.querySelector('.calc-modal')) return;
+  let plan = INSTALLMENT_PLANS[0];
+  const input = el('input', { class: 'calc-input', type: 'text', inputmode: 'decimal', dir: 'ltr', placeholder: 'اكتب المبلغ — مثال 50000', autocomplete: 'off' });
+  const chips = INSTALLMENT_PLANS.map((p) =>
+    el('button', { type: 'button', class: 'calc-chip' + (p === plan ? ' active' : ''), onclick: () => { plan = p; chips.forEach((c, i) => c.classList.toggle('active', INSTALLMENT_PLANS[i] === p)); render(); } }, [p.label])
+  );
+  const result = el('div', { class: 'calc-result' });
+  const compare = el('div', { class: 'calc-compare' });
+
+  function row(label, value, cls) {
+    return el('div', { class: 'calc-row' + (cls ? ' ' + cls : '') }, [el('span', {}, [label]), el('b', {}, [value])]);
+  }
+  function render() {
+    const amount = parseAmountInput(input.value);
+    result.innerHTML = '';
+    compare.innerHTML = '';
+    if (!amount) {
+      result.appendChild(el('div', { class: 'calc-empty' }, ['اكتب المبلغ واختار المدة عشان يظهرلك القسط فورًا']));
+      return;
+    }
+    const r = calcInstallment(amount, plan);
+    result.appendChild(el('div', { class: 'calc-monthly' }, [
+      el('div', { class: 'calc-monthly-label' }, ['العميل هيدفع كل شهر']),
+      el('div', { class: 'calc-monthly-value' }, [moneyFmt.format(Math.round(r.monthly)) + ' ج']),
+      el('div', { class: 'calc-monthly-sub' }, ['لمدة ' + plan.label + ' (' + r.months + ' شهر)']),
+    ]));
+    result.appendChild(row('المقدم (٢٠٪)', moneyFmt.format(Math.round(r.down)) + ' ج'));
+    result.appendChild(row('المتبقي بعد المقدم', moneyFmt.format(Math.round(r.financed)) + ' ج'));
+    result.appendChild(row('الفايدة (' + Math.round(plan.rate * 100) + '٪)', moneyFmt.format(Math.round(r.financed * plan.rate)) + ' ج'));
+    result.appendChild(row('إجمالي اللي هيتدفع (مع المقدم)', moneyFmt.format(Math.round(r.grandTotal)) + ' ج', 'calc-total'));
+    compare.appendChild(el('div', { class: 'calc-compare-title' }, ['مقارنة كل المدد']));
+    INSTALLMENT_PLANS.forEach((p) => {
+      const c = calcInstallment(amount, p);
+      compare.appendChild(el('div', { class: 'calc-compare-row' + (p === plan ? ' active' : ''), onclick: () => { plan = p; chips.forEach((ch, i) => ch.classList.toggle('active', INSTALLMENT_PLANS[i] === p)); render(); } }, [
+        el('span', {}, [p.label]),
+        el('b', {}, [moneyFmt.format(Math.round(c.monthly)) + ' ج شهريًا']),
+      ]));
+    });
+  }
+  input.addEventListener('input', render);
+
+  const body = el('div', { class: 'calc-body' }, [
+    el('label', { class: 'calc-label' }, ['المبلغ']),
+    input,
+    el('label', { class: 'calc-label' }, ['مدة التقسيط']),
+    el('div', { class: 'calc-chips' }, chips),
+    result,
+    compare,
+  ]);
+  const m = modal('🧮 حاسبة الأقساط', body, []);
+  m.el.classList.add('calc-modal');
+  const onKey = (e) => { if (e.key === 'Escape') m.close(); };
+  document.addEventListener('keydown', onKey);
+  new MutationObserver((_, obs) => { if (!m.el.isConnected) { document.removeEventListener('keydown', onKey); obs.disconnect(); } }).observe(document.body, { childList: true });
+  render();
+  input.focus();
+}
+App.openInstallmentCalculator = openInstallmentCalculator;
+
 function modal(title, bodyNode, footerNodes) {
   const backdrop = el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } });
   const m = el('div', { class: 'modal' }, [
