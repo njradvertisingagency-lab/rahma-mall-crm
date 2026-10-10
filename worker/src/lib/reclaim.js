@@ -349,3 +349,55 @@ export async function sweepAutoDistribute(db, env) {
   }
   return { distributed: ids.length };
 }
+
+// ---------------------------------------------------------------------------
+// تنظيف أسبوعي: كل يوم خميس (الإجازة) ١٢:٠٠ الضهر بتوقيت القاهرة، حذف نهائي
+// لكل العملاء اللي حالتهم "غير مهتم" (مؤرشفين وغير مؤرشفين) — بطلب صاحب الشركة.
+//   - مرة واحدة في اليوم (settings key: purge_not_interested_sent).
+//   - الجداول المرتبطة بالعميل (ملاحظات، تاريخ حالات، مكالمات…) بتتحذف تلقائي
+//     بـ ON DELETE CASCADE؛ distribution_items بنحذفها بإيدينا لأنها من غير cascade.
+//   - أي عميل عليه مكافآت (reward_transactions) بيتسيب — دي بيانات مرتبات.
+//   - خارج الخميس ١٢:٠٠–١٢:٠٢ مفيش أي قراءة من القاعدة.
+// ---------------------------------------------------------------------------
+const PURGE_MIN = 12 * 60;
+export async function sweepPurgeNotInterested(db) {
+  const now = getCairoNow();
+  if (now.minutesSinceMidnight < PURGE_MIN || now.minutesSinceMidnight > PURGE_MIN + 2) return { purged: 0 };
+  const status = await getWorkHoursStatus(db);
+  const dedupRow = await db.prepare(`SELECT value FROM settings WHERE key = 'purge_not_interested_sent'`).first();
+  try {
+    if (dedupRow && JSON.parse(dedupRow.value).date === status.dateStr) return { purged: 0 };
+  } catch {
+    /* ignore */
+  }
+
+  const rows = await db
+    .prepare(
+      `SELECT c.id FROM customers c
+       WHERE c.status = 'NOT_INTERESTED'
+         AND NOT EXISTS (SELECT 1 FROM reward_transactions r WHERE r.customer_id = c.id)`
+    )
+    .all();
+  const ids = rows.results.map((r) => r.id);
+
+  for (let i = 0; i < ids.length; i += 40) {
+    const chunk = ids.slice(i, i + 40);
+    const marks = chunk.map(() => '?').join(',');
+    await db.batch([
+      db.prepare(`DELETE FROM distribution_items WHERE customer_id IN (${marks})`).bind(...chunk),
+      db.prepare(`DELETE FROM customers WHERE id IN (${marks})`).bind(...chunk),
+    ]);
+  }
+
+  await db
+    .prepare(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('purge_not_interested_sent', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+    )
+    .bind(JSON.stringify({ date: status.dateStr, purged: ids.length }), nowIso())
+    .run();
+  if (ids.length > 0) {
+    await logActivity(db, { actor: null, action: 'AUTO_PURGE_NOT_INTERESTED', entityType: 'customer', entityId: 'bulk', metadata: { count: ids.length } });
+  }
+  return { purged: ids.length };
+}
