@@ -913,7 +913,7 @@ function parseAmountInput(raw) {
 function openInstallmentCalculator() {
   if (document.querySelector('.calc-modal')) return;
   let plan = INSTALLMENT_PLANS[0];
-  const input = el('input', { class: 'calc-input', type: 'text', inputmode: 'decimal', dir: 'ltr', placeholder: 'اكتب المبلغ — مثال 50000', autocomplete: 'off' });
+  const input = el('input', { class: 'calc-input', type: 'text', inputmode: 'decimal', dir: 'ltr', placeholder: 'اكتب المبلغ — مثال 50,000', autocomplete: 'off' });
   const chips = INSTALLMENT_PLANS.map((p) =>
     el('button', { type: 'button', class: 'calc-chip' + (p === plan ? ' active' : ''), onclick: () => { plan = p; chips.forEach((c, i) => c.classList.toggle('active', INSTALLMENT_PLANS[i] === p)); render(); } }, [p.label])
   );
@@ -950,7 +950,21 @@ function openInstallmentCalculator() {
       ]));
     });
   }
-  input.addEventListener('input', render);
+  // تنسيق الرقم وهو بيتكتب: 20000 => 20,000 (بيحافظ على مكان المؤشر وبيحوّل الأرقام العربي لإنجليزي).
+  input.addEventListener('input', () => {
+    const raw = input.value;
+    const caret = input.selectionStart ?? raw.length;
+    const isDigitChar = (ch) => /[0-9٠-٩۰-۹]/.test(ch);
+    const digitsBeforeCaret = [...raw.slice(0, caret)].filter(isDigitChar).length;
+    const digits = [...raw].filter(isDigitChar).map((ch) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(ch) >= 0 ? '٠١٢٣٤٥٦٧٨٩'.indexOf(ch) : '۰۱۲۳۴۵۶۷۸۹'.indexOf(ch) >= 0 ? '۰۱۲۳۴۵۶۷۸۹'.indexOf(ch) : ch)).join('').replace(/^0+(?=\d)/, '');
+    const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    input.value = formatted;
+    let pos = 0;
+    let seen = 0;
+    while (pos < formatted.length && seen < digitsBeforeCaret) { if (formatted[pos] !== ',') seen++; pos++; }
+    try { input.setSelectionRange(pos, pos); } catch { /* ignore */ }
+    render();
+  });
 
   const body = el('div', { class: 'calc-body' }, [
     el('label', { class: 'calc-label' }, ['المبلغ']),
