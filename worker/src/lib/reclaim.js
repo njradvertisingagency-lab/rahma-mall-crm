@@ -292,11 +292,20 @@ export async function sweepAutoDistribute(db, env) {
     return { distributed: 0 };
   }
 
+  // المخزن (غير موزّع) + أرقام "لا يوجد رد" من الأيام اللي فاتت (تتوزع لموظف غير اللي كان معاه).
+  // الحالة والملاحظات بتفضل زي ما هي لأنها مربوطة بالعميل مش بالموظف.
+  const { dayStartIso } = getCairoDayBoundsUtc(status.dateStr);
   const pool = await db
-    .prepare(`SELECT id FROM customers WHERE assigned_employee_id IS NULL AND archived = 0 ORDER BY created_at ASC`)
+    .prepare(
+      `SELECT id, NULL AS prev FROM customers WHERE assigned_employee_id IS NULL AND archived = 0
+       UNION ALL
+       SELECT id, assigned_employee_id AS prev FROM customers
+       WHERE status = 'NO_ANSWER' AND archived = 0 AND assigned_employee_id IS NOT NULL AND assigned_at < ?`
+    )
+    .bind(dayStartIso)
     .all();
-  const ids = pool.results.map((r) => r.id);
-  if (ids.length === 0) {
+  const items = pool.results;
+  if (items.length === 0) {
     await markDone({ distributed: 0, reason: 'empty_pool' });
     return { distributed: 0 };
   }
@@ -304,14 +313,22 @@ export async function sweepAutoDistribute(db, env) {
   const { label } = await nextDistributionLabel(db);
   const dist = await db
     .prepare(`INSERT INTO distributions (label, method, total_customers, created_by, notes) VALUES (?, 'ROUND_ROBIN', ?, NULL, 'توزيع تلقائي ١١:٣٠') RETURNING id`)
-    .bind(label, ids.length)
+    .bind(label, items.length)
     .first();
   const ts = nowIso();
   const counts = {};
+  const reassignedFrom = {};
+  const ids = [];
   const statements = [];
-  ids.forEach((cid, i) => {
-    const empId = onlineIds[i % onlineIds.length];
+  let rr = 0;
+  items.forEach((it) => {
+    const eligible = it.prev == null ? onlineIds : onlineIds.filter((id) => id !== it.prev);
+    if (eligible.length === 0) return; // الموظف الوحيد الأونلاين هو اللي كان معاه — يفضل عنده
+    const empId = eligible[rr++ % eligible.length];
+    const cid = it.id;
+    ids.push(cid);
     counts[empId] = (counts[empId] || 0) + 1;
+    if (it.prev != null) reassignedFrom[it.prev] = (reassignedFrom[it.prev] || 0) + 1;
     statements.push(
       db.prepare(`UPDATE customers SET assigned_employee_id = ?, assigned_at = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(empId, ts, ts, cid),
       db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason, distribution_id) VALUES (?, ?, NULL, 'DISTRIBUTION', ?)`).bind(cid, empId, dist.id),
@@ -319,6 +336,9 @@ export async function sweepAutoDistribute(db, env) {
     );
   });
   for (let i = 0; i < statements.length; i += 90) await db.batch(statements.slice(i, i + 90));
+  for (const eid of Object.keys(reassignedFrom)) {
+    await broadcast(env, 'CUSTOMER_REASSIGNED', { count: reassignedFrom[eid] }, { scope: 'employee', employeeId: Number(eid) }).catch(() => {});
+  }
 
   await markDone({ distributed: ids.length, distributionId: dist.id });
   await logActivity(db, {
