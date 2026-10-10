@@ -490,3 +490,28 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   50% { box-shadow: 0 0 0 10px rgba(229,57,53,0), 0 0 18px 6px rgba(229,57,53,.8); transform: scale(1.12); }
 }
 @media (prefers-reduced-motion: reduce) { .refresh-btn.refresh-needed { animation: none; box-shadow: 0 0 12px 4px rgba(229,57,53,.8); } }
+
+/* حاسبة الأقساط */
+.calc-modal .modal { max-width: 440px; width: calc(100% - 24px); }
+.calc-body { display: flex; flex-direction: column; gap: 10px; }
+.calc-label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.calc-input { width: 100%; font-size: 22px; font-weight: 800; padding: 12px 14px; text-align: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-family: inherit; }
+.calc-input:focus { outline: 2px solid var(--brand-2); outline-offset: 1px; }
+.calc-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.calc-chip { padding: 10px 4px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-weight: 700; font-family: inherit; cursor: pointer; }
+.calc-chip.active { background: var(--brand); color: var(--brand-foreground); border-color: var(--brand); }
+.calc-result { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.calc-empty { text-align: center; color: var(--text-faint); padding: 14px 6px; font-size: 13px; }
+.calc-monthly { text-align: center; background: var(--brand-2-soft); border-radius: var(--radius); padding: 14px 8px; margin-bottom: 4px; }
+.calc-monthly-label { font-size: 13px; color: var(--text-muted); font-weight: 700; }
+.calc-monthly-value { font-size: 34px; font-weight: 900; color: var(--brand-2); line-height: 1.2; }
+.calc-monthly-sub { font-size: 12px; color: var(--text-muted); }
+.calc-row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 6px 2px; border-bottom: 1px dashed var(--border); }
+.calc-row.calc-total { border-bottom: 0; font-size: 15px; }
+.calc-compare { margin-top: 6px; }
+.calc-compare-title { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; }
+.calc-compare-row { display: flex; justify-content: space-between; padding: 7px 10px; border-radius: var(--radius-sm); font-size: 13px; cursor: pointer; }
+.calc-compare-row.active { background: var(--success-soft); }
+.nav-item.nav-calc { font-weight: 800; }
+.calc-topbtn { font-weight: 800; }
+@media (max-width: 720px) { .calc-topbtn { font-size: 0; padding: 8px 10px; } .calc-topbtn::before { content: '🧮'; font-size: 18px; } }
