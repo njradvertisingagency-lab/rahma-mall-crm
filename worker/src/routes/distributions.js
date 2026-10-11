@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { nextDistributionLabel, logActivity, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
+import { protectedFirst, computeQuotas } from '../lib/protected.js';
 
 export const distributionRoutes = new Hono();
 distributionRoutes.use('*', requireAuth, requireSalesLead);
@@ -14,28 +15,35 @@ async function getEligibleEmployees(db, requestedIds, onlyAvailable) {
     list = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results;
   }
   if (onlyAvailable) list = list.filter((e) => e.availability === 'AVAILABLE');
-  return list;
+  return protectedFirst(list); // الموظفة الجديدة أول واحدة في الترتيب
 }
 
 function planEqual(customerIds, employees) {
-  // Contiguous fair blocks: remainder distributed one-extra to the first N employees.
-  const n = employees.length;
-  const base = Math.floor(customerIds.length / n);
-  const remainder = customerIds.length % n;
+  // Contiguous blocks حسب الحصص (الموظفة الجديدة أول واحدة وبتاخد أكتر بـ ٧-١٠ أرقام).
+  const quotas = computeQuotas(customerIds.length, employees.map((e) => e.id));
   const plan = new Map(employees.map((e) => [e.id, []]));
   let idx = 0;
-  employees.forEach((emp, i) => {
-    const count = base + (i < remainder ? 1 : 0);
+  employees.forEach((emp) => {
+    const count = quotas.get(Number(emp.id)) || 0;
     for (let k = 0; k < count; k++) plan.get(emp.id).push(customerIds[idx++]);
   });
   return plan;
 }
 
 function planRoundRobin(customerIds, employees) {
+  const quotas = computeQuotas(customerIds.length, employees.map((e) => e.id));
+  const remaining = new Map(employees.map((e) => [e.id, quotas.get(Number(e.id)) || 0]));
   const plan = new Map(employees.map((e) => [e.id, []]));
-  customerIds.forEach((cid, i) => {
-    const emp = employees[i % employees.length];
-    plan.get(emp.id).push(cid);
+  let i = 0;
+  customerIds.forEach((cid) => {
+    for (let t = 0; t < employees.length; t++) {
+      const emp = employees[i++ % employees.length];
+      if (remaining.get(emp.id) > 0) {
+        remaining.set(emp.id, remaining.get(emp.id) - 1);
+        plan.get(emp.id).push(cid);
+        return;
+      }
+    }
   });
   return plan;
 }
@@ -236,6 +244,7 @@ reassignmentRoutes.post('/', async (c) => {
   if (body.mode === 'REDISTRIBUTE') {
     const onlyAvailable = body.onlyAvailableEmployees !== false;
     const employees = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results.filter((e) => !onlyAvailable || e.availability === 'AVAILABLE');
+    employees.splice(0, employees.length, ...protectedFirst(employees));
     if (employees.length === 0) return jsonError(c, 400, 'لا يوجد موظف مؤهل لإعادة التوزيع إليه', 'NO_ELIGIBLE_EMPLOYEES');
     const plan = planEqual(customerIds, employees);
     const ts = nowIso();

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../lib/auth.js';
 import { logActivity, broadcast, jsonError, nowIso } from '../lib/db.js';
-import { getWhatsappTemplateSettings, generateMessage, buildWhatsAppUrl } from '../lib/whatsapp.js';
+import { getWhatsappTemplateSettings, generateMessage, buildWhatsAppUrl, TRAINEE_TEMPLATES } from '../lib/whatsapp.js';
+import { isProtectedEmployee } from '../lib/protected.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
 
 export const whatsappRoutes = new Hono();
@@ -41,10 +42,19 @@ whatsappRoutes.get('/customers/:id/preview', async (c) => {
 
   const message = generateMessage({ customerName: customer.name, employeeName: employeeNameAr, companyName, template });
 
+  // الموظفة الجديدة بتختار من ٥ قوالب جاهزة.
+  const templates = user.role === 'employee' && isProtectedEmployee(user.employeeId)
+    ? TRAINEE_TEMPLATES.map((t) => ({
+        label: t.label,
+        message: generateMessage({ customerName: customer.name, employeeName: employeeNameAr, companyName, template: t.template }),
+      }))
+    : null;
+
   return c.json({
     phoneValid: valid,
     normalizedPhone: valid ? normalized : null,
     message,
+    templates,
     contactStatus: customer.whatsapp_contact_status,
     contactedAt: customer.whatsapp_contacted_at,
   });
