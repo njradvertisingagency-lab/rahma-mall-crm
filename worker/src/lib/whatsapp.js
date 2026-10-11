@@ -10,14 +10,11 @@
 // generateMessage() and buildWhatsAppUrl() today.
 
 const DEFAULT_TEMPLATE = [
-  'أهلاً بحضرتك {{customer_name}} 🌷',
-  'مع حضرتك {{employee_name}} من {{company_name}}.',
-  'حاولنا التواصل مع حضرتك هاتفيًا، ويسعدنا تواصلك معنا عند رؤيتك للرسالة.',
-  'يسعدنا تواصلك معنا في الوقت المناسب لحضرتك.',
-  'نتمنى لحضرتك يومًا سعيدًا 🌷',
-  '{{company_name}}',
+  'أهلاً بيك',
+  'مع حضرتك {{employee_name}} من {{company_name}}',
+  'كنت بحاول أكلم حضرتك بخصوص طلبك، تحب نكمل هنا على واتساب ولا أكلمك في معاد يناسبك؟',
 ].join('\n');
-const DEFAULT_COMPANY_NAME = 'رحمة مول';
+const DEFAULT_COMPANY_NAME = 'رحمه مول للتقسيط';
 
 export async function getWhatsappTemplateSettings(db) {
   const row = await db.prepare(`SELECT value FROM settings WHERE key = 'whatsapp_template'`).first();
@@ -81,14 +78,8 @@ export async function getMessageStatus() {
 // قوالب جاهزة للموظفة الجديدة (فترة التدريب) — تختار واحد منهم كل مرة تبعت لعميل.
 const TRAINEE_TEMPLATES = [
   {
-    label: 'تعريف سريع',
-    template: [
-      'أهلاً بحضرتك {{customer_name}} 🌷',
-      'مع حضرتك {{employee_name}} من {{company_name}}.',
-      'حاولت أتواصل مع حضرتك تليفونيًا ومقدرتش أوصل لحضرتك.',
-      'ممكن تتواصل معايا في الوقت المناسب ليك، ويسعدني أخدمك.',
-      '{{company_name}}',
-    ].join('\n'),
+    label: 'الرسالة الأساسية',
+    template: DEFAULT_TEMPLATE,
   },
   {
     label: 'عرض مساعدة',
