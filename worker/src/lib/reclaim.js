@@ -29,7 +29,7 @@
 import { nowIso, logActivity, broadcast, nextDistributionLabel } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
-import { PROTECTED_SQL, protectedFirst } from './protected.js';
+import { PROTECTED_SQL, protectedFirst, computeQuotas } from './protected.js';
 
 export async function sweepAutoReclaim(db, env) {
   // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
@@ -319,11 +319,20 @@ export async function sweepAutoDistribute(db, env) {
   const reassignedFrom = {};
   const ids = [];
   const statements = [];
+  // حصص: زمايل مهرة عدد متساوي ومهرة أكتر منهم بـ ٧-١٠. بنختار لكل رقم المؤهل اللي باقيله أكبر حصة.
+  const remaining = computeQuotas(items.length, onlineIds);
   let rr = 0;
   items.forEach((it) => {
     const eligible = it.prev == null ? onlineIds : onlineIds.filter((id) => id !== it.prev);
     if (eligible.length === 0) return; // الموظف الوحيد الأونلاين هو اللي كان معاه — يفضل عنده
-    const empId = eligible[rr++ % eligible.length];
+    let empId = eligible[0];
+    let best = -Infinity;
+    for (const id of eligible) {
+      const r = remaining.get(id) ?? 0;
+      if (r > best) { best = r; empId = id; }
+    }
+    if (best <= 0) empId = eligible[rr++ % eligible.length];
+    else remaining.set(empId, best - 1);
     const cid = it.id;
     ids.push(cid);
     counts[empId] = (counts[empId] || 0) + 1;
