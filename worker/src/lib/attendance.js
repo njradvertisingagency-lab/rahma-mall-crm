@@ -14,6 +14,7 @@
 // succeeds and is durably recorded — only the notification might be missed
 // — matching the same "the real mutation must never fail because a
 // side-effect hiccupped" philosophy as broadcast() in lib/db.js.
+import { isProtectedUser } from './protected.js';
 import { nowIso, broadcast, logActivity } from './db.js';
 import { getWorkHoursStatus } from './workhours.js';
 import { asGet, asPut, asList, asCheckIn, asCheckOut } from './attendanceStore.js';
@@ -119,7 +120,8 @@ export async function recordCheckIn(env, user) {
   }
 
   const now = nowIso();
-  const isLate = !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
+  // الموظفة الجديدة (فترة تدريب): مفيش تأخير يتحسب عليها.
+  const isLate = !isProtectedUser(user.id) && !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
   const lateMinutes = isLate ? status.minutesSinceMidnight - status.startMin : 0;
 
   // الفحص ("هل مسجّل بالفعل؟") والكتابة بيحصلوا معًا ذرّيًّا جوه الـ Durable

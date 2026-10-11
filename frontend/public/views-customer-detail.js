@@ -630,12 +630,33 @@
           const proceed = confirm(`تم التواصل مع هذا العميل عبر واتساب بالفعل بتاريخ ${fmt.dateTime(c.whatsappContactedAt)}. هل تريد فتح واتساب مرة أخرى؟`);
           if (!proceed) return;
         }
-        const originalMessage = preview.message;
+        let originalMessage = preview.message;
         const textarea = el('textarea', { style: 'min-height:160px' }, [originalMessage]);
         textarea.value = originalMessage;
+        // قوالب جاهزة (للموظفة الجديدة): اختيار قالب بيملا الرسالة.
+        let templatePicker = null;
+        if (Array.isArray(preview.templates) && preview.templates.length) {
+          const chips = preview.templates.map((t, i) => el('button', {
+            type: 'button',
+            class: 'btn btn-outline btn-sm' + (i === 0 ? ' active' : ''),
+            style: 'margin:0 0 6px 6px',
+            onclick: () => {
+              originalMessage = t.message;
+              textarea.value = t.message;
+              chips.forEach((b, j) => b.classList.toggle('active', j === i));
+              chips.forEach((b, j) => { b.style.background = j === i ? 'var(--primary, #2563eb)' : ''; b.style.color = j === i ? '#fff' : ''; });
+            },
+          }, [t.label]));
+          originalMessage = preview.templates[0].message;
+          textarea.value = originalMessage;
+          chips[0].style.background = 'var(--primary, #2563eb)';
+          chips[0].style.color = '#fff';
+          templatePicker = el('div', { class: 'field' }, [el('label', {}, ['اختاري قالب الرسالة']), el('div', {}, chips)]);
+        }
         const body = el('div', {}, [
           el('div', { class: 'mb-8', style: 'font-size:13px' }, [el('b', {}, ['العميل: ']), c.name || '—', ' — ', el('span', { class: 'mono' }, [c.phone])]),
           el('div', { class: 'mb-12', style: 'font-size:13px' }, [el('b', {}, ['الموظف: ']), App.state.user.displayName]),
+          ...(templatePicker ? [templatePicker] : []),
           el('div', { class: 'field' }, [el('label', {}, ['الرسالة المقترحة']), textarea]),
           el('button', { class: 'link-btn', onclick: () => { textarea.value = originalMessage; } }, ['↺ إعادة الرسالة الافتراضية']),
         ]);

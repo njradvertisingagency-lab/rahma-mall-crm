@@ -78,4 +78,54 @@ export async function getMessageStatus() {
   throw new Error('getMessageStatus() requires a configured WhatsApp Business API integration (not enabled in this build).');
 }
 
-export { DEFAULT_TEMPLATE, DEFAULT_COMPANY_NAME };
+// قوالب جاهزة للموظفة الجديدة (فترة التدريب) — تختار واحد منهم كل مرة تبعت لعميل.
+const TRAINEE_TEMPLATES = [
+  {
+    label: 'تعريف سريع',
+    template: [
+      'أهلاً بحضرتك {{customer_name}} 🌷',
+      'مع حضرتك {{employee_name}} من {{company_name}}.',
+      'حاولت أتواصل مع حضرتك تليفونيًا ومقدرتش أوصل لحضرتك.',
+      'ممكن تتواصل معايا في الوقت المناسب ليك، ويسعدني أخدمك.',
+      '{{company_name}}',
+    ].join('\n'),
+  },
+  {
+    label: 'عرض مساعدة',
+    template: [
+      'مساء الخير {{customer_name}} 🌷',
+      'معاك {{employee_name}} من {{company_name}}.',
+      'شوفت إن حضرتك مهتم بخدماتنا، وحابة أساعد حضرتك في أي استفسار أو تفاصيل محتاجها.',
+      'قولّي إيه المناسب لحضرتك ونرتب كل حاجة. 😊',
+    ].join('\n'),
+  },
+  {
+    label: 'متابعة بعد عدم الرد',
+    template: [
+      'أهلاً {{customer_name}} 🌷',
+      'أنا {{employee_name}} من {{company_name}}، اتصلت بحضرتك قبل كده ومقدرتش أوصلك.',
+      'لو الوقت مش مناسب، قولّي أنسب معاد أكلم حضرتك فيه، وأنا تحت أمرك.',
+      'شكرًا لوقت حضرتك 🌸',
+    ].join('\n'),
+  },
+  {
+    label: 'دعوة للزيارة والاستفسار',
+    template: [
+      'أهلاً بحضرتك {{customer_name}} 🌷',
+      'معاك {{employee_name}} من {{company_name}}.',
+      'يسعدنا نستقبل حضرتك ونشرحلك كل التفاصيل والعروض المتاحة.',
+      'لو عندك أي سؤال ابعتلي هنا وهرد عليك في أقرب وقت. 🌟',
+      '{{company_name}}',
+    ].join('\n'),
+  },
+  {
+    label: 'رسالة قصيرة ودودة',
+    template: [
+      'صباح الخير {{customer_name}} ☀️',
+      '{{employee_name}} من {{company_name}} معاك.',
+      'حابة أطمّن على حضرتك، ولو محتاج أي مساعدة أنا موجودة دايمًا. 🌷',
+    ].join('\n'),
+  },
+];
+
+export { DEFAULT_TEMPLATE, DEFAULT_COMPANY_NAME, TRAINEE_TEMPLATES };

@@ -5,6 +5,7 @@
 // applyManualAdjustment من rewards.js — فيبقى الرصيد دائمًا مصدر حقيقة واحد.
 // الجدول الوحيد المُضاف (motivation_events) لا يخزّن أي رصيد؛ دوره فقط منع
 // صرف نفس المكافأة/الخصم مرتين (idempotency)، بنفس فكرة sweepOpsReports.
+import { PROTECTED_SQL } from './protected.js';
 import { applyManualAdjustment } from './rewards.js';
 import { getCairoNow, getCairoDayBoundsUtc } from './workhours.js';
 
@@ -116,7 +117,7 @@ export async function sweepLateNotePenalty(db, env) {
     .prepare(
       `SELECT cs.customer_id, cs.employee_id, cs.seen_at
        FROM customer_seen cs
-       WHERE cs.employee_id IS NOT NULL
+       WHERE cs.employee_id IS NOT NULL AND cs.employee_id NOT IN (${PROTECTED_SQL})
          AND cs.seen_at <= datetime('now', ?)
          AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = cs.customer_id AND n.created_at >= cs.seen_at)`
     )

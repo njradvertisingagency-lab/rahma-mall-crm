@@ -29,10 +29,7 @@
 import { nowIso, logActivity, broadcast, nextDistributionLabel } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
-
-// موظفين مستثنين من أي سحب تلقائي (مهرة id=4 — جديدة، طلب صاحب الشغل).
-const PROTECTED_EMPLOYEE_IDS = [4];
-const PROTECTED_SQL = PROTECTED_EMPLOYEE_IDS.join(',');
+import { PROTECTED_SQL, protectedFirst } from './protected.js';
 
 export async function sweepAutoReclaim(db, env) {
   // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
@@ -200,7 +197,7 @@ export async function sweepRedistribute3pm(db, env) {
       const fromEmployeeId = Number(employeeIdStr);
 
       // Eligible targets = online employees EXCEPT the original assignee
-      const targets = onlineEmployeeIds.filter((id) => id !== fromEmployeeId);
+      const targets = protectedFirst(onlineEmployeeIds.filter((id) => id !== fromEmployeeId));
       if (targets.length === 0) continue; // This employee is the only one online — skip their leads
 
       // Distribute equally (round-robin) among targets
@@ -284,9 +281,11 @@ export async function sweepAutoDistribute(db, env) {
       .run();
 
   const presenceMap = await getEmployeePresenceMap(db);
-  const onlineIds = Object.entries(presenceMap)
-    .filter(([, p]) => p.online)
-    .map(([id]) => Number(id));
+  const onlineIds = protectedFirst(
+    Object.entries(presenceMap)
+      .filter(([, p]) => p.online)
+      .map(([id]) => Number(id))
+  );
   if (onlineIds.length === 0) {
     await markDone({ distributed: 0, reason: 'no_online_employees' });
     return { distributed: 0 };

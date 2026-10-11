@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
 import { nextDistributionLabel, logActivity, broadcast, jsonError, nowIso, selectByIds } from '../lib/db.js';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
+import { protectedFirst } from '../lib/protected.js';
 
 export const distributionRoutes = new Hono();
 distributionRoutes.use('*', requireAuth, requireSalesLead);
@@ -14,7 +15,7 @@ async function getEligibleEmployees(db, requestedIds, onlyAvailable) {
     list = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results;
   }
   if (onlyAvailable) list = list.filter((e) => e.availability === 'AVAILABLE');
-  return list;
+  return protectedFirst(list); // الموظفة الجديدة أول واحدة في الترتيب
 }
 
 function planEqual(customerIds, employees) {
@@ -236,6 +237,7 @@ reassignmentRoutes.post('/', async (c) => {
   if (body.mode === 'REDISTRIBUTE') {
     const onlyAvailable = body.onlyAvailableEmployees !== false;
     const employees = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results.filter((e) => !onlyAvailable || e.availability === 'AVAILABLE');
+    employees.splice(0, employees.length, ...protectedFirst(employees));
     if (employees.length === 0) return jsonError(c, 400, 'لا يوجد موظف مؤهل لإعادة التوزيع إليه', 'NO_ELIGIBLE_EMPLOYEES');
     const plan = planEqual(customerIds, employees);
     const ts = nowIso();
