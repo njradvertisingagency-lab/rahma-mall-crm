@@ -127,17 +127,16 @@ export async function sweepAutoReclaim(db, env) {
 //     online = 1), excluding the original assignee
 //   - Runs once per Cairo calendar day at/after 15:00, deduped via settings key
 // ---------------------------------------------------------------------------
-const REDISTRIBUTE_HOUR = 16; // 4 PM Cairo (كان ٣ العصر — اتغير بطلب صاحب الشركة)
+const REDISTRIBUTE_MIN = 17 * 60 + 45; // 5:45 PM Cairo (كان ٤ العصر — اتغير لـ ٥:٤٥ بطلب صاحب الشركة)
 
 export async function sweepRedistribute3pm(db, env) {
-  // نفس الفكرة: قبل ٤ العصر مفيش أي قراءة من القاعدة.
-  if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_HOUR * 60) return { redistributed: 0 };
+  // نفس الفكرة: قبل ٥:٤٥ العصر مفيش أي قراءة من القاعدة.
+  if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_MIN) return { redistributed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { redistributed: 0 };
 
-  // Only fire at or after 3 PM Cairo
-  const targetMinute = REDISTRIBUTE_HOUR * 60;
-  if (status.minutesSinceMidnight < targetMinute) return { redistributed: 0 };
+  // Only fire at or after 5:45 PM Cairo
+  if (status.minutesSinceMidnight < REDISTRIBUTE_MIN) return { redistributed: 0 };
 
   // Dedup: once per Cairo calendar day
   const dedupRow = await db.prepare(`SELECT value FROM settings WHERE key = 'redistribute_3pm_sent'`).first();

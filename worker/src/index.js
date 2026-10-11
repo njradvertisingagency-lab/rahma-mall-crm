@@ -20,6 +20,7 @@ import { opsReportRoutes } from './routes/opsreports.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { rewardsRoutes } from './routes/rewards.js';
 import { accountingRoutes } from './routes/accounting.js';
+import { dailyReportRoutes } from './routes/daily-report.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
 import { recordDailySnapshots } from './lib/performance.js';
@@ -93,6 +94,7 @@ api.route('/rewards', rewardsRoutes);
 api.route('/ops-reports', opsReportRoutes);
 api.route('/attendance', attendanceRoutes);
 api.route('/accounting', accountingRoutes);
+api.route('/daily-report', dailyReportRoutes);
 app.route('/api', api);
 
 // Real-time WebSocket upgrade — authenticated in routes/ws.js before ever

@@ -711,6 +711,7 @@ const NAV_EMPLOYEE = [
   ['my-interested', '⭐', 'عملائك المهتمين'],
   ['followups', '⏰', 'المتابعات'],
   ['my-performance', '📈', 'أدائي'],
+  ['daily-report', '📊', 'تقرير اليوم'],
   ['profile', '🙍', 'الملف الشخصي'],
 ];
 function renderShell() {

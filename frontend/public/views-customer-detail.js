@@ -29,6 +29,7 @@
     ['REJECTED', 'تم الرفض'],
   ];
   const CALL_OUTCOME_LABELS = Object.fromEntries(CALL_OUTCOMES);
+  const CALL_OUTCOME_COLORS = { ANSWERED:'#27ae60', NO_ANSWER:'#e67e22', BUSY:'#e74c3c', WRONG_NUMBER:'#95a5a6', SWITCHED_OFF:'#7f8c8d', REJECTED:'#c0392b' };
   const FOLLOWUP_STATUS_LABELS = { UPCOMING: 'قادمة', DUE: 'مستحقة', OVERDUE: 'متأخرة', COMPLETED: 'مكتملة', CANCELLED: 'ملغاة' };
 
   function modal(title, bodyNode, footerNodes) {
@@ -221,8 +222,8 @@
     function renderCallAttempts() {
       const wrap = el('div', { class: 'card card-pad' });
       wrap.appendChild(el('div', { class: 'flex-between mb-8' }, [
-        el('div', { class: 'muted', style: 'font-size:12px' }, ['يتم تسجيلها يدويًا — لا يوجد ربط بمقسم هاتف، فلا يُفترض أي نتيجة تلقائيًا.']),
-        el('button', { class: 'btn btn-sm btn-primary', onclick: () => logCallAttempt() }, ['📞 تسجيل محاولة اتصال']),
+        el('div', { class: 'muted', style: 'font-size:11px' }, ['يتم تسجيلها يدويًا — لا يوجد ربط بمقسم هاتف.']),
+        el('button', { class: 'btn btn-sm', style: 'background:#e74c3c;color:#fff;font-weight:800;padding:8px 18px;border-radius:10px;font-size:13px', onclick: () => logCallAttempt() }, ['📞 سجّل مكالمة']),
       ]));
       if (data.callAttempts.length === 0) {
         wrap.appendChild(el('div', { class: 'muted' }, ['لا توجد محاولات اتصال مسجّلة بعد.']));
@@ -233,7 +234,7 @@
           el('thead', {}, [el('tr', {}, ['الوقت', 'النتيجة', 'بواسطة', 'ملاحظات'].map((h) => el('th', {}, [h])))]),
           el('tbody', {}, data.callAttempts.map((a) => el('tr', {}, [
             el('td', {}, [fmt.dateTime(a.created_at)]),
-            el('td', {}, [CALL_OUTCOME_LABELS[a.outcome] || a.outcome]),
+            el('td', {}, [el('span', { style: `background:${CALL_OUTCOME_COLORS[a.outcome] || '#555'};color:#fff;padding:3px 10px;border-radius:8px;font-size:12px;font-weight:700` }, [CALL_OUTCOME_LABELS[a.outcome] || a.outcome])]),
             el('td', {}, [a.attempted_by_name || '—']),
             el('td', {}, [a.notes || '—']),
           ]))),
