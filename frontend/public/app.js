@@ -708,6 +708,7 @@ const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['my-files', '🗃️', 'ملفاتي'],
   ['my-customers', '👥', 'عملائي'],
+  ['my-interested', '⭐', 'عملائك المهتمين'],
   ['followups', '⏰', 'المتابعات'],
   ['my-performance', '📈', 'أدائي'],
   ['profile', '🙍', 'الملف الشخصي'],

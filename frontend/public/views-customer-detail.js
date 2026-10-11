@@ -7,7 +7,7 @@
   // بقت تتحدد تلقائيًا فقط عبر زر "تمت الصفقة" (مش قائمة يدوية بعد كده).
   // الترتيب مقصود: لا يوجد رد (محتاج إعادة محاولة) ← متابعة (نتيجة إيجابية،
   // العميل جاي للفرع) ← غير مهتم (إغلاق سلبي نهائي).
-  const SELECTABLE_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'NOT_INTERESTED'];
+  const SELECTABLE_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED'];
   const STATUS_LABELS = App.labels.status;
   const SLA_LEVEL_LABELS = { OK: 'ضمن الموعد', WARNING: 'اقترب الموعد', BREACHED: 'تم تجاوز الموعد' };
   const PAYMENT_METHOD_LABELS = { CASH: 'نقدًا', CARD: 'بطاقة', INSTALLMENT: 'تقسيط', OTHER: 'أخرى' };
@@ -567,6 +567,7 @@
         // "لا يوجد رد" يجدول إعادة اتصال تلقائية بعد ١٥ دقيقة من السيرفر —
         // نوضّح ده للموظف فورًا حتى لا يفتكر إنه لازم يجدولها بنفسه.
         toast(res.autoFollowup ? 'تم تحديث الحالة — تم جدولة إعادة اتصال تلقائيًا بعد ١٥ دقيقة' : 'تم تحديث الحالة', 'success');
+        if (status === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية (مش "مهتم" بس)', 'info');
         await load();
         render();
       } catch (e) {
