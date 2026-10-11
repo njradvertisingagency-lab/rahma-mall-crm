@@ -17,30 +17,71 @@
     ]));
 
     const summaryBox = el('div', { class: 'mb-16' });
+    const filterBar = el('div', { class: 'card card-pad mb-16', style: 'display:flex;gap:12px;flex-wrap:wrap;align-items:end' });
     const tableWrap = el('div', { class: 'table-wrap responsive-cards' });
+    container.appendChild(filterBar);
     container.appendChild(summaryBox);
     container.appendChild(tableWrap);
 
-    async function load() {
+    // فلاتر على الجهاز (من غير أي قراءة إضافية من القاعدة): موظف / حالة / الملاحظات.
+    let all = null;
+    const filters = { emp: '', status: '', note: '' };
+
+    function selectField(label, key, options) {
+      const sel = el('select', { onchange: () => { filters[key] = sel.value; render(); } },
+        options.map(([v, t]) => el('option', { value: v }, [t])));
+      sel.value = filters[key];
+      return el('div', { class: 'field', style: 'margin:0;min-width:170px' }, [el('label', {}, [label]), sel]);
+    }
+
+    function buildFilterBar() {
+      filterBar.innerHTML = '';
+      const counts = {};
+      all.customers.forEach((c) => { const k = c.assignedEmployeeId ?? 'none'; counts[k] = counts[k] || { name: c.employeeName || 'غير موزّع', n: 0 }; counts[k].n++; });
+      const empOpts = [['', `كل الموظفين (${all.customers.length})`]]
+        .concat(Object.entries(counts).sort((x, y) => x[1].name.localeCompare(y[1].name)).map(([k, v]) => [String(k), `${v.name} (${v.n})`]));
+      const statuses = [...new Set(all.customers.map((c) => c.status))];
+      const stOpts = [['', 'كل الحالات']].concat(statuses.map((st) => [st, (App.labels && App.labels.status[st]) || st]));
+      filterBar.append(
+        selectField('الموظف', 'emp', empOpts),
+        selectField('الحالة', 'status', stOpts),
+        selectField('الملاحظات', 'note', [['', 'الكل'], ['with', 'عليها ملاحظة'], ['without', 'بدون ملاحظة']]),
+        el('button', { class: 'btn btn-outline', onclick: () => { filters.emp = ''; filters.status = ''; filters.note = ''; buildFilterBar(); render(); } }, ['مسح الفلاتر'])
+      );
+    }
+
+    function render() {
       tableWrap.innerHTML = '';
       summaryBox.innerHTML = '';
-      let data;
-      try {
-        data = await api('/distributions/today');
-      } catch (e) {
-        tableWrap.appendChild(el('div', { class: 'empty-state' }, [e.message]));
+      const list = all.customers.filter((c) =>
+        (!filters.emp || String(c.assignedEmployeeId ?? 'none') === filters.emp) &&
+        (!filters.status || c.status === filters.status) &&
+        (!filters.note || (filters.note === 'with' ? !!c.lastNote : !c.lastNote)));
+      const withNote = list.filter((c) => c.lastNote).length;
+      const byStatus = {};
+      list.forEach((c) => { byStatus[c.status] = (byStatus[c.status] || 0) + 1; });
+      const summary = el('div', { class: 'card card-pad' }, [
+        el('div', { style: 'font-weight:800' }, [filters.emp || filters.status || filters.note
+          ? `المعروض: ${list.length} من ${all.total} رقم موزّع اليوم`
+          : `إجمالي الأرقام الموزّعة اليوم: ${all.total}`]),
+        el('div', { class: 'muted', style: 'margin-top:6px' }, [
+          `عليها ملاحظة: ${withNote} — بدون ملاحظة: ${list.length - withNote}`,
+        ]),
+        el('div', { class: 'flex gap-8 wrap', style: 'margin-top:8px' },
+          Object.entries(byStatus).map(([st, n]) => el('span', {}, [badges.status(st), ` × ${n}`]))),
+      ]);
+      summaryBox.appendChild(summary);
+      if (all.customers.length === 0) {
+        tableWrap.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['📭']), 'لسه محدش اتوزّع عليه عميل النهاردة.']));
         return;
       }
-      summaryBox.appendChild(el('div', { class: 'card card-pad' }, [
-        el('div', { style: 'font-weight:800' }, [`إجمالي الأرقام الموزّعة اليوم: ${data.total}`]),
-      ]));
-      if (data.customers.length === 0) {
-        tableWrap.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['📭']), 'لسه محدش اتوزّع عليه عميل النهاردة.']));
+      if (list.length === 0) {
+        tableWrap.appendChild(el('div', { class: 'empty-state' }, ['مفيش أرقام مطابقة للفلاتر دي.']));
         return;
       }
       tableWrap.appendChild(el('table', { class: 'data-table' }, [
         el('thead', {}, [el('tr', {}, ['الكود', 'الهاتف', 'الاسم', 'الموظف', 'الحالة', 'الأولوية', 'واتساب', 'آخر ملاحظة', ''].map((h) => el('th', {}, [h])))]),
-        el('tbody', {}, data.customers.map((c) => el('tr', {}, [
+        el('tbody', {}, list.map((c) => el('tr', {}, [
           el('td', {}, [el('a', { href: '#/customers/' + c.id, style: 'font-weight:700' }, [c.id])]),
           el('td', { class: 'mono' }, [c.phone]),
           el('td', {}, [c.name || '—']),
@@ -61,6 +102,18 @@
           ]),
         ]))),
       ]));
+    }
+
+    async function load() {
+      try {
+        all = await api('/distributions/today');
+      } catch (e) {
+        tableWrap.innerHTML = '';
+        tableWrap.appendChild(el('div', { class: 'empty-state' }, [e.message]));
+        return;
+      }
+      buildFilterBar();
+      render();
     }
 
     await load();
