@@ -14,3 +14,33 @@ export const isProtectedUser = (id) => PROTECTED_USER_IDS.includes(Number(id));
 export function protectedFirst(list, getId = (x) => (typeof x === 'object' ? x.id : x)) {
   return [...list].sort((a, b) => Number(isProtectedEmployee(getId(b))) - Number(isProtectedEmployee(getId(a))));
 }
+
+// حصص التوزيع: زمايلها بياخدوا عدد متساوي (k، أو k+1 لو في باقي قسمة)،
+// والموظفة المحمية بتاخد k + (8..10) → يعني دايمًا أكتر من كل زميلة بـ 7..10 أرقام.
+// مثال: ١٦٠ رقم، ٣ زميلات → ٥٠ و٥٠ و٥٠ (والباقي +١) ومهرة ٦٠ تقريبًا.
+// بيرجّع Map(employeeId → count) مجموعها = total بالظبط.
+export function computeQuotas(total, employeeIds) {
+  const ids = employeeIds.map(Number);
+  const prot = ids.filter(isProtectedEmployee);
+  const others = ids.filter((id) => !isProtectedEmployee(id));
+  const q = new Map(ids.map((id) => [id, 0]));
+  const even = () => {
+    const n = ids.length;
+    const base = Math.floor(total / n);
+    const rem = total % n;
+    ids.forEach((id, i) => q.set(id, base + (i < rem ? 1 : 0)));
+    return q;
+  };
+  if (prot.length === 0 || others.length === 0) return even();
+  const extra = 8 + Math.floor(Math.random() * 3); // 8..10
+  const protTotalExtra = extra * prot.length;
+  if (total - protTotalExtra < 0) return even();
+  const slots = ids.length;
+  const k = Math.floor((total - protTotalExtra) / slots);
+  let rem = total - protTotalExtra - k * slots; // 0..slots-1
+  prot.forEach((id) => q.set(id, k + extra));
+  others.forEach((id) => q.set(id, k));
+  for (const id of others) { if (rem <= 0) break; q.set(id, q.get(id) + 1); rem--; }
+  for (const id of prot) { if (rem <= 0) break; q.set(id, q.get(id) + 1); rem--; }
+  return q;
+}
