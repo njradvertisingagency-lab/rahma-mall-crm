@@ -513,6 +513,42 @@
       card.appendChild(el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['الإجراءات']));
 
       card.appendChild(el('a', { class: 'btn btn-outline btn-block mb-8', href: 'tel:' + c.normalizedPhone, onclick: () => api('/customers/' + c.id + '/call', { method: 'POST' }).catch(() => {}) }, ['📞 اتصال بالعميل']));
+
+      // --- تسجيل نتيجة المكالمة (inline بعد زر الاتصال مباشرة) ---
+      const callSection = el('div', { style: 'background:var(--surface-2);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--border)' });
+      callSection.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text)' }, ['📞 هل اتصلت بالعميل؟']));
+      const outcomeBtnsWrap = el('div', { class: 'flex gap-6 wrap', style: 'margin-bottom:10px' });
+      let selectedOutcome = null;
+      const outcomeBtns = [];
+      CALL_OUTCOMES.forEach(([val, label]) => {
+        const btn = el('button', {
+          style: `background:${CALL_OUTCOME_COLORS[val]};color:#fff;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;border:2px solid transparent;cursor:pointer;opacity:0.6;transition:opacity .2s,border-color .2s`,
+          onclick: () => {
+            selectedOutcome = val;
+            outcomeBtns.forEach((b, i) => {
+              b.style.opacity = CALL_OUTCOMES[i][0] === val ? '1' : '0.4';
+              b.style.borderColor = CALL_OUTCOMES[i][0] === val ? '#fff' : 'transparent';
+            });
+          },
+        }, [label]);
+        outcomeBtns.push(btn);
+        outcomeBtnsWrap.appendChild(btn);
+      });
+      callSection.appendChild(outcomeBtnsWrap);
+      const callNotes = el('textarea', { placeholder: 'ملاحظات (اختياري)', style: 'width:100%;min-height:50px;border-radius:8px;padding:8px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:10px' });
+      callSection.appendChild(callNotes);
+      const saveCallBtn = el('button', { style: 'background:#e74c3c;color:#fff;font-weight:800;padding:10px 0;border-radius:10px;font-size:14px;width:100%;border:none;cursor:pointer', onclick: async () => {
+        if (!selectedOutcome) { toast('اختار نتيجة المكالمة الأول', 'error'); return; }
+        try {
+          await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
+          toast('تم تسجيل المكالمة ✅', 'success');
+          await load();
+          render();
+        } catch (e) { toast(e.message, 'error'); }
+      } }, ['💾 سجّل المكالمة']);
+      callSection.appendChild(saveCallBtn);
+      card.appendChild(callSection);
+
       card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ رقم الهاتف', 'success'); } }, ['📋 نسخ الرقم']));
 
       // --- زر واتساب ---

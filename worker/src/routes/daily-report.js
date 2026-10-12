@@ -14,6 +14,8 @@ dailyReportRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
 
+  try {
+
   // الموظف المرتبط بالمستخدم
   const emp = await db.prepare(`SELECT id, name FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
   if (!emp) return c.json({ error: 'لا يوجد موظف مرتبط بالحساب' }, 400);
@@ -180,4 +182,9 @@ dailyReportRoutes.get('/', async (c) => {
     teamLeaderPhone: TEAM_LEADER_PHONE,
     canSend,
   });
+
+  } catch (err) {
+    console.error('daily-report error', err);
+    return c.json({ error: { message: 'تعذر تحميل التقرير اليومي — برجاء المحاولة مرة أخرى', code: 'DAILY_REPORT_ERROR' } }, 500);
+  }
 });
