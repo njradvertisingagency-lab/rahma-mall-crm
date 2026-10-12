@@ -89,8 +89,6 @@
       left.appendChild(renderCallAttempts());
       left.appendChild(el('div', { class: 'section-title' }, ['زيارات الفرع والمشتريات']));
       left.appendChild(renderSalesSection());
-      left.appendChild(el('div', { class: 'section-title' }, ['الملاحظات']));
-      left.appendChild(renderNotes());
       left.appendChild(el('div', { class: 'section-title' }, ['المتابعات']));
       left.appendChild(renderFollowups());
       left.appendChild(el('div', { class: 'section-title' }, ['سجل النشاط']));
@@ -489,7 +487,7 @@
 
       card.appendChild(el('a', { class: 'btn btn-outline btn-block mb-8', href: 'tel:' + c.normalizedPhone, onclick: () => api('/customers/' + c.id + '/call', { method: 'POST' }).catch(() => {}) }, ['📞 اتصال بالعميل']));
 
-      // --- تسجيل نتيجة المكالمة (inline بعد زر الاتصال مباشرة) ---
+      // --- Shared chip styles ---
       const chipSectionStyle = 'background:var(--surface-2);border-radius:16px;padding:16px;margin-bottom:14px;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.08)';
       const chipTitleStyle = 'font-weight:800;font-size:14px;margin-bottom:12px;color:var(--text);display:flex;align-items:center;gap:6px';
       const chipGridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:12px';
@@ -497,10 +495,28 @@
       const chipActiveExtra = 'transform:scale(1.05);box-shadow:0 2px 8px rgba(0,0,0,.25)';
       const saveBtnStyle = 'color:#fff;font-weight:800;padding:11px 0;border-radius:14px;font-size:14px;width:100%;border:none;cursor:pointer;transition:background .2s;letter-spacing:.3px';
 
+      // ── ربط نتيجة المكالمة بالحالات المسموحة ──
+      // لو الموظف اختار "تم الرد" ماينفعش يختار حالة "لا يوجد رد" والعكس.
+      const OUTCOME_ALLOWED_STATUSES = {
+        ANSWERED:     ['FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED'],
+        NO_ANSWER:    ['NO_ANSWER'],
+        BUSY:         ['NO_ANSWER', 'FOLLOW_UP'],
+        WRONG_NUMBER: ['NOT_INTERESTED'],
+        SWITCHED_OFF: ['NO_ANSWER', 'FOLLOW_UP'],
+        REJECTED:     ['NO_ANSWER', 'NOT_INTERESTED'],
+      };
+      // لو المكالمة ليها حالة واحدة بس ← auto-select
+      const OUTCOME_AUTO_STATUS = {
+        NO_ANSWER: 'NO_ANSWER',
+        WRONG_NUMBER: 'NOT_INTERESTED',
+      };
+
+      // --- تسجيل نتيجة المكالمة ---
       const callSection = el('div', { style: chipSectionStyle });
       callSection.appendChild(el('div', { style: chipTitleStyle }, ['📞 هل اتصلت بالعميل؟']));
       const outcomeBtnsWrap = el('div', { style: chipGridStyle });
       let selectedOutcome = null;
+      let selectedStatus = SELECTABLE_STATUSES.includes(c.status) ? c.status : null;
       const outcomeBtns = [];
       function refreshCallChips() {
         outcomeBtns.forEach((b, i) => {
@@ -514,7 +530,19 @@
       CALL_OUTCOMES.forEach(([val, label]) => {
         const btn = el('button', {
           style: `background:${CALL_OUTCOME_COLORS[val]};${chipBaseStyle};opacity:0.5`,
-          onclick: () => { selectedOutcome = val; refreshCallChips(); },
+          onclick: () => {
+            selectedOutcome = val;
+            refreshCallChips();
+            // ── ربط الحالة تلقائيًا ──
+            if (OUTCOME_AUTO_STATUS[val]) {
+              selectedStatus = OUTCOME_AUTO_STATUS[val];
+            } else {
+              // لو الحالة المختارة مش مسموحة مع النتيجة الجديدة ← امسحها
+              const allowed = OUTCOME_ALLOWED_STATUSES[val] || SELECTABLE_STATUSES;
+              if (selectedStatus && !allowed.includes(selectedStatus)) selectedStatus = null;
+            }
+            refreshStatusChips();
+          },
         }, [label]);
         outcomeBtns.push(btn);
         outcomeBtnsWrap.appendChild(btn);
@@ -533,6 +561,31 @@
       } }, ['💾 سجّل المكالمة']);
       callSection.appendChild(saveCallBtn);
       card.appendChild(callSection);
+
+      // --- الملاحظات (نُقلت هنا — بعد المكالمة مباشرة) ---
+      const notesSection = el('div', { style: chipSectionStyle });
+      notesSection.appendChild(el('div', { style: chipTitleStyle }, ['✍️ الملاحظات']));
+      const notesList = el('div', { style: 'margin-bottom:10px' }, data.notes.length === 0
+        ? [el('div', { style: 'color:var(--muted);font-size:13px;text-align:center;padding:8px 0' }, ['لا توجد ملاحظات بعد.'])]
+        : data.notes.map((n) =>
+          el('div', { style: 'margin-bottom:10px;padding:10px 12px;background:var(--surface);border-radius:12px;border:1px solid var(--border)' }, [
+            el('div', { style: 'font-size:13.5px;color:var(--text);line-height:1.6' }, [n.note]),
+            el('div', { style: 'font-size:11px;color:var(--muted);margin-top:4px' }, [`${n.author_name} · ${fmt.dateTime(n.created_at)}`]),
+          ])
+        )
+      );
+      notesSection.appendChild(notesList);
+      const noteInput = el('textarea', { placeholder: 'أضف ملاحظة…', style: 'width:100%;min-height:60px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:10px;font-family:inherit' });
+      notesSection.appendChild(noteInput);
+      notesSection.appendChild(el('button', { style: `background:linear-gradient(135deg,#2ecc71,#27ae60);${saveBtnStyle}`, onclick: async () => {
+        if (!noteInput.value.trim()) return;
+        await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: noteInput.value.trim() } });
+        noteInput.value = '';
+        toast('تم إضافة الملاحظة ✅', 'success');
+        await load();
+        render();
+      } }, ['✍️ إضافة ملاحظة']));
+      card.appendChild(notesSection);
 
       card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ رقم الهاتف', 'success'); } }, ['📋 نسخ الرقم']));
 
@@ -554,37 +607,49 @@
 
       card.appendChild(el('hr', { style: 'border-color:var(--border);margin:14px 0' }));
 
-      // --- تمت الصفقة — الطريقة الوحيدة الآن لإغلاق العميل، متاحة لأي موظف لعميله هو ---
+      // --- تمت الصفقة ---
       if (c.status !== 'CLOSED') {
         card.appendChild(el('button', { class: 'btn btn-success btn-block mb-8', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']));
       }
 
-      // --- تغيير الحالة (chip buttons بدل dropdown) ---
+      // --- تغيير الحالة (مربوطة بنتيجة المكالمة) ---
       const STATUS_CHIP_COLORS = { NO_ANSWER: '#95a5a6', FOLLOW_UP: '#e67e22', INTERESTED: '#27ae60', NOT_INTERESTED: '#7f8c8d' };
       const statusSection = el('div', { style: chipSectionStyle });
       statusSection.appendChild(el('div', { style: chipTitleStyle }, ['📋 تغيير الحالة']));
       const statusBtnsWrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px' });
-      let selectedStatus = SELECTABLE_STATUSES.includes(c.status) ? c.status : null;
       const statusBtns = [];
       function refreshStatusChips() {
+        const allowed = selectedOutcome ? (OUTCOME_ALLOWED_STATUSES[selectedOutcome] || SELECTABLE_STATUSES) : SELECTABLE_STATUSES;
         statusBtns.forEach((b, i) => {
-          const isOn = SELECTABLE_STATUSES[i] === selectedStatus;
-          b.style.opacity = isOn ? '1' : '0.5';
-          b.style.borderColor = isOn ? 'rgba(255,255,255,.7)' : 'transparent';
+          const val = SELECTABLE_STATUSES[i];
+          const isAllowed = allowed.includes(val);
+          const isOn = val === selectedStatus;
+          b.disabled = !isAllowed;
+          b.style.opacity = !isAllowed ? '0.15' : (isOn ? '1' : '0.5');
+          b.style.borderColor = isOn && isAllowed ? 'rgba(255,255,255,.7)' : 'transparent';
+          b.style.cursor = isAllowed ? 'pointer' : 'not-allowed';
           b.style.cssText = b.style.cssText.replace(/transform:[^;]+;?/g,'').replace(/box-shadow:[^;]+;?/g,'');
-          if (isOn) b.style.cssText += ';' + chipActiveExtra;
+          if (isOn && isAllowed) b.style.cssText += ';' + chipActiveExtra;
         });
       }
       SELECTABLE_STATUSES.forEach((val) => {
         const isActive = val === selectedStatus;
         const btn = el('button', {
           style: `background:${STATUS_CHIP_COLORS[val]};${chipBaseStyle};opacity:${isActive ? '1' : '0.5'}${isActive ? ';border-color:rgba(255,255,255,.7);' + chipActiveExtra : ''}`,
-          onclick: () => { selectedStatus = val; refreshStatusChips(); },
+          onclick: () => {
+            const allowed = selectedOutcome ? (OUTCOME_ALLOWED_STATUSES[selectedOutcome] || SELECTABLE_STATUSES) : SELECTABLE_STATUSES;
+            if (!allowed.includes(val)) return;
+            selectedStatus = val;
+            refreshStatusChips();
+          },
         }, [STATUS_LABELS[val] || val]);
         statusBtns.push(btn);
         statusBtnsWrap.appendChild(btn);
       });
       statusSection.appendChild(statusBtnsWrap);
+      // رسالة توضيحية لما يكون فيه ربط
+      const statusHintEl = el('div', { style: 'font-size:11px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.8;display:none' });
+      statusSection.appendChild(statusHintEl);
       if (!SELECTABLE_STATUSES.includes(c.status)) {
         statusSection.appendChild(el('div', { style: 'font-size:11.5px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.7' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
       }
@@ -716,27 +781,6 @@
         );
       }
       await showComposer();
-    }
-
-    function renderNotes() {
-      const wrap = el('div', { class: 'card card-pad' });
-      const list = el('div', {}, data.notes.length === 0 ? [el('div', { class: 'muted' }, ['لا توجد ملاحظات بعد.'])] : data.notes.map((n) =>
-        el('div', { class: 'mb-12' }, [
-          el('div', { style: 'font-size:13.5px' }, [n.note]),
-          el('div', { class: 'faint' }, [`${n.author_name} · ${fmt.dateTime(n.created_at)}`]),
-        ])
-      ));
-      const input = el('textarea', { placeholder: 'أضف ملاحظة…' });
-      wrap.appendChild(list);
-      wrap.appendChild(el('div', { class: 'field mt-12' }, [input]));
-      wrap.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
-        if (!input.value.trim()) return;
-        await api('/customers/' + data.customer.id + '/notes', { method: 'POST', body: { note: input.value.trim() } });
-        input.value = '';
-        await load();
-        render();
-      } }, ['إضافة ملاحظة']));
-      return wrap;
     }
 
     function renderFollowups() {
