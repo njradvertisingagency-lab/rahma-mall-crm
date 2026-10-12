@@ -97,35 +97,7 @@ dailyReportRoutes.get('/', async (c) => {
     .bind(user.id, dateStr)
     .first();
 
-  const CALL_OUTCOME_AR = {
-    ANSWERED: 'رد ✅',
-    NO_ANSWER: 'مارد 📵',
-    BUSY: 'مشغول 🔴',
-    WRONG_NUMBER: 'رقم غلط ❌',
-    SWITCHED_OFF: 'مغلق 📴',
-    REJECTED: 'رفض 🚫',
-  };
-
-  const STATUS_AR = {
-    NEW: 'جديد',
-    NO_ANSWER: 'لا يوجد رد',
-    FOLLOW_UP: 'متابعة',
-    INTERESTED: 'مهتم',
-    NOT_INTERESTED: 'غير مهتم',
-    SOLD: 'تم البيع',
-    CUSTOMER_WAITING: 'عميل منتظر',
-    CLOSED: 'مغلق',
-  };
-
-  const STATUS_EMOJI = {
-    NEW: '🆕', NO_ANSWER: '📵', FOLLOW_UP: '🔁', INTERESTED: '⭐',
-    NOT_INTERESTED: '❌', SOLD: '💰', CUSTOMER_WAITING: '⏳', CLOSED: '✅',
-  };
-
-  // بناء نص التقرير
-  const d = dateStr.split('-');
-  const dateAr = `${d[2]}/${d[1]}/${d[0]}`;
-
+  // وقت الحضور
   let checkinStr = '—';
   if (attendanceRow?.check_in_at) {
     const t = new Date(attendanceRow.check_in_at);
@@ -137,43 +109,6 @@ dailyReportRoutes.get('/', async (c) => {
   }
 
   const remaining = totalReceived - reclaimedCount;
-
-  const statusLines = Object.entries(statusMap)
-    .map(([k, v]) => `  ${STATUS_EMOJI[k] || '•'} ${STATUS_AR[k] || k}: *${v}*`)
-    .join('\n');
-
-  const callOutcomeLines = Object.entries(callOutcomeMap)
-    .map(([k, v]) => `  ${CALL_OUTCOME_AR[k] || k}: *${v}*`)
-    .join('\n');
-
-  const reportText = [
-    `━━━━━━━━━━━━━━━━━━━`,
-    `📊 *تقرير يومي — ${dateAr}*`,
-    `👤 *${emp.name}*`,
-    `⏰ الحضور: ${checkinStr}`,
-    `━━━━━━━━━━━━━━━━━━━`,
-    '',
-    `📱 *الأرقام*`,
-    `  استلمت: *${totalReceived}* رقم`,
-    `  اتسحب: *${reclaimedCount}* رقم`,
-    `  باقي معايا: *${remaining}* رقم`,
-    '',
-    `📞 *المكالمات: ${callsRow.n} محاولة*`,
-    callOutcomeLines || '  لا توجد مكالمات',
-    '',
-    `✍️ *الملاحظات*`,
-    `  كتبت على: *${notesRow.customers}* عميل (${notesRow.total} ملاحظة)`,
-    '',
-    `💬 *واتساب:* ${waRow.n} عميل`,
-    '',
-    `📈 *توزيع الحالات:*`,
-    statusLines || '  لا توجد حالات',
-    '',
-    `━━━━━━━━━━━━━━━━━━━`,
-    `🏢 *رحمة مول — CRM*`,
-  ].filter(Boolean).join('\n');
-
-  const waUrl = `https://wa.me/${toInternational(TEAM_LEADER_PHONE)}?text=${encodeURIComponent(reportText)}`;
 
   // الزرار يفتح الساعه ٥:٤٥ بالظبط — نفس وقت سحب الأرقام
   const { minutesSinceMidnight } = getCairoNow();
@@ -192,9 +127,7 @@ dailyReportRoutes.get('/', async (c) => {
     whatsappCount: waRow.n,
     statusBreakdown: statusMap,
     callOutcomeBreakdown: callOutcomeMap,
-    reportText,
-    waUrl,
-    teamLeaderPhone: TEAM_LEADER_PHONE,
+    teamLeaderIntl: toInternational(TEAM_LEADER_PHONE),
     canSend,
   });
 
