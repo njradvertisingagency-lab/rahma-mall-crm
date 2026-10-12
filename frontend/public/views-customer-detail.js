@@ -549,19 +549,46 @@
         card.appendChild(el('button', { class: 'btn btn-success btn-block mb-8', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']));
       }
 
-      card.appendChild(el('div', { class: 'field' }, [
-        el('label', {}, ['تغيير الحالة']),
-        el('select', { id: 'status-select' }, [
-          // الحالة الحالية لو كانت من القيم القديمة غير المتاحة يدويًا بعد الآن
-          // (جديد/جاري الاتصال/مشغول/مهتم/مغلق) — تظهر معطّلة أعلى القائمة
-          // حتى لا تختفي من العرض، لكن بدون إمكانية إعادة اختيارها.
-          !SELECTABLE_STATUSES.includes(c.status)
-            ? el('option', { value: c.status, selected: true, disabled: true }, [STATUS_LABELS[c.status] || c.status])
-            : null,
-          ...SELECTABLE_STATUSES.map((s) => el('option', { value: s, selected: s === c.status || undefined }, [STATUS_LABELS[s] || s])),
-        ]),
-      ]));
-      card.appendChild(el('button', { class: 'btn btn-primary btn-block mb-8', onclick: () => changeStatus(c) }, ['تحديث الحالة']));
+      // --- تغيير الحالة (chip buttons بدل dropdown) ---
+      const STATUS_CHIP_COLORS = { NO_ANSWER: '#95a5a6', FOLLOW_UP: '#f39c12', INTERESTED: '#27ae60', NOT_INTERESTED: '#7f8c8d' };
+      const statusSection = el('div', { style: 'background:var(--surface-2);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--border)' });
+      statusSection.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text)' }, ['📋 تغيير الحالة']));
+      const statusBtnsWrap = el('div', { class: 'flex gap-6 wrap', style: 'margin-bottom:10px' });
+      let selectedStatus = SELECTABLE_STATUSES.includes(c.status) ? c.status : null;
+      const statusBtns = [];
+      SELECTABLE_STATUSES.forEach((val) => {
+        const isActive = val === selectedStatus;
+        const btn = el('button', {
+          style: `background:${STATUS_CHIP_COLORS[val]};color:#fff;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;border:2px solid transparent;cursor:pointer;opacity:${isActive ? '1' : '0.5'};transition:opacity .2s,border-color .2s${isActive ? ';border-color:#fff' : ''}`,
+          onclick: () => {
+            selectedStatus = val;
+            statusBtns.forEach((b, i) => {
+              b.style.opacity = SELECTABLE_STATUSES[i] === val ? '1' : '0.4';
+              b.style.borderColor = SELECTABLE_STATUSES[i] === val ? '#fff' : 'transparent';
+            });
+          },
+        }, [STATUS_LABELS[val] || val]);
+        statusBtns.push(btn);
+        statusBtnsWrap.appendChild(btn);
+      });
+      statusSection.appendChild(statusBtnsWrap);
+      // لو الحالة الحالية مش من القيم القابلة للاختيار — نعرضها كـ chip معطّل
+      if (!SELECTABLE_STATUSES.includes(c.status)) {
+        statusSection.appendChild(el('div', { style: 'font-size:11px;color:var(--muted);margin-bottom:8px' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
+      }
+      const saveStatusBtn = el('button', { style: 'background:#3498db;color:#fff;font-weight:800;padding:10px 0;border-radius:10px;font-size:14px;width:100%;border:none;cursor:pointer', onclick: async () => {
+        if (!selectedStatus) { toast('اختار الحالة الأول', 'error'); return; }
+        if (selectedStatus === c.status) { toast('الحالة هي هي مفيش تغيير', 'info'); return; }
+        try {
+          const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status: selectedStatus } });
+          toast(res.autoFollowup ? 'تم تحديث الحالة — تم جدولة إعادة اتصال تلقائيًا بعد ١٥ دقيقة' : 'تم تحديث الحالة', 'success');
+          if (selectedStatus === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية (مش "مهتم" بس)', 'info');
+          await load();
+          render();
+        } catch (e) { toast(e.message, 'error'); }
+      } }, ['💾 تحديث الحالة']);
+      statusSection.appendChild(saveStatusBtn);
+      card.appendChild(statusSection);
 
       if (c.status === 'CLOSED' && App.state.user.role === 'team_leader') {
         card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => reopenCustomer(c) }, ['إعادة فتح العميل']));
@@ -571,21 +598,7 @@
       return card;
     }
 
-    async function changeStatus(c) {
-      const status = document.getElementById('status-select').value;
-      if (status === c.status) return;
-      try {
-        const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status } });
-        // "لا يوجد رد" يجدول إعادة اتصال تلقائية بعد ١٥ دقيقة من السيرفر —
-        // نوضّح ده للموظف فورًا حتى لا يفتكر إنه لازم يجدولها بنفسه.
-        toast(res.autoFollowup ? 'تم تحديث الحالة — تم جدولة إعادة اتصال تلقائيًا بعد ١٥ دقيقة' : 'تم تحديث الحالة', 'success');
-        if (status === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية (مش "مهتم" بس)', 'info');
-        await load();
-        render();
-      } catch (e) {
-        toast(e.message, 'error');
-      }
-    }
+    // changeStatus is now inline in renderActionsCard chip buttons
 
 
     async function reopenCustomer(c) {
