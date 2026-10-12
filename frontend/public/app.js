@@ -720,7 +720,13 @@ function renderShell() {
     el('div', { class: 'sidebar-footer' }, [
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
       el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
-      ...(App.state.user && App.state.user.id === 5 ? [el('div', { class: 'dev-credit', style: 'margin-top:4px' }, ['بحبك قد الكون ❤️'])] : []),
+      ...(App.state.user && App.state.user.id === 5 ? [(function() {
+        const heartEl = el('div', { class: 'dev-credit', style: 'margin-top:4px' }, ['بحبك قد الكون ❤️']);
+        let step = 0;
+        const frames = ['❤️', '❤️❤️', '❤️❤️❤️', '❤️❤️❤️❤️', '❤️❤️❤️', '❤️❤️'];
+        setInterval(() => { step = (step + 1) % frames.length; heartEl.textContent = 'بحبك قد الكون ' + frames[step]; }, 600);
+        return heartEl;
+      })()] : []),
     ]),
   ]);
 
