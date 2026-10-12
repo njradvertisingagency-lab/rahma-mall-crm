@@ -34,7 +34,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
   const binds = user.role === 'employee' ? [user.employeeId] : [];
   // Employee-scoped visibility: same as customer list (today + actionable statuses + pending call outcomes)
   const empVis = user.role === 'employee'
-    ? `AND (assigned_at >= ? OR status IN ('INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = customers.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
+    ? `AND (assigned_at >= ? OR status IN ('NEW','INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = customers.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
     : '';
   const visBinds = user.role === 'employee' ? [user.employeeId, empDayStart] : [];
 
@@ -86,7 +86,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
     const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
     const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
     const empVisC = user.role === 'employee'
-      ? `AND (c.assigned_at >= ? OR c.status IN ('INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = c.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
+      ? `AND (c.assigned_at >= ? OR c.status IN ('NEW','INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = c.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
       : '';
     const unopenedRow = await db.prepare(
       `SELECT COUNT(*) AS n FROM customers c WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
