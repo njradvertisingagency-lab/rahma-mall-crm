@@ -511,9 +511,13 @@
         WRONG_NUMBER: 'NOT_INTERESTED',
       };
 
-      // --- تسجيل نتيجة المكالمة ---
-      const callSection = el('div', { style: chipSectionStyle });
-      callSection.appendChild(el('div', { style: chipTitleStyle }, ['📞 هل اتصلت بالعميل؟']));
+      // ══════════════════════════════════════════════════════════════
+      //  إجراء موحّد: نتيجة المكالمة + الحالة + الملاحظة = زر واحد
+      // ══════════════════════════════════════════════════════════════
+      const unifiedSection = el('div', { style: chipSectionStyle });
+      unifiedSection.appendChild(el('div', { style: chipTitleStyle }, ['📞 سجّل المكالمة']));
+
+      // ① نتيجة المكالمة
       const outcomeBtnsWrap = el('div', { style: chipGridStyle });
       let selectedOutcome = null;
       let selectedStatus = SELECTABLE_STATUSES.includes(c.status) ? c.status : null;
@@ -533,89 +537,28 @@
           onclick: () => {
             selectedOutcome = val;
             refreshCallChips();
-            // ── ربط الحالة تلقائيًا ──
             if (OUTCOME_AUTO_STATUS[val]) {
               selectedStatus = OUTCOME_AUTO_STATUS[val];
             } else {
-              // لو الحالة المختارة مش مسموحة مع النتيجة الجديدة ← امسحها
               const allowed = OUTCOME_ALLOWED_STATUSES[val] || SELECTABLE_STATUSES;
               if (selectedStatus && !allowed.includes(selectedStatus)) selectedStatus = null;
             }
             refreshStatusChips();
+            // إظهار باقي الفورم بعد اختيار النتيجة
+            statusWrap.style.display = '';
+            noteWrap.style.display = '';
+            unifiedSaveBtn.style.display = '';
           },
         }, [label]);
         outcomeBtns.push(btn);
         outcomeBtnsWrap.appendChild(btn);
       });
-      callSection.appendChild(outcomeBtnsWrap);
-      const callNotes = el('textarea', { placeholder: 'ملاحظات (اختياري)...', style: 'width:100%;min-height:48px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:12px;font-family:inherit' });
-      callSection.appendChild(callNotes);
-      const saveCallBtn = el('button', { style: `background:linear-gradient(135deg,#e74c3c,#c0392b);${saveBtnStyle}`, onclick: async () => {
-        if (!selectedOutcome) { toast('اختار نتيجة المكالمة الأول', 'error'); return; }
-        try {
-          await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
-          toast('تم تسجيل المكالمة ✅', 'success');
-          await load();
-          render();
-        } catch (e) { toast(e.message, 'error'); }
-      } }, ['💾 سجّل المكالمة']);
-      callSection.appendChild(saveCallBtn);
-      card.appendChild(callSection);
+      unifiedSection.appendChild(outcomeBtnsWrap);
 
-      // --- الملاحظات (نُقلت هنا — بعد المكالمة مباشرة) ---
-      const notesSection = el('div', { style: chipSectionStyle });
-      notesSection.appendChild(el('div', { style: chipTitleStyle }, ['✍️ الملاحظات']));
-      const notesList = el('div', { style: 'margin-bottom:10px' }, data.notes.length === 0
-        ? [el('div', { style: 'color:var(--muted);font-size:13px;text-align:center;padding:8px 0' }, ['لا توجد ملاحظات بعد.'])]
-        : data.notes.map((n) =>
-          el('div', { style: 'margin-bottom:10px;padding:10px 12px;background:var(--surface);border-radius:12px;border:1px solid var(--border)' }, [
-            el('div', { style: 'font-size:13.5px;color:var(--text);line-height:1.6' }, [n.note]),
-            el('div', { style: 'font-size:11px;color:var(--muted);margin-top:4px' }, [`${n.author_name} · ${fmt.dateTime(n.created_at)}`]),
-          ])
-        )
-      );
-      notesSection.appendChild(notesList);
-      const noteInput = el('textarea', { placeholder: 'أضف ملاحظة…', style: 'width:100%;min-height:60px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:10px;font-family:inherit' });
-      notesSection.appendChild(noteInput);
-      notesSection.appendChild(el('button', { style: `background:linear-gradient(135deg,#2ecc71,#27ae60);${saveBtnStyle}`, onclick: async () => {
-        if (!noteInput.value.trim()) return;
-        await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: noteInput.value.trim() } });
-        noteInput.value = '';
-        toast('تم إضافة الملاحظة ✅', 'success');
-        await load();
-        render();
-      } }, ['✍️ إضافة ملاحظة']));
-      card.appendChild(notesSection);
-
-      card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ رقم الهاتف', 'success'); } }, ['📋 نسخ الرقم']));
-
-      // --- زر واتساب ---
-      const waBtn = el('button', {
-        class: 'btn btn-block mb-8 ' + (c.whatsappContactStatus === 'NOT_CONTACTED' ? 'btn-whatsapp' : 'btn-whatsapp done'),
-        onclick: () => openWhatsAppModal(c),
-      }, [c.whatsappContactStatus === 'NOT_CONTACTED' ? '💬 إرسال واتساب' : '✓ تم التواصل واتساب']);
-      card.appendChild(waBtn);
-      if (c.whatsappContactStatus !== 'NOT_CONTACTED') {
-        card.appendChild(el('div', { class: 'faint mb-4' }, [
-          'وقت التواصل: ',
-          el('span', { class: 'mono' }, [fmt.dateTime(c.whatsappContactedAt)]),
-        ]));
-        if (c.whatsappContactedByName) {
-          card.appendChild(el('div', { class: 'faint mb-12' }, [`تم بواسطة: ${c.whatsappContactedByName}`]));
-        }
-      }
-
-      card.appendChild(el('hr', { style: 'border-color:var(--border);margin:14px 0' }));
-
-      // --- تمت الصفقة ---
-      if (c.status !== 'CLOSED') {
-        card.appendChild(el('button', { class: 'btn btn-success btn-block mb-8', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']));
-      }
-
-      // --- تغيير الحالة (مربوطة بنتيجة المكالمة) ---
+      // ② الحالة (مخفية لحد ما يختار نتيجة المكالمة)
       const STATUS_CHIP_COLORS = { NO_ANSWER: '#95a5a6', FOLLOW_UP: '#e67e22', INTERESTED: '#27ae60', NOT_INTERESTED: '#7f8c8d' };
-      const statusSection = el('div', { style: chipSectionStyle });
-      statusSection.appendChild(el('div', { style: chipTitleStyle }, ['📋 تغيير الحالة']));
+      const statusWrap = el('div', { style: 'display:none' });
+      statusWrap.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600' }, ['📋 الحالة:']));
       const statusBtnsWrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px' });
       const statusBtns = [];
       function refreshStatusChips() {
@@ -646,26 +589,83 @@
         statusBtns.push(btn);
         statusBtnsWrap.appendChild(btn);
       });
-      statusSection.appendChild(statusBtnsWrap);
-      // رسالة توضيحية لما يكون فيه ربط
-      const statusHintEl = el('div', { style: 'font-size:11px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.8;display:none' });
-      statusSection.appendChild(statusHintEl);
+      statusWrap.appendChild(statusBtnsWrap);
       if (!SELECTABLE_STATUSES.includes(c.status)) {
-        statusSection.appendChild(el('div', { style: 'font-size:11.5px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.7' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
+        statusWrap.appendChild(el('div', { style: 'font-size:11.5px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.7' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
       }
-      const saveStatusBtn = el('button', { style: `background:linear-gradient(135deg,#3498db,#2980b9);${saveBtnStyle}`, onclick: async () => {
-        if (!selectedStatus) { toast('اختار الحالة الأول', 'error'); return; }
-        if (selectedStatus === c.status) { toast('الحالة هي هي مفيش تغيير', 'info'); return; }
+      unifiedSection.appendChild(statusWrap);
+
+      // ③ ملاحظة (اختياري — مخفية لحد ما يختار نتيجة)
+      const noteWrap = el('div', { style: 'display:none' });
+      const callNotes = el('textarea', { placeholder: '✍️ ملاحظة (اختياري)...', style: 'width:100%;min-height:48px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:12px;font-family:inherit' });
+      noteWrap.appendChild(callNotes);
+      unifiedSection.appendChild(noteWrap);
+
+      // ④ زر الحفظ الموحّد
+      const unifiedSaveBtn = el('button', { style: `background:linear-gradient(135deg,#e74c3c,#c0392b);${saveBtnStyle};display:none`, onclick: async () => {
+        if (!selectedOutcome) { toast('اختار نتيجة المكالمة الأول', 'error'); return; }
+        unifiedSaveBtn.disabled = true;
+        unifiedSaveBtn.textContent = '⏳ جارِ الحفظ…';
         try {
-          const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status: selectedStatus } });
-          toast(res.autoFollowup ? 'تم تحديث الحالة — تم جدولة إعادة اتصال تلقائيًا بعد ١٥ دقيقة' : 'تم تحديث الحالة', 'success');
-          if (selectedStatus === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية (مش "مهتم" بس)', 'info');
+          // 1) تسجيل المكالمة
+          await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
+          // 2) إضافة ملاحظة لو موجودة
+          if (callNotes.value.trim()) {
+            await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: callNotes.value.trim() } });
+          }
+          // 3) تحديث الحالة لو اتغيرت
+          let statusMsg = '';
+          if (selectedStatus && selectedStatus !== c.status) {
+            const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status: selectedStatus } });
+            if (res.autoFollowup) statusMsg = ' — تم جدولة إعادة اتصال بعد ١٥ دقيقة';
+          }
+          toast('تم تسجيل كل حاجة بنجاح ✅' + statusMsg, 'success');
+          if (selectedStatus === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية', 'info');
           await load();
           render();
         } catch (e) { toast(e.message, 'error'); }
-      } }, ['💾 تحديث الحالة']);
-      statusSection.appendChild(saveStatusBtn);
-      card.appendChild(statusSection);
+        finally { unifiedSaveBtn.disabled = false; unifiedSaveBtn.textContent = '💾 سجّل وحدّث'; }
+      } }, ['💾 سجّل وحدّث']);
+      unifiedSection.appendChild(unifiedSaveBtn);
+      card.appendChild(unifiedSection);
+
+      // --- الملاحظات السابقة (عرض فقط) ---
+      if (data.notes.length > 0) {
+        const notesSection = el('div', { style: chipSectionStyle });
+        notesSection.appendChild(el('div', { style: chipTitleStyle }, ['✍️ الملاحظات السابقة']));
+        data.notes.forEach((n) => {
+          notesSection.appendChild(el('div', { style: 'margin-bottom:10px;padding:10px 12px;background:var(--surface);border-radius:12px;border:1px solid var(--border)' }, [
+            el('div', { style: 'font-size:13.5px;color:var(--text);line-height:1.6' }, [n.note]),
+            el('div', { style: 'font-size:11px;color:var(--muted);margin-top:4px' }, [`${n.author_name} · ${fmt.dateTime(n.created_at)}`]),
+          ]));
+        });
+        card.appendChild(notesSection);
+      }
+
+      card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => { navigator.clipboard?.writeText(c.phone); toast('تم نسخ رقم الهاتف', 'success'); } }, ['📋 نسخ الرقم']));
+
+      // --- زر واتساب ---
+      const waBtn = el('button', {
+        class: 'btn btn-block mb-8 ' + (c.whatsappContactStatus === 'NOT_CONTACTED' ? 'btn-whatsapp' : 'btn-whatsapp done'),
+        onclick: () => openWhatsAppModal(c),
+      }, [c.whatsappContactStatus === 'NOT_CONTACTED' ? '💬 إرسال واتساب' : '✓ تم التواصل واتساب']);
+      card.appendChild(waBtn);
+      if (c.whatsappContactStatus !== 'NOT_CONTACTED') {
+        card.appendChild(el('div', { class: 'faint mb-4' }, [
+          'وقت التواصل: ',
+          el('span', { class: 'mono' }, [fmt.dateTime(c.whatsappContactedAt)]),
+        ]));
+        if (c.whatsappContactedByName) {
+          card.appendChild(el('div', { class: 'faint mb-12' }, [`تم بواسطة: ${c.whatsappContactedByName}`]));
+        }
+      }
+
+      card.appendChild(el('hr', { style: 'border-color:var(--border);margin:14px 0' }));
+
+      // --- تمت الصفقة ---
+      if (c.status !== 'CLOSED') {
+        card.appendChild(el('button', { class: 'btn btn-success btn-block mb-8', onclick: () => openDealDoneModal() }, ['✓ تمت الصفقة']));
+      }
 
       if (c.status === 'CLOSED' && App.state.user.role === 'team_leader') {
         card.appendChild(el('button', { class: 'btn btn-outline btn-block mb-8', onclick: () => reopenCustomer(c) }, ['إعادة فتح العميل']));
