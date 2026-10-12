@@ -383,37 +383,69 @@ function applyTheme() {
   s.id = 'mohra-pink-theme';
   s.textContent = `
     :root[data-user-theme="pink"] {
-      --brand: #d6336c;
-      --brand-dark: #a61e4d;
+      --bg: #fdf2f8;
+      --surface: #ffffff;
+      --surface-2: #fce7f3;
+      --border: #f9a8d4;
+      --brand: #ec4899;
+      --brand-dark: #db2777;
       --brand-foreground: #ffffff;
-      --brand-soft: rgba(214, 51, 108, 0.08);
-      --brand-2: #e64980;
-      --brand-2-soft: rgba(230, 73, 128, 0.1);
-      --info: #cc5de8;
-      --info-soft: rgba(204, 93, 232, 0.1);
-      --success: #20c997;
-      --success-soft: rgba(32, 201, 151, 0.1);
-      --mono-tint: #e64980;
-      --shadow-brand: rgba(214, 51, 108, 0.15) 0px 1px 3px 0px, rgba(214, 51, 108, 0.08) 0px 1px 0px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset;
+      --brand-soft: rgba(236, 72, 153, 0.12);
+      --brand-2: #f472b6;
+      --brand-2-soft: rgba(244, 114, 182, 0.15);
+      --success: #e84393;
+      --success-soft: rgba(232, 67, 147, 0.1);
+      --warning: #f06595;
+      --warning-soft: rgba(240, 101, 149, 0.12);
+      --danger: #be185d;
+      --danger-soft: rgba(190, 24, 93, 0.1);
+      --info: #d946ef;
+      --info-soft: rgba(217, 70, 239, 0.1);
+      --gray: #9d7a8a;
+      --gray-soft: #fce7f3;
+      --mono-tint: #ec4899;
+      --shadow-xs: rgba(236, 72, 153, 0.08) 0px 1px 3px 0px, rgba(236, 72, 153, 0.06) 0px 1px 2px -1px;
+      --shadow-sm: rgba(236, 72, 153, 0.08) 0px 4px 4px 0px;
+      --shadow-brand: rgba(236, 72, 153, 0.2) 0px 1px 3px 0px, rgba(236, 72, 153, 0.1) 0px 1px 0px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset;
     }
     :root[data-user-theme="pink"][data-theme="dark"] {
-      --brand: #f783ac;
-      --brand-dark: #fcc2d7;
-      --brand-foreground: #111111;
-      --brand-soft: rgba(247, 131, 172, 0.14);
-      --brand-2: #f06595;
-      --brand-2-soft: rgba(240, 101, 149, 0.18);
-      --info: #da77f2;
-      --info-soft: rgba(218, 119, 242, 0.16);
-      --success: #63e6be;
-      --success-soft: rgba(99, 230, 190, 0.16);
-      --mono-tint: #f06595;
-      --shadow-brand: 0 1px 3px rgba(0, 0, 0, 0.5);
+      --bg: #1a0a12;
+      --surface: #1f0f18;
+      --surface-2: #2d1423;
+      --border: rgba(244, 114, 182, 0.2);
+      --brand: #f472b6;
+      --brand-dark: #f9a8d4;
+      --brand-foreground: #1a0a12;
+      --brand-soft: rgba(244, 114, 182, 0.16);
+      --brand-2: #ec4899;
+      --brand-2-soft: rgba(236, 72, 153, 0.2);
+      --success: #f472b6;
+      --success-soft: rgba(244, 114, 182, 0.16);
+      --warning: #f9a8d4;
+      --warning-soft: rgba(249, 168, 212, 0.16);
+      --danger: #fb7185;
+      --danger-soft: rgba(251, 113, 133, 0.16);
+      --info: #e879f9;
+      --info-soft: rgba(232, 121, 249, 0.16);
+      --gray: #c9a0b3;
+      --gray-soft: #2d1423;
+      --mono-tint: #f472b6;
+      --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+      --shadow-brand: 0 1px 3px rgba(244, 114, 182, 0.3);
     }
-    :root[data-user-theme="pink"] .sidebar { border-color: rgba(214, 51, 108, 0.15); }
-    :root[data-user-theme="pink"] .nav-item.active { background: var(--brand-soft); }
-    :root[data-user-theme="pink"] .topbar { border-bottom-color: rgba(214, 51, 108, 0.2); }
+    :root[data-user-theme="pink"] .sidebar { background: var(--surface); border-color: var(--border); }
+    :root[data-user-theme="pink"] .nav-item.active { background: var(--brand-soft); color: var(--brand); }
+    :root[data-user-theme="pink"] .topbar { border-bottom: 2px solid var(--brand-soft); }
     :root[data-user-theme="pink"] .page-title { color: var(--brand); }
+    :root[data-user-theme="pink"] .btn-primary { background: linear-gradient(135deg, #ec4899, #db2777); }
+    :root[data-user-theme="pink"] .btn-primary:hover { background: linear-gradient(135deg, #db2777, #be185d); }
+    :root[data-user-theme="pink"] .btn-outline { border-color: #f9a8d4; }
+    :root[data-user-theme="pink"] .btn-outline:hover { background: var(--surface-2); border-color: #f472b6; }
+    :root[data-user-theme="pink"] .card { border-color: rgba(244, 114, 182, 0.15); }
+    :root[data-user-theme="pink"] .badge { border-color: rgba(244, 114, 182, 0.2); }
+    :root[data-user-theme="pink"] .link-btn { color: var(--brand); }
+    :root[data-user-theme="pink"] .spinner { border-top-color: var(--brand); }
   `;
   document.head.appendChild(s);
 })();
