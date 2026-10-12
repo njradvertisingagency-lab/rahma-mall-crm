@@ -795,7 +795,7 @@ function renderShell() {
       ])
     ))),
     el('div', { class: 'sidebar-footer' }, [
-      el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
+      el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode']),
       el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
       ...(App.state.user && App.state.user.id === 5 ? [(function() {
         if (!document.getElementById('mohra-hearts-css')) {
