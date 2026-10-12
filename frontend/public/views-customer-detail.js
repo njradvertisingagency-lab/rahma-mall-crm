@@ -609,10 +609,12 @@
         try {
           // 1) تسجيل المكالمة
           await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
-          // 2) إضافة ملاحظة لو موجودة
-          if (callNotes.value.trim()) {
-            await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: callNotes.value.trim() } });
-          }
+          // 2) إضافة ملاحظة — لو الموظف ماكتبش، نولّد واحدة أوتوماتيك عشان تحمي العميل من السحب
+          const manualNote = callNotes.value.trim();
+          const outcomeLabel = CALL_OUTCOME_LABELS[selectedOutcome] || selectedOutcome;
+          const statusLabel = selectedStatus ? (STATUS_LABELS[selectedStatus] || selectedStatus) : '';
+          const autoNote = manualNote || ('📞 ' + outcomeLabel + (statusLabel ? ' → ' + statusLabel : ''));
+          await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: autoNote } });
           // 3) تحديث الحالة لو اتغيرت
           let statusMsg = '';
           if (selectedStatus && selectedStatus !== c.status) {
