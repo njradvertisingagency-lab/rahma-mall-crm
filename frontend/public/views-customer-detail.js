@@ -485,6 +485,9 @@
       const card = el('div', { class: 'card card-pad' });
       card.appendChild(el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['الإجراءات']));
 
+      // ⚠️ تحذير للموظفين
+      card.appendChild(el('div', { style: 'background:linear-gradient(135deg,#fff3cd,#ffeeba);border:1px solid #ffc107;border-radius:12px;padding:10px 14px;margin-bottom:12px;text-align:center;font-size:13px;font-weight:700;color:#856404;line-height:1.6' }, ['⚠️ متنساش تكتب ملاحظة للعميل عشان الرقم ميتسحبش منك']));
+
       card.appendChild(el('a', { class: 'btn btn-outline btn-block mb-8', href: 'tel:' + c.normalizedPhone, onclick: () => api('/customers/' + c.id + '/call', { method: 'POST' }).catch(() => {}) }, ['📞 اتصال بالعميل']));
 
       // --- Shared chip styles ---
@@ -597,32 +600,36 @@
 
       // ③ ملاحظة (اختياري — مخفية لحد ما يختار نتيجة)
       const noteWrap = el('div', { style: 'display:none' });
-      const callNotes = el('textarea', { placeholder: '✍️ ملاحظة (اختياري)...', style: 'width:100%;min-height:48px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:12px;font-family:inherit' });
+      const callNotes = el('textarea', { placeholder: '✍️ اكتب ملاحظة (إجباري)...', style: 'width:100%;min-height:48px;border-radius:12px;padding:10px 12px;font-size:13px;border:2px solid #e74c3c;background:var(--surface);color:var(--text);resize:vertical;margin-bottom:12px;font-family:inherit' });
       noteWrap.appendChild(callNotes);
       unifiedSection.appendChild(noteWrap);
 
       // ④ زر الحفظ الموحّد
       const unifiedSaveBtn = el('button', { style: `background:linear-gradient(135deg,#e74c3c,#c0392b);${saveBtnStyle};display:none`, onclick: async () => {
         if (!selectedOutcome) { toast('اختار نتيجة المكالمة الأول', 'error'); return; }
+        // الملاحظة إجبارية
+        if (!callNotes.value.trim()) { toast('لازم تكتب ملاحظة الأول ❗', 'error'); callNotes.focus(); return; }
         unifiedSaveBtn.disabled = true;
         unifiedSaveBtn.textContent = '⏳ جارِ الحفظ…';
         try {
           // 1) تسجيل المكالمة
           await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
-          // 2) إضافة ملاحظة — لو الموظف ماكتبش، نولّد واحدة أوتوماتيك عشان تحمي العميل من السحب
-          const manualNote = callNotes.value.trim();
-          const outcomeLabel = CALL_OUTCOME_LABELS[selectedOutcome] || selectedOutcome;
-          const statusLabel = selectedStatus ? (STATUS_LABELS[selectedStatus] || selectedStatus) : '';
-          const autoNote = manualNote || ('📞 ' + outcomeLabel + (statusLabel ? ' → ' + statusLabel : ''));
-          await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: autoNote } });
+          // 2) إضافة ملاحظة
+          const noteText = callNotes.value.trim();
+          await api('/customers/' + c.id + '/notes', { method: 'POST', body: { note: noteText } });
           // 3) تحديث الحالة لو اتغيرت
           let statusMsg = '';
           if (selectedStatus && selectedStatus !== c.status) {
             const res = await api('/customers/' + c.id + '/status', { method: 'PATCH', body: { status: selectedStatus } });
             if (res.autoFollowup) statusMsg = ' — تم جدولة إعادة اتصال بعد ١٥ دقيقة';
           }
-          toast('تم تسجيل كل حاجة بنجاح ✅' + statusMsg, 'success');
-          if (selectedStatus === 'INTERESTED') toast('عشان العميل يظهر في "عملائك المهتمين" اكتب عليه ملاحظة حقيقية', 'info');
+          // 4) لو النتيجة مش "تم الرد" أو "تم الرفض" ← سحب فوري
+          const NON_RECLAIM_OUTCOMES = ['ANSWERED', 'REJECTED'];
+          if (!NON_RECLAIM_OUTCOMES.includes(selectedOutcome)) {
+            toast('الرقم اتسحب — النتيجة مش رد أو رفض 🔄', 'info');
+          } else {
+            toast('تم تسجيل كل حاجة بنجاح ✅' + statusMsg, 'success');
+          }
           await load();
           render();
         } catch (e) { toast(e.message, 'error'); }

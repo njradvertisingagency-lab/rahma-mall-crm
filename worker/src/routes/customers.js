@@ -816,7 +816,19 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
   const leadScore = await computeLeadScore(db, id);
   await broadcast(c.env, 'LEAD_SCORE_UPDATED', { id, score: leadScore.score }, { scope: 'role', role: 'team_leader' });
 
-  return c.json({ callAttempt: { id: res.id, outcome: body.outcome, notes: body.notes || null, createdAt: res.created_at }, leadScore: leadScore.score }, 201);
+  // ── سحب فوري لو النتيجة مش "تم الرد" أو "تم الرفض" ──
+  const NON_RECLAIM_OUTCOMES = ['ANSWERED', 'REJECTED'];
+  let reclaimed = false;
+  if (!NON_RECLAIM_OUTCOMES.includes(body.outcome) && existing.assigned_employee_id) {
+    await db.prepare(`UPDATE customers SET assigned_employee_id = NULL, updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
+    await db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, action) VALUES (?, ?, ?, 'REASSIGNMENT')`).bind(id, existing.assigned_employee_id, user.id).run();
+    await logActivity(db, { actor: user, action: 'CUSTOMER_AUTO_RECLAIMED', entityType: 'customer', entityId: id, metadata: { reason: 'outcome_' + body.outcome } });
+    await broadcast(c.env, 'CUSTOMER_REASSIGNED', { id, fromEmployeeId: existing.assigned_employee_id }, { scope: 'employee', employeeId: existing.assigned_employee_id });
+    await broadcast(c.env, 'CUSTOMER_REASSIGNED', { id, fromEmployeeId: existing.assigned_employee_id }, { scope: 'role', role: 'team_leader' });
+    reclaimed = true;
+  }
+
+  return c.json({ callAttempt: { id: res.id, outcome: body.outcome, notes: body.notes || null, createdAt: res.created_at }, leadScore: leadScore.score, reclaimed }, 201);
 });
 
 // ---------------------------------------------------------------------------
