@@ -51,9 +51,9 @@ dailyReportRoutes.get('/', async (c) => {
       `SELECT COUNT(DISTINCT n.customer_id) AS customers, COUNT(*) AS total
        FROM customer_notes n
        JOIN customers c ON c.id = n.customer_id
-       WHERE n.employee_id = ? AND n.created_at >= ? AND n.created_at <= ?`
+       WHERE n.author_id = ? AND n.created_at >= ? AND n.created_at <= ?`
     )
-    .bind(emp.id, dayStartIso, dayEndIso)
+    .bind(user.id, dayStartIso, dayEndIso)
     .first();
 
   // 4. مكالمات النهاردة — إجمالي + تفصيل حسب النتيجة
