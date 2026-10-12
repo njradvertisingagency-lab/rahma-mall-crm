@@ -371,7 +371,52 @@ App.toast = toast;
 // ---------------------------------------------------------------------------
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', App.state.theme);
+  // Pink theme for Mohra (user_id=5)
+  if (App.state.user && App.state.user.id === 5) {
+    document.documentElement.setAttribute('data-user-theme', 'pink');
+  }
 }
+// ── Mohra Pink Theme ──
+(function() {
+  if (document.getElementById('mohra-pink-theme')) return;
+  const s = document.createElement('style');
+  s.id = 'mohra-pink-theme';
+  s.textContent = `
+    :root[data-user-theme="pink"] {
+      --brand: #d6336c;
+      --brand-dark: #a61e4d;
+      --brand-foreground: #ffffff;
+      --brand-soft: rgba(214, 51, 108, 0.08);
+      --brand-2: #e64980;
+      --brand-2-soft: rgba(230, 73, 128, 0.1);
+      --info: #cc5de8;
+      --info-soft: rgba(204, 93, 232, 0.1);
+      --success: #20c997;
+      --success-soft: rgba(32, 201, 151, 0.1);
+      --mono-tint: #e64980;
+      --shadow-brand: rgba(214, 51, 108, 0.15) 0px 1px 3px 0px, rgba(214, 51, 108, 0.08) 0px 1px 0px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset;
+    }
+    :root[data-user-theme="pink"][data-theme="dark"] {
+      --brand: #f783ac;
+      --brand-dark: #fcc2d7;
+      --brand-foreground: #111111;
+      --brand-soft: rgba(247, 131, 172, 0.14);
+      --brand-2: #f06595;
+      --brand-2-soft: rgba(240, 101, 149, 0.18);
+      --info: #da77f2;
+      --info-soft: rgba(218, 119, 242, 0.16);
+      --success: #63e6be;
+      --success-soft: rgba(99, 230, 190, 0.16);
+      --mono-tint: #f06595;
+      --shadow-brand: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    :root[data-user-theme="pink"] .sidebar { border-color: rgba(214, 51, 108, 0.15); }
+    :root[data-user-theme="pink"] .nav-item.active { background: var(--brand-soft); }
+    :root[data-user-theme="pink"] .topbar { border-bottom-color: rgba(214, 51, 108, 0.2); }
+    :root[data-user-theme="pink"] .page-title { color: var(--brand); }
+  `;
+  document.head.appendChild(s);
+})();
 App.toggleTheme = () => {
   App.state.theme = App.state.theme === 'dark' ? 'light' : 'dark';
   localStorage.setItem('rm_theme', App.state.theme);
