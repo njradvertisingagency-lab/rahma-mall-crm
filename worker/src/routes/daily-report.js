@@ -98,12 +98,12 @@ dailyReportRoutes.get('/', async (c) => {
     .first();
 
   const CALL_OUTCOME_AR = {
-    ANSWERED: 'رد',
-    NO_ANSWER: 'مارد',
-    BUSY: 'مشغول',
-    WRONG_NUMBER: 'رقم غلط',
-    SWITCHED_OFF: 'مغلق',
-    REJECTED: 'رفض',
+    ANSWERED: 'رد ✅',
+    NO_ANSWER: 'مارد 📵',
+    BUSY: 'مشغول 🔴',
+    WRONG_NUMBER: 'رقم غلط ❌',
+    SWITCHED_OFF: 'مغلق 📴',
+    REJECTED: 'رفض 🚫',
   };
 
   const STATUS_AR = {
@@ -114,6 +114,12 @@ dailyReportRoutes.get('/', async (c) => {
     NOT_INTERESTED: 'غير مهتم',
     SOLD: 'تم البيع',
     CUSTOMER_WAITING: 'عميل منتظر',
+    CLOSED: 'مغلق',
+  };
+
+  const STATUS_EMOJI = {
+    NEW: '🆕', NO_ANSWER: '📵', FOLLOW_UP: '🔁', INTERESTED: '⭐',
+    NOT_INTERESTED: '❌', SOLD: '💰', CUSTOMER_WAITING: '⏳', CLOSED: '✅',
   };
 
   // بناء نص التقرير
@@ -133,29 +139,38 @@ dailyReportRoutes.get('/', async (c) => {
   const remaining = totalReceived - reclaimedCount;
 
   const statusLines = Object.entries(statusMap)
-    .map(([k, v]) => `${STATUS_AR[k] || k}: ${v}`)
-    .join(' | ');
+    .map(([k, v]) => `  ${STATUS_EMOJI[k] || '•'} ${STATUS_AR[k] || k}: *${v}*`)
+    .join('\n');
 
   const callOutcomeLines = Object.entries(callOutcomeMap)
-    .map(([k, v]) => `${CALL_OUTCOME_AR[k] || k}: ${v}`)
-    .join(' | ');
+    .map(([k, v]) => `  ${CALL_OUTCOME_AR[k] || k}: *${v}*`)
+    .join('\n');
 
   const reportText = [
-    `📊 تقرير يوم ${dateAr}`,
-    `👤 ${emp.name}`,
-    `⏰ وقت الحضور: ${checkinStr}`,
+    `━━━━━━━━━━━━━━━━━━━`,
+    `📊 *تقرير يومي — ${dateAr}*`,
+    `👤 *${emp.name}*`,
+    `⏰ الحضور: ${checkinStr}`,
+    `━━━━━━━━━━━━━━━━━━━`,
     '',
-    `📱 استلمت: ${totalReceived} رقم`,
-    `✍️ ملاحظات على: ${notesRow.customers} عميل (${notesRow.total} ملاحظة)`,
-    `📞 مكالمات: ${callsRow.n} محاولة`,
-    callOutcomeLines ? `   ↳ ${callOutcomeLines}` : null,
-    `💬 واتساب: ${waRow.n} عميل`,
+    `📱 *الأرقام*`,
+    `  استلمت: *${totalReceived}* رقم`,
+    `  اتسحب: *${reclaimedCount}* رقم`,
+    `  باقي معايا: *${remaining}* رقم`,
     '',
-    `📈 الحالات:`,
-    statusLines || 'لا توجد حالات',
+    `📞 *المكالمات: ${callsRow.n} محاولة*`,
+    callOutcomeLines || '  لا توجد مكالمات',
     '',
-    `🔄 اتسحب مني: ${reclaimedCount} رقم`,
-    `✅ لسه معايا: ${remaining} رقم`,
+    `✍️ *الملاحظات*`,
+    `  كتبت على: *${notesRow.customers}* عميل (${notesRow.total} ملاحظة)`,
+    '',
+    `💬 *واتساب:* ${waRow.n} عميل`,
+    '',
+    `📈 *توزيع الحالات:*`,
+    statusLines || '  لا توجد حالات',
+    '',
+    `━━━━━━━━━━━━━━━━━━━`,
+    `🏢 *رحمة مول — CRM*`,
   ].filter(Boolean).join('\n');
 
   const waUrl = `https://wa.me/${toInternational(TEAM_LEADER_PHONE)}?text=${encodeURIComponent(reportText)}`;
