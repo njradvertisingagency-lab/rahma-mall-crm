@@ -218,13 +218,10 @@
       return wrap;
     }
 
-    // --- محاولات الاتصال (يدوية دائمًا — لا يُفترض شيء) ---
+    // --- محاولات الاتصال (عرض فقط — التسجيل بقى في الإجراءات) ---
     function renderCallAttempts() {
       const wrap = el('div', { class: 'card card-pad' });
-      wrap.appendChild(el('div', { class: 'flex-between mb-8' }, [
-        el('div', { class: 'muted', style: 'font-size:11px' }, ['يتم تسجيلها يدويًا — لا يوجد ربط بمقسم هاتف.']),
-        el('button', { class: 'btn btn-sm', style: 'background:#e74c3c;color:#fff;font-weight:800;padding:8px 18px;border-radius:10px;font-size:13px', onclick: () => logCallAttempt() }, ['📞 سجّل مكالمة']),
-      ]));
+      wrap.appendChild(el('div', { style: 'font-weight:800;margin-bottom:8px' }, ['📞 سجل المكالمات']));
       if (data.callAttempts.length === 0) {
         wrap.appendChild(el('div', { class: 'muted' }, ['لا توجد محاولات اتصال مسجّلة بعد.']));
         return wrap;
@@ -241,28 +238,6 @@
         ]),
       ]));
       return wrap;
-    }
-
-    function logCallAttempt() {
-      const outcomeSel = el('select', {}, CALL_OUTCOMES.map(([v, l]) => el('option', { value: v }, [l])));
-      const notesInput = el('textarea', { placeholder: 'ملاحظات (اختياري)' });
-      const body = el('div', {}, [
-        el('div', { class: 'field' }, [el('label', {}, ['النتيجة']), outcomeSel]),
-        el('div', { class: 'field' }, [el('label', {}, ['ملاحظات']), notesInput]),
-      ]);
-      const dlg = modal('تسجيل محاولة اتصال', body, []);
-      dlg.el.querySelector('.modal-footer').append(
-        el('button', { class: 'btn btn-outline', onclick: () => dlg.close() }, ['إلغاء']),
-        el('button', { class: 'btn btn-primary', onclick: async () => {
-          try {
-            await api('/customers/' + data.customer.id + '/call-attempts', { method: 'POST', body: { outcome: outcomeSel.value, notes: notesInput.value } });
-            toast('تم تسجيل محاولة الاتصال', 'success');
-            dlg.close();
-            await load();
-            render();
-          } catch (e) { toast(e.message, 'error'); }
-        } }, ['حفظ'])
-      );
     }
 
     // --- زيارات الفرع والمشتريات (تمت الصفقة) — حالة الصفقة نظام مستقل عن حالة العميل. ---
