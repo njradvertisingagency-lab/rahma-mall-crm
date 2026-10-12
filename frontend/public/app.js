@@ -721,11 +721,16 @@ function renderShell() {
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '☀️ الوضع الفاتح' : '🌙 الوضع الداكن']),
       el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
       ...(App.state.user && App.state.user.id === 5 ? [(function() {
-        const heartEl = el('div', { class: 'dev-credit', style: 'margin-top:4px' }, ['بحبك قد الكون ❤️']);
-        let step = 0;
-        const frames = ['❤️', '❤️❤️', '❤️❤️❤️', '❤️❤️❤️❤️', '❤️❤️❤️', '❤️❤️'];
-        setInterval(() => { step = (step + 1) % frames.length; heartEl.textContent = 'بحبك قد الكون ' + frames[step]; }, 600);
-        return heartEl;
+        if (!document.getElementById('mohra-hearts-css')) {
+          const css = document.createElement('style');
+          css.id = 'mohra-hearts-css';
+          css.textContent = `@keyframes mohra-pulse{0%,100%{opacity:.3;transform:scale(.7)}50%{opacity:1;transform:scale(1.2)}}.mohra-heart{display:inline-block;animation:mohra-pulse 1.2s ease-in-out infinite}`;
+          document.head.appendChild(css);
+        }
+        const h1 = el('span', { class: 'mohra-heart', style: 'animation-delay:0s' }, ['❤️']);
+        const h2 = el('span', { class: 'mohra-heart', style: 'animation-delay:.3s' }, ['❤️']);
+        const h3 = el('span', { class: 'mohra-heart', style: 'animation-delay:.6s' }, ['❤️']);
+        return el('div', { class: 'dev-credit', style: 'margin-top:4px' }, ['بحبك قد الكون ', h1, h2, h3]);
       })()] : []),
     ]),
   ]);
