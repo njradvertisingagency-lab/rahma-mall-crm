@@ -93,7 +93,7 @@ dailyReportRoutes.get('/', async (c) => {
 
   // 7. وقت الحضور
   const attendanceRow = await db
-    .prepare(`SELECT checked_in_at FROM attendance_records WHERE user_id = ? AND date = ?`)
+    .prepare(`SELECT check_in_at FROM attendance_records WHERE user_id = ? AND work_date = ?`)
     .bind(user.id, dateStr)
     .first();
 
@@ -121,8 +121,8 @@ dailyReportRoutes.get('/', async (c) => {
   const dateAr = `${d[2]}/${d[1]}/${d[0]}`;
 
   let checkinStr = '—';
-  if (attendanceRow?.checked_in_at) {
-    const t = new Date(attendanceRow.checked_in_at);
+  if (attendanceRow?.check_in_at) {
+    const t = new Date(attendanceRow.check_in_at);
     const h = t.getUTCHours() + 2; // Cairo = UTC+2 (approximate)
     const m = String(t.getUTCMinutes()).padStart(2, '0');
     const ampm = h >= 12 ? 'م' : 'ص';
