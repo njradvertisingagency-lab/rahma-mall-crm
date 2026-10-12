@@ -490,29 +490,39 @@
       card.appendChild(el('a', { class: 'btn btn-outline btn-block mb-8', href: 'tel:' + c.normalizedPhone, onclick: () => api('/customers/' + c.id + '/call', { method: 'POST' }).catch(() => {}) }, ['📞 اتصال بالعميل']));
 
       // --- تسجيل نتيجة المكالمة (inline بعد زر الاتصال مباشرة) ---
-      const callSection = el('div', { style: 'background:var(--surface-2);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--border)' });
-      callSection.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text)' }, ['📞 هل اتصلت بالعميل؟']));
-      const outcomeBtnsWrap = el('div', { class: 'flex gap-6 wrap', style: 'margin-bottom:10px' });
+      const chipSectionStyle = 'background:var(--surface-2);border-radius:16px;padding:16px;margin-bottom:14px;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,.08)';
+      const chipTitleStyle = 'font-weight:800;font-size:14px;margin-bottom:12px;color:var(--text);display:flex;align-items:center;gap:6px';
+      const chipGridStyle = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:12px';
+      const chipBaseStyle = 'color:#fff;padding:8px 6px;border-radius:20px;font-size:12.5px;font-weight:700;border:3px solid transparent;cursor:pointer;transition:all .2s ease;text-align:center;line-height:1.3';
+      const chipActiveExtra = 'transform:scale(1.05);box-shadow:0 2px 8px rgba(0,0,0,.25)';
+      const saveBtnStyle = 'color:#fff;font-weight:800;padding:11px 0;border-radius:14px;font-size:14px;width:100%;border:none;cursor:pointer;transition:background .2s;letter-spacing:.3px';
+
+      const callSection = el('div', { style: chipSectionStyle });
+      callSection.appendChild(el('div', { style: chipTitleStyle }, ['📞 هل اتصلت بالعميل؟']));
+      const outcomeBtnsWrap = el('div', { style: chipGridStyle });
       let selectedOutcome = null;
       const outcomeBtns = [];
+      function refreshCallChips() {
+        outcomeBtns.forEach((b, i) => {
+          const isOn = CALL_OUTCOMES[i][0] === selectedOutcome;
+          b.style.opacity = isOn ? '1' : '0.5';
+          b.style.borderColor = isOn ? 'rgba(255,255,255,.7)' : 'transparent';
+          b.style.cssText = b.style.cssText.replace(/transform:[^;]+;?/g,'').replace(/box-shadow:[^;]+;?/g,'');
+          if (isOn) b.style.cssText += ';' + chipActiveExtra;
+        });
+      }
       CALL_OUTCOMES.forEach(([val, label]) => {
         const btn = el('button', {
-          style: `background:${CALL_OUTCOME_COLORS[val]};color:#fff;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;border:2px solid transparent;cursor:pointer;opacity:0.6;transition:opacity .2s,border-color .2s`,
-          onclick: () => {
-            selectedOutcome = val;
-            outcomeBtns.forEach((b, i) => {
-              b.style.opacity = CALL_OUTCOMES[i][0] === val ? '1' : '0.4';
-              b.style.borderColor = CALL_OUTCOMES[i][0] === val ? '#fff' : 'transparent';
-            });
-          },
+          style: `background:${CALL_OUTCOME_COLORS[val]};${chipBaseStyle};opacity:0.5`,
+          onclick: () => { selectedOutcome = val; refreshCallChips(); },
         }, [label]);
         outcomeBtns.push(btn);
         outcomeBtnsWrap.appendChild(btn);
       });
       callSection.appendChild(outcomeBtnsWrap);
-      const callNotes = el('textarea', { placeholder: 'ملاحظات (اختياري)', style: 'width:100%;min-height:50px;border-radius:8px;padding:8px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:10px' });
+      const callNotes = el('textarea', { placeholder: 'ملاحظات (اختياري)...', style: 'width:100%;min-height:48px;border-radius:12px;padding:10px 12px;font-size:13px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;margin-bottom:12px;font-family:inherit' });
       callSection.appendChild(callNotes);
-      const saveCallBtn = el('button', { style: 'background:#e74c3c;color:#fff;font-weight:800;padding:10px 0;border-radius:10px;font-size:14px;width:100%;border:none;cursor:pointer', onclick: async () => {
+      const saveCallBtn = el('button', { style: `background:linear-gradient(135deg,#e74c3c,#c0392b);${saveBtnStyle}`, onclick: async () => {
         if (!selectedOutcome) { toast('اختار نتيجة المكالمة الأول', 'error'); return; }
         try {
           await api('/customers/' + c.id + '/call-attempts', { method: 'POST', body: { outcome: selectedOutcome, notes: callNotes.value } });
@@ -550,33 +560,35 @@
       }
 
       // --- تغيير الحالة (chip buttons بدل dropdown) ---
-      const STATUS_CHIP_COLORS = { NO_ANSWER: '#95a5a6', FOLLOW_UP: '#f39c12', INTERESTED: '#27ae60', NOT_INTERESTED: '#7f8c8d' };
-      const statusSection = el('div', { style: 'background:var(--surface-2);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--border)' });
-      statusSection.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text)' }, ['📋 تغيير الحالة']));
-      const statusBtnsWrap = el('div', { class: 'flex gap-6 wrap', style: 'margin-bottom:10px' });
+      const STATUS_CHIP_COLORS = { NO_ANSWER: '#95a5a6', FOLLOW_UP: '#e67e22', INTERESTED: '#27ae60', NOT_INTERESTED: '#7f8c8d' };
+      const statusSection = el('div', { style: chipSectionStyle });
+      statusSection.appendChild(el('div', { style: chipTitleStyle }, ['📋 تغيير الحالة']));
+      const statusBtnsWrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px' });
       let selectedStatus = SELECTABLE_STATUSES.includes(c.status) ? c.status : null;
       const statusBtns = [];
+      function refreshStatusChips() {
+        statusBtns.forEach((b, i) => {
+          const isOn = SELECTABLE_STATUSES[i] === selectedStatus;
+          b.style.opacity = isOn ? '1' : '0.5';
+          b.style.borderColor = isOn ? 'rgba(255,255,255,.7)' : 'transparent';
+          b.style.cssText = b.style.cssText.replace(/transform:[^;]+;?/g,'').replace(/box-shadow:[^;]+;?/g,'');
+          if (isOn) b.style.cssText += ';' + chipActiveExtra;
+        });
+      }
       SELECTABLE_STATUSES.forEach((val) => {
         const isActive = val === selectedStatus;
         const btn = el('button', {
-          style: `background:${STATUS_CHIP_COLORS[val]};color:#fff;padding:6px 14px;border-radius:10px;font-size:12px;font-weight:700;border:2px solid transparent;cursor:pointer;opacity:${isActive ? '1' : '0.5'};transition:opacity .2s,border-color .2s${isActive ? ';border-color:#fff' : ''}`,
-          onclick: () => {
-            selectedStatus = val;
-            statusBtns.forEach((b, i) => {
-              b.style.opacity = SELECTABLE_STATUSES[i] === val ? '1' : '0.4';
-              b.style.borderColor = SELECTABLE_STATUSES[i] === val ? '#fff' : 'transparent';
-            });
-          },
+          style: `background:${STATUS_CHIP_COLORS[val]};${chipBaseStyle};opacity:${isActive ? '1' : '0.5'}${isActive ? ';border-color:rgba(255,255,255,.7);' + chipActiveExtra : ''}`,
+          onclick: () => { selectedStatus = val; refreshStatusChips(); },
         }, [STATUS_LABELS[val] || val]);
         statusBtns.push(btn);
         statusBtnsWrap.appendChild(btn);
       });
       statusSection.appendChild(statusBtnsWrap);
-      // لو الحالة الحالية مش من القيم القابلة للاختيار — نعرضها كـ chip معطّل
       if (!SELECTABLE_STATUSES.includes(c.status)) {
-        statusSection.appendChild(el('div', { style: 'font-size:11px;color:var(--muted);margin-bottom:8px' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
+        statusSection.appendChild(el('div', { style: 'font-size:11.5px;color:var(--muted);margin-bottom:10px;text-align:center;opacity:.7' }, [`الحالة الحالية: ${STATUS_LABELS[c.status] || c.status}`]));
       }
-      const saveStatusBtn = el('button', { style: 'background:#3498db;color:#fff;font-weight:800;padding:10px 0;border-radius:10px;font-size:14px;width:100%;border:none;cursor:pointer', onclick: async () => {
+      const saveStatusBtn = el('button', { style: `background:linear-gradient(135deg,#3498db,#2980b9);${saveBtnStyle}`, onclick: async () => {
         if (!selectedStatus) { toast('اختار الحالة الأول', 'error'); return; }
         if (selectedStatus === c.status) { toast('الحالة هي هي مفيش تغيير', 'info'); return; }
         try {
