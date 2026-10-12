@@ -636,7 +636,6 @@ App.rerender = renderRoute;
 // يوافق/يرفض على طلبات الإجازة (شوف views-leaves.js).
 const NAV_TL = [
   ['dashboard', '📊', 'لوحة التحكم'],
-  ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
   ['import', '📥', 'استيراد عملاء'],
@@ -644,7 +643,6 @@ const NAV_TL = [
   ['today-leads', '📞', 'أرقام اليوم'],
   ['team-performance', '🏅', 'أداء الفريق'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['file-movements', '📂', 'حركة الملفات'],
 ];
 
 // حساب الموارد البشرية (isHr=1) — نفس role='team_leader' في قاعدة البيانات،
@@ -653,9 +651,7 @@ const NAV_TL = [
 // أساسي، بدون أي وصول لشغل المبيعات/CRM (العملاء، التوزيع، التحليلات...).
 const NAV_HR = [
   ['dashboard', '📊', 'لوحة التحكم'],
-  ['accounting-files', '🗃️', 'ملفات العملاء'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
-  ['file-movements', '📂', 'حركة الملفات'],
 ];
 
 // حساب "admin" (👑 الرؤية الشاملة، is_owner=1) — god-view كامل للشركة:
@@ -663,8 +659,6 @@ const NAV_HR = [
 // قائمة واحدة مدمجة، بدون أي قفل. هذا هو حساب المالك الفعلي بعد التحديث —
 // وصول تشغيلي كامل، مش عرض فقط زي الحساب القديم.
 const NAV_ADMIN = [
-  ['accounting-files', '🗃️', 'الحسابات — الملفات'],
-  ['file-movements', '📂', 'حركة الملفات'],
   ['dashboard', '📊', 'لوحة التحكم'],
   ['command-center', '🎛️', 'مركز التحكم'],
   ['customers', '👥', 'العملاء'],
@@ -678,35 +672,8 @@ const NAV_ADMIN = [
   ['activity', '🕒', 'سجل الأنشطة'],
   ['settings', '⚙️', 'الإعدادات'],
 ];
-// موظفو الحسابات (department='accounting') — قائمة خاصة بقسم الحسابات فقط:
-// الداشبورد + ملفات العملاء + حركة الملفات + البصمة/الحضور + الإجازات
-// + الإشعارات + الملف الشخصي. لا يوجد وصول لأي شيء في المبيعات/CRM.
-const NAV_ACCOUNTING = [
-  ['accounting-files', '🗃️', 'ملفات العملاء'],
-  ['file-movements', '📂', 'حركة الملفات'],
-  ['import', '📥', 'استيراد عملاء'],
-  ['distribute', '🔀', 'توزيع العملاء'],
-  ['today-leads', '📞', 'أرقام اليوم'],
-  ['team-performance', '🏅', 'أداء الفريق'],
-  ['reports', '🧾', 'التقارير'],
-  ['dashboard', '📊', 'لوحة التحكم'],
-  ['payroll-salaries', '💰', 'تكوين الرواتب'],
-  ['payroll-runs', '📋', 'دورات المرتبات'],
-  ['profile', '🙍', 'الملف الشخصي'],
-];
-
-// موظفو الشئون القانونية (department='legal') — نفس صفحات الحسابات تقريبًا:
-// الداشبورد + ملفات العملاء + حركة الملفات + الإجازات + الإشعارات + الملف الشخصي.
-const NAV_LEGAL = [
-  ['dashboard', '📊', 'لوحة التحكم'],
-  ['accounting-files', '🗃️', 'ملفات العملاء'],
-  ['file-movements', '📂', 'حركة الملفات'],
-  ['profile', '🙍', 'الملف الشخصي'],
-];
-
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
-  ['my-files', '🗃️', 'ملفاتي'],
   ['my-customers', '👥', 'عملائي'],
   ['my-interested', '⭐', 'عملائك المهتمين'],
   ['followups', '⏰', 'المتابعات'],
@@ -722,9 +689,7 @@ function renderShell() {
   // الأدمن/المالك فقط). قائد الفريق العادي لسه يشوف مبيعاته بس.
   const nav = user.role === 'team_leader'
     ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL)
-    : (user.department === 'accounting' ? NAV_ACCOUNTING
-       : user.department === 'legal' ? NAV_LEGAL
-       : NAV_EMPLOYEE);
+    : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
 
   // مظهر مميز (ذهبي) لحساب الأدمن فقط — عشان يبان من أول لحظة إنه حساب

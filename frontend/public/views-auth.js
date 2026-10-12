@@ -8,7 +8,7 @@
     let allEmployees = [];
     let filteredEmployees = [];
     let selectedEmployee = null;
-    let activeDept = null; // 'customer_service' or 'accounting'
+    let activeDept = null;
     let employeesClosedInfo = null; // { shiftText, opensInText, isOffDay } when outside work hours
 
     async function render() {
@@ -23,7 +23,7 @@
 
       if (screen === 'pick') {
         container.appendChild(
-          el('div', { class: 'login-cards login-cards-3' }, [
+          el('div', { class: 'login-cards' }, [
             el('div', { class: 'login-card', onclick: () => { screen = 'tl-form'; render(); } }, [
               el('div', { class: 'icon' }, ['💼']),
               el('div', { class: 'label' }, ['الإدارة']),
@@ -34,17 +34,12 @@
               el('div', { class: 'label' }, ['خدمة العملاء']),
               el('div', { class: 'desc' }, ['متابعة عملائك ومهامك الخاصة.']),
             ]),
-            el('div', { class: 'login-card', onclick: async () => { activeDept = 'accounting'; screen = 'employee-pick'; await loadEmployees(); render(); } }, [
-              el('div', { class: 'icon' }, ['🧾']),
-              el('div', { class: 'label' }, ['الحسابات']),
-              el('div', { class: 'desc' }, ['إدارة ملفات العملاء وحركة المستندات.']),
-            ]),
           ])
         );
       } else if (screen === 'tl-form') {
         container.appendChild(renderLoginForm('Teamleader-optional', 'تسجيل دخول الإدارة', true));
       } else if (screen === 'employee-pick') {
-        const deptLabel = activeDept === 'accounting' ? 'الحسابات' : 'خدمة العملاء';
+        const deptLabel = 'خدمة العملاء';
         if (employeesClosedInfo) {
           const info = employeesClosedInfo;
           container.appendChild(
@@ -87,11 +82,7 @@
         const data = await api('/auth/employees-public');
         allEmployees = data.employees;
         // فلترة حسب القسم المختار
-        filteredEmployees = allEmployees.filter((e) =>
-          activeDept === 'accounting'
-            ? e.department === 'accounting'
-            : e.department !== 'accounting'
-        );
+        filteredEmployees = allEmployees.filter((e) => e.department !== 'accounting');
         employeesClosedInfo = data.closed ? { shiftText: data.shiftText, opensInText: data.opensInText, isOffDay: data.isOffDay } : null;
       } catch (e) {
         toast('تعذّر تحميل قائمة الموظفين', 'error');
