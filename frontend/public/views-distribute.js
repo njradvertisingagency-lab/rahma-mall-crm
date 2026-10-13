@@ -8,24 +8,85 @@
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [el('div', { class: 'page-title' }, ['توزيع العملاء'])]));
 
-    const { customers: unassigned } = await api('/customers?employeeId=unassigned&pageSize=200');
     const { employees } = await api('/employees');
-
-    const selectedCustomers = new Set(unassigned.map((c) => c.id));
+    const selectedCustomers = new Set();
     const selectedEmployees = new Set(employees.filter((e) => e.availability === 'AVAILABLE').map((e) => e.id));
 
     const card = el('div', { class: 'card card-pad' });
-    card.appendChild(el('div', { style: 'font-weight:800;margin-bottom:10px' }, [`عملاء غير موزّعين: ${unassigned.length}`]));
 
-    const custList = el('div', { style: 'max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:16px' },
-      unassigned.length === 0
-        ? [el('div', { class: 'muted' }, ['لا يوجد عملاء غير موزّعين — قم باستيراد بعضهم أولاً.'])]
-        : unassigned.map((c) => el('label', { class: 'checkbox-row', style: 'padding:4px 0' }, [
-            el('input', { type: 'checkbox', checked: true, onchange: (e) => (e.target.checked ? selectedCustomers.add(c.id) : selectedCustomers.delete(c.id)) }),
-            `${c.id} — ${c.phone} ${c.name ? '(' + c.name + ')' : ''}`,
-          ]))
-    );
+    // ── توزيع حتى لو مكررة (toggle) ──
+    const includeDuplicatesCheck = el('input', { type: 'checkbox' });
+    const duplicatesLabel = el('label', { class: 'checkbox-row mb-12', style: 'background:var(--surface-2);padding:10px 14px;border-radius:12px;border:1px solid var(--border)' }, [
+      includeDuplicatesCheck,
+      '🔁 توزيع حتى لو مكررة (عملاء موزّعين بالفعل — لعمل متابعة)',
+    ]);
+    card.appendChild(duplicatesLabel);
+
+    const custHeader = el('div', { style: 'font-weight:800;margin-bottom:10px' });
+    card.appendChild(custHeader);
+
+    const custList = el('div', { style: 'max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:16px' });
     card.appendChild(custList);
+
+    // select-all / deselect-all row
+    const selectAllRow = el('div', { class: 'flex gap-8 mb-12', style: 'justify-content:flex-end' }, [
+      el('button', { class: 'btn btn-sm btn-outline', onclick: () => { allLoadedCustomers.forEach(c => selectedCustomers.add(c.id)); refreshCustCheckboxes(); } }, ['تحديد الكل']),
+      el('button', { class: 'btn btn-sm btn-outline', onclick: () => { selectedCustomers.clear(); refreshCustCheckboxes(); } }, ['إلغاء الكل']),
+    ]);
+    card.appendChild(selectAllRow);
+
+    let allLoadedCustomers = [];
+    let custCheckboxElements = [];
+
+    function refreshCustCheckboxes() {
+      custCheckboxElements.forEach(({ cb, id }) => { cb.checked = selectedCustomers.has(id); });
+    }
+
+    async function loadCustomers() {
+      const includeDups = includeDuplicatesCheck.checked;
+      let customers;
+      if (includeDups) {
+        const res = await api('/customers?pageSize=500');
+        customers = res.customers;
+      } else {
+        const res = await api('/customers?employeeId=unassigned&pageSize=500');
+        customers = res.customers;
+      }
+      allLoadedCustomers = customers;
+      selectedCustomers.clear();
+      customers.forEach(c => selectedCustomers.add(c.id));
+
+      custHeader.textContent = includeDups
+        ? `جميع العملاء: ${customers.length} (بما فيهم الموزّعين)`
+        : `عملاء غير موزّعين: ${customers.length}`;
+
+      custList.innerHTML = '';
+      custCheckboxElements = [];
+      if (customers.length === 0) {
+        custList.appendChild(el('div', { class: 'muted' }, [
+          includeDups
+            ? 'لا يوجد عملاء — قم باستيراد بعضهم أولاً.'
+            : 'لا يوجد عملاء غير موزّعين — قم باستيراد بعضهم أولاً.',
+        ]));
+      } else {
+        customers.forEach(c => {
+          const cb = el('input', { type: 'checkbox', checked: true, onchange: () => (cb.checked ? selectedCustomers.add(c.id) : selectedCustomers.delete(c.id)) });
+          custCheckboxElements.push({ cb, id: c.id });
+          const empTag = c.assignedEmployeeName
+            ? el('span', { style: 'font-size:11px;background:var(--primary);color:#fff;padding:1px 6px;border-radius:8px;margin-right:4px' }, [c.assignedEmployeeName])
+            : null;
+          const row = el('label', { class: 'checkbox-row', style: 'padding:4px 0' }, [
+            cb,
+            ...(empTag ? [empTag, ' '] : []),
+            `${c.id} — ${c.phone} ${c.name ? '(' + c.name + ')' : ''}`,
+          ]);
+          custList.appendChild(row);
+        });
+      }
+    }
+
+    includeDuplicatesCheck.onchange = () => loadCustomers();
+    await loadCustomers();
 
     card.appendChild(el('div', { class: 'field' }, [
       el('label', {}, ['طريقة التوزيع']),
