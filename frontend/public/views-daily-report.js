@@ -105,7 +105,7 @@
         // قبل ٥:٤٥
         reportActionsWrap.appendChild(el('div', {
           style: 'text-align:center;padding:18px;background:var(--surface-2);border-radius:16px;color:var(--muted);font-size:14px;font-weight:700;border:1px solid var(--border)',
-        }, ['🔒 إنشاء التقرير والإرسال هيفتح الساعة ٥:٤٥ م']));
+        }, [`🔒 إنشاء التقرير والإرسال هيفتح الساعة ${data.reportUnlockText || '٥:٤٥ م'}`]));
       } else {
         // بعد ٥:٤٥ — زر إنشاء التقرير
         const reportPreview = el('div', { style: 'display:none' });

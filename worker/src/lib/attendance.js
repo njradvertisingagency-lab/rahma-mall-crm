@@ -82,6 +82,23 @@ export async function getMyAttendanceStatus(env, userId) {
   const status = await getWorkHoursStatus(env.DB);
   const record = await asGet(env, recordKey(status.dateStr, userId));
   const lateCount = await countLateThisMonth(env, userId, monthOf(status.dateStr));
+
+  // Per-employee shift override (e.g. Menna ends at 5 PM instead of 6 PM)
+  let effectiveEndMin = status.endMin;
+  let effectiveEndHour = status.settings.endHour;
+  let effectiveEndMinute = status.settings.endMinute;
+  try {
+    const emp = await env.DB.prepare(`SELECT shift_config FROM employees WHERE user_id = ? AND active = 1`).bind(userId).first();
+    if (emp?.shift_config) {
+      const sc = JSON.parse(emp.shift_config);
+      if (sc.endHour != null && sc.endMinute != null) {
+        effectiveEndHour = sc.endHour;
+        effectiveEndMinute = sc.endMinute;
+        effectiveEndMin = sc.endHour * 60 + sc.endMinute;
+      }
+    }
+  } catch {}
+
   return {
     dateStr: status.dateStr,
     isHolidayToday: status.isHolidayToday,
@@ -92,9 +109,9 @@ export async function getMyAttendanceStatus(env, userId) {
     lateCountThisMonth: lateCount,
     remainingLateAllowance: Math.max(0, MONTHLY_LATE_ALLOWANCE - lateCount),
     // للواجهة: تأكيد "انصراف مبكر" لو الموظف بيسجّل انصراف قبل نهاية الشيفت
-    // الفعلية (المُعدّة في الإعدادات، مش رقم ثابت في كود الواجهة).
-    isBeforeShiftEnd: status.minutesSinceMidnight < status.endMin,
-    shiftEndText: formatHourAr(status.settings.endHour, status.settings.endMinute),
+    // الفعلية — بيراعي الشيفت الخاص بالموظف لو موجود.
+    isBeforeShiftEnd: status.minutesSinceMidnight < effectiveEndMin,
+    shiftEndText: formatHourAr(effectiveEndHour, effectiveEndMinute),
   };
 }
 

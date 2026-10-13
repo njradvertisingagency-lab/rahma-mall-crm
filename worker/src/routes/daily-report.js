@@ -17,7 +17,7 @@ dailyReportRoutes.get('/', async (c) => {
   try {
 
   // الموظف المرتبط بالمستخدم
-  const emp = await db.prepare(`SELECT id, name FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
+  const emp = await db.prepare(`SELECT id, name, shift_config FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
   if (!emp) return c.json({ error: 'لا يوجد موظف مرتبط بالحساب' }, 400);
 
   const { dateStr } = getCairoNow();
@@ -112,7 +112,24 @@ dailyReportRoutes.get('/', async (c) => {
 
   // الزرار يفتح الساعه ٥:٤٥ بالظبط — نفس وقت سحب الأرقام
   const { minutesSinceMidnight } = getCairoNow();
-  const canSend = minutesSinceMidnight >= 17 * 60 + 45; // 5:45 PM Cairo
+  // Per-employee report unlock time (shift_config.reportUnlockHour/Minute),
+  // default 5:45 PM for everyone else.
+  let reportUnlockMin = 17 * 60 + 45; // 5:45 PM default
+  if (emp.shift_config) {
+    try {
+      const sc = JSON.parse(emp.shift_config);
+      if (sc.reportUnlockHour != null && sc.reportUnlockMinute != null) {
+        reportUnlockMin = sc.reportUnlockHour * 60 + sc.reportUnlockMinute;
+      }
+    } catch {}
+  }
+  const canSend = minutesSinceMidnight >= reportUnlockMin;
+
+  // Arabic 12h format for unlock time (e.g. "٤:٤٥ م")
+  const _uh = reportUnlockMin / 60 | 0;
+  const _um = reportUnlockMin % 60;
+  const _uh12 = _uh > 12 ? _uh - 12 : (_uh === 0 ? 12 : _uh);
+  const reportUnlockText = `${_uh12}:${String(_um).padStart(2, '0')} م`;
 
   return c.json({
     date: dateStr,
@@ -129,6 +146,7 @@ dailyReportRoutes.get('/', async (c) => {
     callOutcomeBreakdown: callOutcomeMap,
     teamLeaderIntl: toInternational(TEAM_LEADER_PHONE),
     canSend,
+    reportUnlockText,
   });
 
   } catch (err) {
