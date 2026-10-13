@@ -559,8 +559,11 @@ customerRoutes.post('/import/commit', requireSalesLead, async (c) => {
   // statements — so keep this a MULTIPLE OF 3. Otherwise a chunk boundary
   // could split one customer's three inserts across two batches and a failed
   // batch would leave that customer without its assignment/history rows.
-  const BATCH_SIZE = 498; // 166 customers × 3 stmts; D1 allows up to 500 per batch
+  // D1 allows up to 100 statements per batch. 99 = 33 customers × 3 stmts.
+  // A short delay between batches avoids D1 rate-limiting on large imports.
+  const BATCH_SIZE = 99;
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 250));
     await db.batch(statements.slice(i, i + BATCH_SIZE));
   }
 
