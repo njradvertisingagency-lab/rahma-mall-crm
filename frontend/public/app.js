@@ -371,9 +371,11 @@ App.toast = toast;
 // ---------------------------------------------------------------------------
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', App.state.theme);
-  // Pink theme for Mohra (user_id=5)
+  // Pink theme for Mohra (user_id=5) only
   if (App.state.user && App.state.user.id === 5) {
     document.documentElement.setAttribute('data-user-theme', 'pink');
+  } else {
+    document.documentElement.removeAttribute('data-user-theme');
   }
 }
 // ── Mohra Pink Theme ──
@@ -1409,6 +1411,7 @@ async function boot() {
     App.startPresenceHeartbeat();
     refreshAttendanceStatus();
   }
+  applyTheme(); // re-apply after login so Mohra gets pink
   renderRoute();
 }
 
