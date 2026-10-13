@@ -559,7 +559,7 @@ customerRoutes.post('/import/commit', requireSalesLead, async (c) => {
   // statements — so keep this a MULTIPLE OF 3. Otherwise a chunk boundary
   // could split one customer's three inserts across two batches and a failed
   // batch would leave that customer without its assignment/history rows.
-  const BATCH_SIZE = 90;
+  const BATCH_SIZE = 498; // 166 customers × 3 stmts; D1 allows up to 500 per batch
   for (let i = 0; i < statements.length; i += BATCH_SIZE) {
     await db.batch(statements.slice(i, i + BATCH_SIZE));
   }
