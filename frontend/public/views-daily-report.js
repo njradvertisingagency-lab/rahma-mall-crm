@@ -125,12 +125,26 @@
             previewCard.appendChild(el('pre', { style: 'white-space:pre-wrap;font-family:inherit;margin:0;line-height:1.9;background:var(--surface);padding:14px;border-radius:12px;font-size:13.5px;color:var(--text);border:1px solid var(--border)' }, [generatedText]));
             reportPreview.appendChild(previewCard);
 
-            // زر الإرسال للتيم ليدر
+            // زر نسخ التقرير للكليبورد
+            const copyBtn = el('button', {
+              style: 'display:flex;align-items:center;justify-content:center;gap:10px;font-size:18px;font-weight:900;padding:18px 30px;background:linear-gradient(135deg,#3498db,#2980b9);color:#fff;border-radius:16px;border:none;cursor:pointer;box-shadow:0 4px 16px rgba(52,152,219,.3);width:100%;margin-bottom:10px',
+              onclick: async () => {
+                try {
+                  await navigator.clipboard.writeText(generatedText);
+                  copyBtn.textContent = '✅ تم النسخ!';
+                  toast('تم نسخ التقرير — الصقه في واتساب', 'success');
+                  setTimeout(() => { copyBtn.textContent = '📋 نسخ التقرير'; }, 2000);
+                } catch { toast('مش قادر ينسخ — انسخه يدوي', 'error'); }
+              },
+            }, ['📋 نسخ التقرير']);
+            reportPreview.appendChild(copyBtn);
+
+            // زر فتح واتساب التيم ليدر
             const sendBtn = el('a', {
-              href: `https://wa.me/${data.teamLeaderIntl}?text=${encodeURIComponent(generatedText)}`,
+              href: `https://wa.me/${data.teamLeaderIntl}`,
               target: '_blank', rel: 'noopener',
-              style: 'display:flex;align-items:center;justify-content:center;gap:10px;font-size:18px;font-weight:900;padding:18px 30px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;border-radius:16px;text-decoration:none;box-shadow:0 4px 16px rgba(37,211,102,.3);width:100%',
-            }, ['📩 إرسال التقرير للتيم ليدر']);
+              style: 'display:flex;align-items:center;justify-content:center;gap:10px;font-size:16px;font-weight:800;padding:14px 30px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;border-radius:16px;text-decoration:none;box-shadow:0 4px 16px rgba(37,211,102,.3);width:100%',
+            }, ['💬 فتح واتساب التيم ليدر']);
             reportPreview.appendChild(sendBtn);
 
             generateBtn.style.display = 'none';
