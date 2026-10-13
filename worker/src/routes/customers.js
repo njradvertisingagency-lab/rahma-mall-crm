@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, requireSalesLead } from '../lib/auth.js';
-import { nextCustomerId, logActivity, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite } from '../lib/db.js';
+import { nextCustomerId, logActivity, broadcast, jsonError, nowIso, idsInClause, idsInJson, backgroundWrite, selectByIds } from '../lib/db.js';
 import * as XLSX from 'xlsx';
 import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 import { normalizeEgyptPhone } from '../lib/phone.js';
@@ -468,15 +468,9 @@ customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
     }
   }
 
-  // When allowDuplicates is true, skip the duplicate check so every valid
-  // phone number is classified as NEW and will be imported.
-  let existingSet;
-  if (allowDuplicates) {
-    existingSet = new Set();
-  } else {
-    const existingRows = await db.prepare(`SELECT normalized_phone FROM customers WHERE archived = 0`).all();
-    existingSet = new Set(existingRows.results.map((r) => r.normalized_phone));
-  }
+  // Always detect duplicates so the preview table shows accurate labels.
+  const existingRows = await db.prepare(`SELECT normalized_phone FROM customers WHERE archived = 0`).all();
+  const existingSet = new Set(existingRows.results.map((r) => r.normalized_phone));
   const preview = buildImportPreview(records, existingSet);
 
   // Stash the parsed rows keyed by a short-lived token so /commit doesn't have
@@ -485,7 +479,7 @@ customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
   )
-    .bind('import_preview_' + token, JSON.stringify({ rows: preview.rows, createdAt: nowIso() }))
+    .bind('import_preview_' + token, JSON.stringify({ rows: preview.rows, allowDuplicates, createdAt: nowIso() }))
     .run();
 
   // A preview that is never committed used to sit in `settings` forever. Each
@@ -514,64 +508,86 @@ customerRoutes.post('/import/commit', requireSalesLead, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const stash = await db.prepare(`SELECT value FROM settings WHERE key = ?`).bind('import_preview_' + body.token).first();
   if (!stash) return jsonError(c, 400, 'انتهت صلاحية معاينة الاستيراد أو لم يتم العثور عليها — يرجى إعادة المعاينة', 'PREVIEW_EXPIRED');
-  const { rows } = JSON.parse(stash.value);
+  const parsed = JSON.parse(stash.value);
+  const rows = parsed.rows;
+  const allowDuplicates = parsed.allowDuplicates === true;
   const newRows = rows.filter((r) => r.status === 'NEW');
-  if (newRows.length === 0) return jsonError(c, 400, 'لا يوجد جديد للاستيراد', 'NOTHING_TO_IMPORT');
+  const dupRows = allowDuplicates ? rows.filter((r) => r.status === 'DUPLICATE') : [];
+  if (newRows.length === 0 && dupRows.length === 0) return jsonError(c, 400, 'لا يوجد جديد للاستيراد', 'NOTHING_TO_IMPORT');
 
-  // Importing used to cost FOUR sequential round-trips per row (reserve an
-  // id, then three inserts). At a few dozen rows that is merely slow; at a
-  // few thousand it runs past the Worker's time limit and dies halfway,
-  // leaving a partial import behind. So: reserve the whole id range in one
-  // statement, then send the inserts in batches.
-  const count = newRows.length;
-  const lastSeq = await db
-    .prepare(`UPDATE counters SET value = value + ? WHERE name = 'customer_seq' RETURNING value`)
-    .bind(count)
-    .first();
-  if (!lastSeq) return jsonError(c, 500, 'تعذر حجز أرقام العملاء الجديدة', 'COUNTER_UNAVAILABLE');
-  const firstSeq = lastSeq.value - count + 1;
-  const customerIdFor = (i) => 'RM-' + String(firstSeq + i).padStart(6, '0');
-
-  const insertCustomer = db.prepare(
-    `INSERT INTO customers (id, phone, normalized_phone, name, source, campaign, product, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  const insertAssignment = db.prepare(
-    `INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'IMPORT_UNASSIGNED')`
-  );
-  const insertHistory = db.prepare(
-    `INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by) VALUES (?, NULL, 'NEW', ?)`
-  );
-
+  // ── Phase 1: INSERT genuinely new customers ──
   const createdIds = [];
-  const statements = [];
-  newRows.forEach((r, i) => {
-    const id = customerIdFor(i);
-    createdIds.push(id);
-    statements.push(
-      insertCustomer.bind(id, r.rawPhone, r.normalizedPhone, r.name || null, r.source || null, r.campaign || null, r.product || null, user.id),
-      insertAssignment.bind(id, user.id),
-      insertHistory.bind(id, user.id)
-    );
-  });
+  if (newRows.length > 0) {
+    const count = newRows.length;
+    const lastSeq = await db
+      .prepare(`UPDATE counters SET value = value + ? WHERE name = 'customer_seq' RETURNING value`)
+      .bind(count)
+      .first();
+    if (!lastSeq) return jsonError(c, 500, 'تعذر حجز أرقام العملاء الجديدة', 'COUNTER_UNAVAILABLE');
+    const firstSeq = lastSeq.value - count + 1;
+    const customerIdFor = (i) => 'RM-' + String(firstSeq + i).padStart(6, '0');
 
-  // Chunked so one batch never grows unbounded on a very large file.
-  // Each batch commits atomically, and every row contributes exactly 3
-  // statements — so keep this a MULTIPLE OF 3. Otherwise a chunk boundary
-  // could split one customer's three inserts across two batches and a failed
-  // batch would leave that customer without its assignment/history rows.
-  // D1 allows up to 100 statements per batch. 99 = 33 customers × 3 stmts.
-  // A short delay between batches avoids D1 rate-limiting on large imports.
-  const BATCH_SIZE = 99;
-  for (let i = 0; i < statements.length; i += BATCH_SIZE) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 250));
-    await db.batch(statements.slice(i, i + BATCH_SIZE));
+    const insertCustomer = db.prepare(
+      `INSERT INTO customers (id, phone, normalized_phone, name, source, campaign, product, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const insertAssignment = db.prepare(
+      `INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'IMPORT_UNASSIGNED')`
+    );
+    const insertHistory = db.prepare(
+      `INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by) VALUES (?, NULL, 'NEW', ?)`
+    );
+
+    const statements = [];
+    newRows.forEach((r, i) => {
+      const id = customerIdFor(i);
+      createdIds.push(id);
+      statements.push(
+        insertCustomer.bind(id, r.rawPhone, r.normalizedPhone, r.name || null, r.source || null, r.campaign || null, r.product || null, user.id),
+        insertAssignment.bind(id, user.id),
+        insertHistory.bind(id, user.id)
+      );
+    });
+
+    const BATCH_SIZE = 99;
+    for (let i = 0; i < statements.length; i += BATCH_SIZE) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
+      await db.batch(statements.slice(i, i + BATCH_SIZE));
+    }
+  }
+
+  // ── Phase 2: unassign duplicate customers so they return to pool ──
+  let resetCount = 0;
+  if (dupRows.length > 0) {
+    const ts = nowIso();
+    const dupPhones = dupRows.map((r) => r.normalizedPhone).filter(Boolean);
+    // Fetch existing customer ids by their normalized phone
+    const existing = await selectByIds(db, {
+      table: 'customers',
+      selectSql: 'id, normalized_phone, assigned_employee_id',
+      ids: dupPhones,
+      idColumn: 'normalized_phone',
+      extraWhereSql: 'archived = 0',
+    });
+    const resetStmts = [];
+    for (const cust of existing) {
+      resetStmts.push(
+        db.prepare(`UPDATE customers SET assigned_employee_id = NULL, status = 'NEW', assigned_at = NULL, updated_at = ?, version = version + 1 WHERE id = ?`).bind(ts, cust.id),
+        db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'REASSIGNMENT')`).bind(cust.id, user.id)
+      );
+    }
+    resetCount = existing.length;
+    const RESET_BATCH = 98; // multiple of 2
+    for (let i = 0; i < resetStmts.length; i += RESET_BATCH) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 250));
+      await db.batch(resetStmts.slice(i, i + RESET_BATCH));
+    }
   }
 
   await db.prepare(`DELETE FROM settings WHERE key = ?`).bind('import_preview_' + body.token).run();
-  await logActivity(db, { actor: user, action: 'CUSTOMERS_IMPORTED', entityType: 'import', entityId: null, metadata: { count: createdIds.length } });
-  await broadcast(c.env, 'CUSTOMERS_IMPORTED', { count: createdIds.length }, { scope: 'role', role: 'team_leader' });
+  await logActivity(db, { actor: user, action: 'CUSTOMERS_IMPORTED', entityType: 'import', entityId: null, metadata: { imported: createdIds.length, reset: resetCount } });
+  await broadcast(c.env, 'CUSTOMERS_IMPORTED', { count: createdIds.length + resetCount }, { scope: 'role', role: 'team_leader' });
 
-  return c.json({ imported: createdIds.length, customerIds: createdIds });
+  return c.json({ imported: createdIds.length, reset: resetCount, customerIds: createdIds });
 });
 
 // ---------------------------------------------------------------------------

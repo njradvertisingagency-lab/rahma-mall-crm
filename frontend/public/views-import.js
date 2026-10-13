@@ -109,9 +109,10 @@
         ]),
       ]));
 
+      const importCount = allowDupsCheck.checked ? s.newCustomers + s.duplicate : s.newCustomers;
       resultBox.appendChild(el('div', { class: 'flex gap-8 mt-16 wrap' }, [
         el('button', { class: 'btn btn-outline', onclick: () => { resultBox.innerHTML = ''; currentToken = null; } }, ['إلغاء']),
-        el('button', { class: 'btn btn-primary', disabled: s.newCustomers === 0 || undefined, onclick: commitImport }, [`استيراد العملاء (${s.newCustomers})`]),
+        el('button', { class: 'btn btn-primary', disabled: importCount === 0 || undefined, onclick: commitImport }, [`استيراد العملاء (${importCount})`]),
       ]));
     }
 
@@ -119,7 +120,10 @@
       if (!currentToken) return;
       try {
         const res = await api('/customers/import/commit', { method: 'POST', body: { token: currentToken } });
-        toast(`تم استيراد ${res.imported} عميل بنجاح.`, 'success');
+        const parts = [];
+        if (res.imported) parts.push(`تم استيراد ${res.imported} عميل جديد`);
+        if (res.reset) parts.push(`تم إعادة ${res.reset} عميل مكرر للتوزيع`);
+        toast(parts.join(' — ') || 'تم بنجاح', 'success');
         App.navigate('#/customers');
       } catch (e) {
         toast(e.message, 'error');
