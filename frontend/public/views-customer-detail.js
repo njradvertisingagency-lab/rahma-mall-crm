@@ -685,10 +685,6 @@
           allWaChipBtns.push({ chip, opt });
           chip.onclick = async () => {
             if (waSelectedAction === opt.action) return; // already selected
-            const confirmMsg = opt.action === 'AWAITING_REPLY'
-              ? 'العميل هيترجع للمجمع ويتسحب منك. متأكد؟'
-              : null;
-            if (confirmMsg && !confirm(confirmMsg)) return;
             // dim all, light up selected
             waSelectedAction = opt.action;
             allWaChipBtns.forEach(b => {
