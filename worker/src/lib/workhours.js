@@ -167,8 +167,9 @@ export async function sweepOffHoursAvailability(db, env) {
   const now = nowIso();
 
   if (!status.isWorkHoursNow) {
+    // موظفين الشيفت المسائي (عندهم shift_config) بيتسابوا — ساعات شغلهم مختلفة.
     const toSwitch = await db
-      .prepare(`SELECT id, availability FROM employees WHERE active = 1 AND off_hours_auto = 0 AND dnd_until IS NULL AND availability != 'UNAVAILABLE'`)
+      .prepare(`SELECT id, availability FROM employees WHERE active = 1 AND off_hours_auto = 0 AND dnd_until IS NULL AND availability != 'UNAVAILABLE' AND (shift_config IS NULL OR shift_config = '')`)
       .all();
     for (const emp of toSwitch.results) {
       await db

@@ -6,6 +6,14 @@ export const PROTECTED_EMPLOYEE_IDS = [4];
 export const PROTECTED_USER_IDS = [5];
 export const PROTECTED_SQL = PROTECTED_EMPLOYEE_IDS.join(',');
 
+// شيفت مسائي (أشرقت ٧م–١ص): مش بتشتغل وقت الشيفت الصبح، فمفيش سحب أرقام
+// منها في الـ reclaim أو الـ redistribute — لازم تلاقي كل أرقامها زي ما هي
+// لما تيجي تكمل بالليل.
+export const EVENING_SHIFT_EMPLOYEE_IDS = [1];
+export const EVENING_SHIFT_SQL = EVENING_SHIFT_EMPLOYEE_IDS.join(',');
+// Combined SQL for reclaim/redistribute exclusion (protected + evening shift)
+export const NO_RECLAIM_SQL = [...PROTECTED_EMPLOYEE_IDS, ...EVENING_SHIFT_EMPLOYEE_IDS].join(',');
+
 export const isProtectedEmployee = (id) => PROTECTED_EMPLOYEE_IDS.includes(Number(id));
 export const isProtectedUser = (id) => PROTECTED_USER_IDS.includes(Number(id));
 

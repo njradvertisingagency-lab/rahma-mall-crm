@@ -119,27 +119,40 @@ export async function recordCheckIn(env, user) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
 
+  // Per-employee custom shift (e.g. evening shift): override start time
+  let empStartMin = status.startMin;
+  let empStartHour = status.settings.startHour;
+  let empStartMinute = status.settings.startMinute;
+  try {
+    const emp = await env.DB.prepare(`SELECT shift_config FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
+    if (emp?.shift_config) {
+      const sc = JSON.parse(emp.shift_config);
+      if (sc.startHour != null && sc.startMinute != null) {
+        empStartHour = sc.startHour;
+        empStartMinute = sc.startMinute;
+        empStartMin = sc.startHour * 60 + sc.startMinute;
+      }
+    }
+  } catch {}
+
   // ما ينفعش حد يسجّل حضور قبل معاد بداية الشيفت خالص (طلب صريح من صاحب
-  // الشركة) — ولو بدقيقة واحدة. هذا عكس تمامًا لسياسة الانصراف (مفتوح تمامًا
-  // بعد نهاية الشيفت، بلا أي قفل) — الصبح ممنوع الحضور بدري، والمساء مسموح
-  // الانصراف في أي وقت. أيام العطلة مستثناة أصلًا فمفيش شيفت يُمنع الوصول له.
-  if (!status.isHolidayToday && status.minutesSinceMidnight < status.startMin) {
+  // الشركة) — ولو بدقيقة واحدة. أيام العطلة مستثناة أصلًا فمفيش شيفت يُمنع الوصول له.
+  if (!status.isHolidayToday && status.minutesSinceMidnight < empStartMin) {
     return {
       error: 'TOO_EARLY',
-      message: `لسه معاد الحضور ما جاش — الدوام يبدأ الساعة ${formatHourAr(status.settings.startHour, status.settings.startMinute)}`,
+      message: `لسه معاد الحضور ما جاش — الدوام يبدأ الساعة ${formatHourAr(empStartHour, empStartMinute)}`,
     };
   }
 
-  // إقفال البصمة نفسها الساعة 8 مساءً (ثابت، مستقل عن نهاية الشيفت الرسمي —
-  // انظر تعليق ATTENDANCE_CLOSE_MIN فوق).
-  if (status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+  // إقفال البصمة — شيفت مسائي (بداية >= 19) مفتوح لحد آخر الليل.
+  if (empStartMin < 19 * 60 && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
     return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الحضور لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
   }
 
   const now = nowIso();
   // الموظفة الجديدة (فترة تدريب): مفيش تأخير يتحسب عليها.
-  const isLate = !isProtectedUser(user.id) && !status.isHolidayToday && status.minutesSinceMidnight > status.startMin;
-  const lateMinutes = isLate ? status.minutesSinceMidnight - status.startMin : 0;
+  const isLate = !isProtectedUser(user.id) && !status.isHolidayToday && status.minutesSinceMidnight > empStartMin;
+  const lateMinutes = isLate ? status.minutesSinceMidnight - empStartMin : 0;
 
   // الفحص ("هل مسجّل بالفعل؟") والكتابة بيحصلوا معًا ذرّيًّا جوه الـ Durable
   // Object نفسه (asCheckIn) بدل قراءة (asGet) هنا ثم كتابة (asPut) منفصلة —

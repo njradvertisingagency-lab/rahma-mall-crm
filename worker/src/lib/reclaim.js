@@ -29,7 +29,7 @@
 import { nowIso, logActivity, broadcast, nextDistributionLabel } from './db.js';
 import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhours.js';
 import { getEmployeePresenceMap } from './presence.js';
-import { PROTECTED_SQL, protectedFirst, computeQuotas } from './protected.js';
+import { PROTECTED_SQL, NO_RECLAIM_SQL, protectedFirst, computeQuotas } from './protected.js';
 
 export async function sweepAutoReclaim(db, env) {
   // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
@@ -53,7 +53,7 @@ export async function sweepAutoReclaim(db, env) {
     .prepare(
       `SELECT c.id, c.name, c.phone, c.assigned_employee_id, c.assigned_at
        FROM customers c
-       WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL AND c.assigned_employee_id NOT IN (${PROTECTED_SQL})
+       WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL AND c.assigned_employee_id NOT IN (${NO_RECLAIM_SQL})
          AND c.assigned_at >= ? AND c.assigned_at <= ?
          AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)`
     )
@@ -156,7 +156,7 @@ export async function sweepRedistribute3pm(db, env) {
     .prepare(
       `SELECT c.id, c.name, c.phone, c.assigned_employee_id, c.assigned_at
        FROM customers c
-       WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL AND c.assigned_employee_id NOT IN (${PROTECTED_SQL})
+       WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL AND c.assigned_employee_id NOT IN (${NO_RECLAIM_SQL})
          AND c.assigned_at >= ? AND c.assigned_at <= ?
          AND NOT EXISTS (SELECT 1 FROM customer_notes n WHERE n.customer_id = c.id AND n.created_at >= c.assigned_at)`
     )
@@ -298,7 +298,7 @@ export async function sweepAutoDistribute(db, env) {
       `SELECT id, NULL AS prev FROM customers WHERE assigned_employee_id IS NULL AND archived = 0
        UNION ALL
        SELECT id, assigned_employee_id AS prev FROM customers
-       WHERE status = 'NO_ANSWER' AND archived = 0 AND assigned_employee_id IS NOT NULL AND assigned_employee_id NOT IN (${PROTECTED_SQL}) AND assigned_at < ?`
+       WHERE status = 'NO_ANSWER' AND archived = 0 AND assigned_employee_id IS NOT NULL AND assigned_employee_id NOT IN (${NO_RECLAIM_SQL}) AND assigned_at < ?`
     )
     .bind(dayStartIso)
     .all();
