@@ -832,6 +832,57 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// WHATSAPP FOLLOWUP — بعد إرسال واتساب الموظف يختار حالة العميل:
+//   INTERESTED / FOLLOW_UP → تغيير الحالة + ملاحظة (محمي من السحب)
+//   AWAITING_REPLY → سحب فوري للعميل (إرجاعه للمجمع)
+// ---------------------------------------------------------------------------
+customerRoutes.post('/:id/whatsapp-followup', async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const { action } = body;
+
+  const VALID_ACTIONS = ['INTERESTED', 'FOLLOW_UP', 'AWAITING_REPLY'];
+  if (!VALID_ACTIONS.includes(action)) {
+    return jsonError(c, 400, 'إجراء غير صالح', 'INVALID_ACTION');
+  }
+
+  const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
+  if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
+  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
+    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
+  }
+
+  const ts = nowIso();
+
+  if (action === 'INTERESTED' || action === 'FOLLOW_UP') {
+    const statusLabel = action === 'INTERESTED' ? 'مهتم' : 'متابعة';
+    await db.prepare(`UPDATE customers SET status = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(action, ts, id).run();
+    await db.prepare(`INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by, note) VALUES (?, ?, ?, ?, ?)`).bind(id, existing.status, action, user.id, `واتساب — ${statusLabel}`).run();
+    await db.prepare(`INSERT INTO customer_notes (customer_id, author_id, author_name, note) VALUES (?, ?, ?, ?)`).bind(id, user.id, user.displayName, `📱 واتساب — ${statusLabel}`).run();
+    await logActivity(db, { actor: user, action: 'STATUS_CHANGED', entityType: 'customer', entityId: id, metadata: { from: existing.status, to: action, via: 'whatsapp_followup' } });
+    await broadcast(c.env, 'CUSTOMER_STATUS_CHANGED', { id, from: existing.status, to: action }, { scope: 'role', role: 'team_leader' });
+    if (existing.assigned_employee_id) {
+      const emp = await db.prepare(`SELECT user_id FROM employees WHERE id = ?`).bind(existing.assigned_employee_id).first();
+      if (emp) await broadcast(c.env, 'CUSTOMER_STATUS_CHANGED', { id, from: existing.status, to: action }, { scope: 'user', userId: emp.user_id });
+    }
+    return c.json({ ok: true, action, reclaimed: false });
+  }
+
+  // AWAITING_REPLY → سحب فوري
+  await db.prepare(`INSERT INTO customer_notes (customer_id, author_id, author_name, note) VALUES (?, ?, ?, ?)`).bind(id, user.id, user.displayName, '📱 واتساب — في انتظار رد العميل').run();
+  if (existing.assigned_employee_id) {
+    await db.prepare(`UPDATE customers SET assigned_employee_id = NULL, updated_at = ?, version = version + 1 WHERE id = ?`).bind(ts, id).run();
+    await db.prepare(`INSERT INTO customer_assignments (customer_id, employee_id, assigned_by, reason) VALUES (?, NULL, ?, 'REASSIGNMENT')`).bind(id, user.id).run();
+    await logActivity(db, { actor: user, action: 'CUSTOMER_AUTO_RECLAIMED', entityType: 'customer', entityId: id, metadata: { reason: 'whatsapp_awaiting_reply' } });
+    await broadcast(c.env, 'CUSTOMER_REASSIGNED', { id, fromEmployeeId: existing.assigned_employee_id }, { scope: 'employee', employeeId: existing.assigned_employee_id });
+    await broadcast(c.env, 'CUSTOMER_REASSIGNED', { id, fromEmployeeId: existing.assigned_employee_id }, { scope: 'role', role: 'team_leader' });
+  }
+  return c.json({ ok: true, action, reclaimed: true });
+});
+
+// ---------------------------------------------------------------------------
 // VIP FLAG (Team Leader only — routes VIP customers to the best employees or
 // gets them personally followed up on by the Team Leader)
 // ---------------------------------------------------------------------------

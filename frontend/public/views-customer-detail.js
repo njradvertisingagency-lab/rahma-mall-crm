@@ -665,8 +665,48 @@
           el('span', { class: 'mono' }, [fmt.dateTime(c.whatsappContactedAt)]),
         ]));
         if (c.whatsappContactedByName) {
-          card.appendChild(el('div', { class: 'faint mb-12' }, [`تم بواسطة: ${c.whatsappContactedByName}`]));
+          card.appendChild(el('div', { class: 'faint mb-4' }, [`تم بواسطة: ${c.whatsappContactedByName}`]));
         }
+
+        // ── حالة العميل بعد الواتساب ──
+        const waFollowupWrap = el('div', { style: 'background:var(--surface-2);border-radius:14px;padding:12px;margin-bottom:12px;border:1px solid var(--border)' });
+        waFollowupWrap.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text);text-align:center' }, ['حدد حالة العميل بعد الواتساب']));
+        const waChips = el('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px' });
+        const WA_FOLLOWUP_OPTIONS = [
+          { action: 'INTERESTED', label: '⭐ مهتم', bg: '#27ae60' },
+          { action: 'FOLLOW_UP', label: '🔁 متابعة', bg: '#e67e22' },
+          { action: 'AWAITING_REPLY', label: '⏳ انتظار رد', bg: '#95a5a6' },
+        ];
+        WA_FOLLOWUP_OPTIONS.forEach(opt => {
+          const chip = el('button', {
+            style: `background:${opt.bg};color:#fff;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;text-align:center;line-height:1.4;transition:all .15s`,
+            onclick: async () => {
+              const confirmMsg = opt.action === 'AWAITING_REPLY'
+                ? 'العميل هيترجع للمجمع ويتسحب منك. متأكد؟'
+                : null;
+              if (confirmMsg && !confirm(confirmMsg)) return;
+              chip.disabled = true;
+              chip.style.opacity = '.5';
+              try {
+                const res = await api('/customers/' + c.id + '/whatsapp-followup', { method: 'POST', body: { action: opt.action } });
+                if (res.reclaimed) {
+                  toast('تم — العميل رجع للمجمع', 'success');
+                } else {
+                  toast('تم تحديث الحالة ✅', 'success');
+                }
+                await load();
+                render();
+              } catch (e) {
+                toast(e.message, 'error');
+                chip.disabled = false;
+                chip.style.opacity = '1';
+              }
+            },
+          }, [opt.label]);
+          waChips.appendChild(chip);
+        });
+        waFollowupWrap.appendChild(waChips);
+        card.appendChild(waFollowupWrap);
       }
 
       card.appendChild(el('hr', { style: 'border-color:var(--border);margin:14px 0' }));
