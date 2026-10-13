@@ -677,32 +677,56 @@
           { action: 'FOLLOW_UP', label: '🔁 متابعة', bg: '#e67e22' },
           { action: 'AWAITING_REPLY', label: '⏳ انتظار رد', bg: '#95a5a6' },
         ];
+        const dimStyle = 'background:#d5d8dc;color:#7f8c8d;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;text-align:center;line-height:1.4;transition:all .15s';
+        let waSelectedAction = null;
+        const allWaChipBtns = [];
         WA_FOLLOWUP_OPTIONS.forEach(opt => {
-          const chip = el('button', {
-            style: `background:${opt.bg};color:#fff;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;text-align:center;line-height:1.4;transition:all .15s`,
-            onclick: async () => {
-              const confirmMsg = opt.action === 'AWAITING_REPLY'
-                ? 'العميل هيترجع للمجمع ويتسحب منك. متأكد؟'
-                : null;
-              if (confirmMsg && !confirm(confirmMsg)) return;
-              chip.disabled = true;
-              chip.style.opacity = '.5';
-              try {
-                const res = await api('/customers/' + c.id + '/whatsapp-followup', { method: 'POST', body: { action: opt.action } });
-                if (res.reclaimed) {
-                  toast('تم — العميل رجع للمجمع', 'success');
-                } else {
-                  toast('تم تحديث الحالة ✅', 'success');
-                }
-                await load();
-                render();
-              } catch (e) {
-                toast(e.message, 'error');
-                chip.disabled = false;
-                chip.style.opacity = '1';
+          const chip = el('button', { style: dimStyle }, [opt.label]);
+          allWaChipBtns.push({ chip, opt });
+          chip.onclick = async () => {
+            if (waSelectedAction === opt.action) return; // already selected
+            const confirmMsg = opt.action === 'AWAITING_REPLY'
+              ? 'العميل هيترجع للمجمع ويتسحب منك. متأكد؟'
+              : null;
+            if (confirmMsg && !confirm(confirmMsg)) return;
+            // dim all, light up selected
+            waSelectedAction = opt.action;
+            allWaChipBtns.forEach(b => {
+              if (b.opt.action === opt.action) {
+                b.chip.style.background = b.opt.bg;
+                b.chip.style.color = '#fff';
+                b.chip.style.transform = 'scale(1.05)';
+                b.chip.style.boxShadow = '0 2px 8px rgba(0,0,0,.25)';
+              } else {
+                b.chip.style.background = '#d5d8dc';
+                b.chip.style.color = '#7f8c8d';
+                b.chip.style.transform = '';
+                b.chip.style.boxShadow = '';
               }
-            },
-          }, [opt.label]);
+              b.chip.disabled = true;
+            });
+            try {
+              const res = await api('/customers/' + c.id + '/whatsapp-followup', { method: 'POST', body: { action: opt.action } });
+              if (res.reclaimed) {
+                toast('تم — العميل رجع للمجمع', 'success');
+              } else {
+                toast('تم تحديث الحالة ✅', 'success');
+              }
+              await load();
+              render();
+            } catch (e) {
+              toast(e.message, 'error');
+              // re-enable all on error
+              waSelectedAction = null;
+              allWaChipBtns.forEach(b => {
+                b.chip.style.background = '#d5d8dc';
+                b.chip.style.color = '#7f8c8d';
+                b.chip.style.transform = '';
+                b.chip.style.boxShadow = '';
+                b.chip.disabled = false;
+              });
+            }
+          };
           waChips.appendChild(chip);
         });
         waFollowupWrap.appendChild(waChips);
