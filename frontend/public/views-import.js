@@ -38,6 +38,13 @@
     container.appendChild(pasteCard);
     container.appendChild(fileCard);
 
+    // ── استيراد حتى لو مكررة ──
+    const allowDupsCheck = el('input', { type: 'checkbox' });
+    const allowDupsCard = el('div', { class: 'card card-pad', style: 'margin-top:12px;padding:10px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px' }, [
+      el('label', { class: 'checkbox-row' }, [allowDupsCheck, '🔁 استيراد حتى لو مكررة (أرقام موجودة بالفعل في النظام)']),
+    ]);
+    container.appendChild(allowDupsCard);
+
     const resultBox = el('div', { class: 'mt-20' });
     container.appendChild(resultBox);
 
@@ -61,6 +68,7 @@
       if (!file) { toast('اختر ملفًا أولاً', 'error'); return; }
       const form = new FormData();
       form.append('file', file);
+      if (allowDupsCheck.checked) form.append('allowDuplicates', 'true');
       try {
         const data = await api('/customers/import/preview', { method: 'POST', body: form });
         currentToken = data.token;
@@ -72,6 +80,7 @@
 
     async function runPreview(body) {
       if (!body.text || !body.text.trim()) { toast('الصق رقمًا واحدًا على الأقل', 'error'); return; }
+      if (allowDupsCheck.checked) body.allowDuplicates = true;
       try {
         const data = await api('/customers/import/preview', { method: 'POST', body });
         currentToken = data.token;

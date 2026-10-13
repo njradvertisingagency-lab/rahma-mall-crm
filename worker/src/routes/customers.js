@@ -442,10 +442,12 @@ customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
   const db = c.env.DB;
   const contentType = c.req.header('content-type') || '';
   let records;
+  let allowDuplicates = false;
   if (contentType.includes('multipart/form-data')) {
     const form = await c.req.formData();
     const file = form.get('file');
     if (!file) return jsonError(c, 400, 'لم يتم رفع أي ملف', 'NO_FILE');
+    allowDuplicates = form.get('allowDuplicates') === 'true';
     const name = file.name || '';
     const buf = await file.arrayBuffer();
     if (name.toLowerCase().endsWith('.csv')) {
@@ -456,6 +458,7 @@ customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
     }
   } else {
     const body = await c.req.json().catch(() => ({}));
+    allowDuplicates = body.allowDuplicates === true;
     if (body.text) {
       records = parsePastedNumbers(body.text);
     } else if (body.csv) {
@@ -465,8 +468,15 @@ customerRoutes.post('/import/preview', requireSalesLead, async (c) => {
     }
   }
 
-  const existingRows = await db.prepare(`SELECT normalized_phone FROM customers WHERE archived = 0`).all();
-  const existingSet = new Set(existingRows.results.map((r) => r.normalized_phone));
+  // When allowDuplicates is true, skip the duplicate check so every valid
+  // phone number is classified as NEW and will be imported.
+  let existingSet;
+  if (allowDuplicates) {
+    existingSet = new Set();
+  } else {
+    const existingRows = await db.prepare(`SELECT normalized_phone FROM customers WHERE archived = 0`).all();
+    existingSet = new Set(existingRows.results.map((r) => r.normalized_phone));
+  }
   const preview = buildImportPreview(records, existingSet);
 
   // Stash the parsed rows keyed by a short-lived token so /commit doesn't have
