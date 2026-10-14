@@ -87,7 +87,32 @@ export async function requireAuth(c, next) {
   }
   if (!session.active) return jsonError(c, 403, 'الحساب مُعطَّل', 'ACCOUNT_DISABLED');
 
-  // النظام شغال ٢٤ ساعة لكل الحسابات — القيد الزمني الوحيد هو البصمة (انظر lib/attendance.js).
+  // النظام شغال ٢٤ ساعة بالـ default لكل الحسابات — إلا لو الموظف عنده
+  // systemStartHour / systemEndHour في shift_config: دول بيحددو ساعات فتح
+  // وقفل النظام لهذا الموظف بالذات (مش البصمة — البصمة ليها منطق منفصل في
+  // lib/attendance.js). مثال: موظف بشيفت صبح + مسا يحتاج النظام يفتحله من
+  // ١٠ صباحًا ويقفل ١١ مساءً بدل ٢٤ ساعة.
+  if (session.employeeId) {
+    try {
+      const emp = await c.env.DB.prepare(`SELECT shift_config FROM employees WHERE id = ? AND active = 1`).bind(session.employeeId).first();
+      if (emp?.shift_config) {
+        const sc = JSON.parse(emp.shift_config);
+        if (sc.systemEndHour != null) {
+          const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date());
+          const h = Number(parts.find(p => p.type === 'hour')?.value) % 24;
+          const nowMin = h * 60 + Number(parts.find(p => p.type === 'minute')?.value);
+          const sysStart = (sc.systemStartHour ?? 10) * 60 + (sc.systemStartMinute ?? 0);
+          const sysEnd = sc.systemEndHour * 60 + (sc.systemEndMinute ?? 0);
+          if (nowMin < sysStart || nowMin >= sysEnd) {
+            return jsonError(c, 403, 'النظام مغلق حاليًا — يعمل من ١٠ صباحًا لحد ١١ مساءً', 'OUTSIDE_WORK_HOURS');
+          }
+        }
+      }
+    } catch (err) {
+      // D1 read failure → degrade to 24h access (non-fatal)
+      console.error('requireAuth: shift_config system-hours check failed (non-fatal)', err);
+    }
+  }
 
   // Touching lastSeenAt is bookkeeping. It runs on EVERY authenticated
   // request, so if it could throw it would take the whole app down with it.
