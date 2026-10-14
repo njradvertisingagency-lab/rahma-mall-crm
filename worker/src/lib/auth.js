@@ -103,7 +103,11 @@ export async function requireAuth(c, next) {
           const nowMin = h * 60 + Number(parts.find(p => p.type === 'minute')?.value);
           const sysStart = (sc.systemStartHour ?? 10) * 60 + (sc.systemStartMinute ?? 0);
           const sysEnd = sc.systemEndHour * 60 + (sc.systemEndMinute ?? 0);
-          if (nowMin < sysStart || nowMin >= sysEnd) {
+          // لو الشيفت بيعدّي نص الليل (مثلاً ١٠ص–١ص) → sysEnd < sysStart
+          const outsideWindow = sysEnd > sysStart
+            ? (nowMin < sysStart || nowMin >= sysEnd)
+            : (nowMin < sysStart && nowMin >= sysEnd);
+          if (outsideWindow) {
             return jsonError(c, 403, 'النظام مغلق حاليًا — يعمل من ١٠ صباحًا لحد ١١ مساءً', 'OUTSIDE_WORK_HOURS');
           }
         }

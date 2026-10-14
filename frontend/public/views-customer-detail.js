@@ -656,9 +656,19 @@
       // --- زر واتساب ---
       const waBtn = el('button', {
         class: 'btn btn-block mb-8 ' + (c.whatsappContactStatus === 'NOT_CONTACTED' ? 'btn-whatsapp' : 'btn-whatsapp done'),
-        onclick: () => openWhatsAppModal(c),
+        onclick: c.whatsappContactStatus === 'NOT_CONTACTED' ? () => openWhatsAppModal(c) : null,
+        style: c.whatsappContactStatus !== 'NOT_CONTACTED' ? 'cursor:default;opacity:.85' : '',
       }, [c.whatsappContactStatus === 'NOT_CONTACTED' ? '💬 إرسال واتساب' : '✓ تم التواصل واتساب']);
       card.appendChild(waBtn);
+      // زرار "تواصل مرة أخرى" — يظهر بس لو العميل اتكلم معاه قبل كده
+      if (c.whatsappContactStatus !== 'NOT_CONTACTED') {
+        const reContactBtn = el('button', {
+          class: 'btn btn-whatsapp btn-block mb-8',
+          style: 'background:var(--primary,#2563eb)',
+          onclick: () => openWhatsAppModal(c, true),
+        }, ['🔄 تواصل مرة أخرى']);
+        card.appendChild(reContactBtn);
+      }
       if (c.whatsappContactStatus !== 'NOT_CONTACTED') {
         card.appendChild(el('div', { class: 'faint mb-4' }, [
           'وقت التواصل: ',
@@ -779,7 +789,7 @@
     }
 
     // --- نافذة مراجعة رسالة واتساب ---
-    async function openWhatsAppModal(c) {
+    async function openWhatsAppModal(c, skipConfirm) {
       let preview;
       try {
         preview = await api('/whatsapp/customers/' + c.id + '/preview');
@@ -798,7 +808,7 @@
       }
 
       async function showComposer() {
-        if (c.whatsappContactStatus !== 'NOT_CONTACTED') {
+        if (!skipConfirm && c.whatsappContactStatus !== 'NOT_CONTACTED') {
           const proceed = confirm(`تم التواصل مع هذا العميل عبر واتساب بالفعل بتاريخ ${fmt.dateTime(c.whatsappContactedAt)}. هل تريد فتح واتساب مرة أخرى؟`);
           if (!proceed) return;
         }
