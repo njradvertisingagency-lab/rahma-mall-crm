@@ -328,9 +328,8 @@ customerRoutes.get('/:id', async (c) => {
     .bind(id)
     .first();
   if (!row) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && row.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
+  // أي موظف يقدر يفتح ويتعامل مع أي عميل — الفريق بيشتغل شيفتين (صبح ومسا)
+  // فلازم أي حد يقدر يتابع عميل زميله.
 
   // Seen is recorded ONLY here — an actual, explicit open of the customer's
   // detail page by the employee it is currently assigned to. A list load
@@ -600,9 +599,6 @@ customerRoutes.patch('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
   if (body.version && body.version !== existing.version) {
     return jsonError(c, 409, 'تم تعديل هذا العميل من قبل شخص آخر — يرجى تحديث الصفحة والمحاولة مرة أخرى', 'VERSION_CONFLICT');
   }
@@ -650,9 +646,6 @@ customerRoutes.patch('/:id/status', async (c) => {
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   let closedReason = null;
   let closedAt = null;
@@ -746,9 +739,6 @@ customerRoutes.post('/:id/notes', async (c) => {
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   const res = await db
     .prepare(`INSERT INTO customer_notes (customer_id, author_id, author_name, note) VALUES (?, ?, ?, ?) RETURNING id, created_at`)
@@ -774,9 +764,6 @@ customerRoutes.post('/:id/products', async (c) => {
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   await db.prepare(`INSERT OR IGNORE INTO customer_products (customer_id, product) VALUES (?, ?)`).bind(id, product).run();
   await db.prepare(`INSERT OR IGNORE INTO products (name) VALUES (?)`).bind(product).run();
@@ -792,9 +779,6 @@ customerRoutes.delete('/:id/products/:product', async (c) => {
   const product = decodeURIComponent(c.req.param('product'));
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
   await db.prepare(`DELETE FROM customer_products WHERE customer_id = ? AND product = ?`).bind(id, product).run();
   return c.json({ ok: true });
 });
@@ -808,9 +792,6 @@ customerRoutes.post('/:id/call', async (c) => {
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
   await logActivity(db, { actor: user, action: 'CALL_INITIATED', entityType: 'customer', entityId: id, metadata: { phone: existing.normalized_phone } });
   return c.json({ ok: true });
 });
@@ -830,9 +811,6 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   const res = await db
     .prepare(`INSERT INTO call_attempts (customer_id, employee_id, attempted_by, outcome, notes) VALUES (?, ?, ?, ?, ?) RETURNING id, created_at`)
@@ -879,9 +857,6 @@ customerRoutes.post('/:id/whatsapp-followup', async (c) => {
 
   const existing = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   const ts = nowIso();
 

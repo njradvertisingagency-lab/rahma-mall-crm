@@ -53,9 +53,6 @@ followupRoutes.post('/customers/:customerId', async (c) => {
 
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(customerId).first();
   if (!customer) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
 
   const employeeId = customer.assigned_employee_id;
   const res = await db
@@ -125,7 +122,6 @@ followupRoutes.patch('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
   if (existing.status !== 'UPCOMING') return jsonError(c, 400, 'يمكن تعديل المتابعات المفتوحة فقط', 'NOT_EDITABLE');
 
   const fields = [];
@@ -159,7 +155,6 @@ followupRoutes.post('/:id/complete', async (c) => {
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
 
   await db.prepare(`UPDATE followups SET status = 'COMPLETED', completed_at = ?, completed_by = ? WHERE id = ?`).bind(nowIso(), user.id, id).run();
   const stillOpen = await db.prepare(`SELECT MIN(scheduled_for) AS next FROM followups WHERE customer_id = ? AND status = 'UPCOMING'`).bind(existing.customer_id).first();
@@ -175,7 +170,6 @@ followupRoutes.post('/:id/cancel', async (c) => {
   const id = c.req.param('id');
   const existing = await db.prepare(`SELECT * FROM followups WHERE id = ?`).bind(id).first();
   if (!existing) return jsonError(c, 404, 'المتابعة غير موجودة', 'NOT_FOUND');
-  if (user.role === 'employee' && existing.employee_id !== user.employeeId) return jsonError(c, 403, 'هذه ليست متابعتك', 'FORBIDDEN_OWNERSHIP');
   await db.prepare(`UPDATE followups SET status = 'CANCELLED', cancelled_at = ? WHERE id = ?`).bind(nowIso(), id).run();
   await logActivity(db, { actor: user, action: 'FOLLOWUP_CANCELLED', entityType: 'customer', entityId: existing.customer_id, metadata: { followupId: id } });
   return c.json({ ok: true });

@@ -27,9 +27,7 @@ salesRoutes.get('/settings', async (c) => {
 async function loadCustomerForSale(db, user, customerId) {
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(customerId).first();
   if (!customer) return { error: { status: 404, message: 'العميل غير موجود', code: 'NOT_FOUND' } };
-  if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return { error: { status: 403, message: 'هذا ليس عميلك', code: 'FORBIDDEN_OWNERSHIP' } };
-  }
+  // أي موظف يقدر يسجل بيع لأي عميل — الفريق بيشتغل شيفتين.
   return { customer };
 }
 
@@ -109,9 +107,6 @@ salesRoutes.post('/customers/:id/purchases', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const customer = await db.prepare(`SELECT * FROM customers WHERE id = ?`).bind(id).first();
   if (!customer) return jsonError(c, 404, 'العميل غير موجود', 'NOT_FOUND');
-  if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذا ليس عميلك', 'FORBIDDEN_OWNERSHIP');
-  }
   if (!body.branchId) return jsonError(c, 400, 'الفرع مطلوب', 'MISSING_BRANCH');
   if (!Array.isArray(body.items) || body.items.length === 0) return jsonError(c, 400, 'مطلوب صنف واحد على الأقل', 'NO_ITEMS');
   for (const it of body.items) {
@@ -159,9 +154,6 @@ salesRoutes.get('/purchases/:purchaseId', async (c) => {
   const purchase = await getPurchase(db, Number(c.req.param('purchaseId')));
   if (!purchase) return jsonError(c, 404, 'عملية الشراء غير موجودة', 'NOT_FOUND');
   const user = c.get('user');
-  if (user.role === 'employee' && purchase.attributed_employee_id !== user.employeeId) {
-    return jsonError(c, 403, 'هذه ليست عملية الشراء الخاصة بك', 'FORBIDDEN_OWNERSHIP');
-  }
   return c.json({ purchase });
 });
 
