@@ -109,44 +109,9 @@
     // من مغادرة الصفحة (زر رجوع، أي رابط، رجوع المتصفح) لحد ما يكتبها.
     // مقصورة على الموظف صاحب العميل — قائد الفريق يتصفح بحرية دائمًا.
     // ---------------------------------------------------------------------
+    // الـ mandatory note popup اتشال — مفيش إجبار على كتابة ملاحظة قبل المتابعة.
     function updateNoteGuard() {
-      if (App.state.user.role === 'employee' && data.customer.needsNote) {
-        App.setNoteGuard({ hash: location.hash, onRequireNote: showMandatoryNoteModal });
-      } else {
-        App.clearNoteGuard();
-      }
-    }
-
-    function showMandatoryNoteModal() {
-      // يمنع تكرار النافذة لو الحارس اتفعّل أكتر من مرة قبل ما يتقفل القديم
-      document.querySelectorAll('.mandatory-note-backdrop').forEach((n) => n.remove());
-      const textarea = el('textarea', { placeholder: 'اكتب ملاحظتك عن هذا العميل قبل المتابعة…', style: 'min-height:120px' });
-      const errorMsg = el('div', { style: 'color:var(--danger);font-size:12.5px;display:none;margin-top:6px' }, ['من فضلك اكتب ملاحظة قبل المتابعة.']);
-      const backdrop = el('div', { class: 'modal-backdrop mandatory-note-backdrop' }); // بدون إغلاق بالنقر على الخلفية
-      const m = el('div', { class: 'modal' }, [
-        el('div', { class: 'modal-header' }, [el('div', { class: 'modal-title' }, ['📝 قبل ما تكمل — اكتب ملاحظتك عن العميل'])]),
-        el('div', { class: 'modal-body' }, [
-          el('div', { class: 'muted mb-8', style: 'font-size:13px' }, ['فتحت هذا العميل ولم تكتب ملاحظة بعد — اكتبها الآن حتى يعرف الفريق ما حدث في هذه المكالمة/الزيارة.']),
-          textarea,
-          errorMsg,
-        ]),
-        el('div', { class: 'modal-footer' }, [
-          el('button', { class: 'btn btn-primary btn-block', onclick: async () => {
-            if (!textarea.value.trim()) { errorMsg.style.display = 'block'; return; }
-            try {
-              await api('/customers/' + data.customer.id + '/notes', { method: 'POST', body: { note: textarea.value.trim() } });
-              backdrop.remove();
-              App.clearNoteGuard();
-              await load();
-              const target = App.consumeBlockedNavigation();
-              if (target) location.hash = target;
-              else render();
-            } catch (e) { toast(e.message, 'error'); }
-          } }, ['حفظ الملاحظة والمتابعة']),
-        ]),
-      ]);
-      backdrop.appendChild(m);
-      document.body.appendChild(backdrop);
+      App.clearNoteGuard();
     }
 
     // --- شريط 360: تقييم العميل (قابل للتفسير)، حالة الموعد، من رآه ---
