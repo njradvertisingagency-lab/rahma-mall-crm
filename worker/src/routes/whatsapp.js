@@ -14,9 +14,8 @@ async function loadCustomerForContact(db, user, customerId) {
     .bind(customerId)
     .first();
   if (!customer) return { error: jsonError2(404, 'Customer not found', 'NOT_FOUND') };
-  if (user.role === 'employee' && customer.assigned_employee_id !== user.employeeId) {
-    return { error: jsonError2(403, 'Not your customer', 'FORBIDDEN_OWNERSHIP') };
-  }
+  // أي موظف يقدر يبعت واتساب لأي عميل حتى لو العميل معين على موظف تاني —
+  // طلب صريح: الفريق بيشتغل صبح ومسا فممكن موظف يتابع عميل زميله.
   return { customer };
 }
 function jsonError2(status, message, code) {
