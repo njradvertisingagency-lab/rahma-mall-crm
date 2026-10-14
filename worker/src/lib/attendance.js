@@ -188,18 +188,36 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
 
-  // انصراف قبل نهاية الشيفت الفعلية (المُعدّة في الإعدادات) — طلب صاحب
-  // الشركة صراحةً: أي انصراف مبكر لحساب موظف (مش قائد فريق/HR/المالك) لازم
-  // يترفق بسبب مكتوب، ويوصل السبب ده لأستاذ هاني وللـHR ولقائد الفريق —
-  // نفس مجموعة الحسابات (role='team_leader') اللي بتستقبل تنبيه الحضور
-  // المتأخر أصلًا في recordCheckIn فوق.
-  const isEarly = !status.isHolidayToday && status.minutesSinceMidnight < status.endMin;
+  // Per-employee custom shift (e.g. evening shift): override start+end time
+  // — نفس منطق recordCheckIn بالظبط، مطبّق هنا على الانصراف كمان عشان
+  // "انصراف مبكر" و"إقفال البصمة" يحسبوا صح للشيفت المسائي.
+  let empStartMin = status.startMin;
+  let effectiveEndMin = status.endMin;
+  try {
+    const emp = await env.DB.prepare(`SELECT shift_config FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
+    if (emp?.shift_config) {
+      const sc = JSON.parse(emp.shift_config);
+      if (sc.startHour != null && sc.startMinute != null) {
+        empStartMin = sc.startHour * 60 + sc.startMinute;
+      }
+      if (sc.endHour != null && sc.endMinute != null) {
+        effectiveEndMin = sc.endHour * 60 + sc.endMinute;
+      }
+    }
+  } catch {}
+
+  // انصراف قبل نهاية الشيفت الفعلية (المُعدّة في الإعدادات أو shift_config
+  // الخاص بالموظف) — طلب صاحب الشركة صراحةً: أي انصراف مبكر لحساب موظف
+  // (مش قائد فريق/HR/المالك) لازم يترفق بسبب مكتوب، ويوصل السبب ده لأستاذ
+  // هاني وللـHR ولقائد الفريق.
+  const isEarly = !status.isHolidayToday && status.minutesSinceMidnight < effectiveEndMin;
   const reasonRequired = user.role === 'employee' && isEarly && !reason;
   const now = nowIso();
 
   // نفس إقفال الـ8 مساءً الثابت بتاع الحضور، مطبّق على الانصراف كمان — طلب
   // صريح: "البصمة تقفل الساعة 8 مساءً" يشمل تسجيل الحضور والانصراف معًا.
-  if (status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+  // شيفت مسائي (بداية >= 19) مستثنى — نفس الاستثناء في recordCheckIn.
+  if (empStartMin < 19 * 60 && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
     return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الانصراف لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
   }
 
