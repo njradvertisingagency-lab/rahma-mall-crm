@@ -6,7 +6,7 @@ import { recordLogin, recordLogout } from '../lib/presehnce.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
-
+h
 // Public: the employee-picker screen needs names/avatars before any password
 // is entered. Only non-sensitive identity fields are exposed.
 //
@@ -130,7 +130,7 @@ authRoutes.post('/login', async (c) => {
     return jsonError(c, 401, 'اسم المستخدم أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
   }
 
-  const userAgent = uaHeader;
+  const userAgent = c.req.header('user-agent') || '';
 
   // From here on, the credential check has already succeeded (from D1 or the
   // cached snapshot) — nothing below should be able to turn that into a
