@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { verifyPassword, hashPassword, randomSaltHex } from '../lib/passwords.js';
 import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
-import { recordLogin, recordLogout } from '../lib/presence.js';
+import { recordLogin, recordLogout } from '../lib/presehnce.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
@@ -61,17 +61,6 @@ authRoutes.get('/employees-public', async (c) => {
   }
 });
 
-// Desktop-only login is enforced mainly client-side (app.js: feature
-// detection before the login form even renders, plus a continuous
-// touch/orientation guard for the rest of the session — see the user's
-// picked options). This is a baseline COMPLEMENT, not a replacement: it
-// only catches the case of someone skipping the browser entirely and
-// hitting this endpoint directly (curl/Postman/a script) with a real
-// mobile-device User-Agent. It cannot catch a spoofed or stripped
-// User-Agent — that is exactly what the client-side feature detection is
-// for — so this check is deliberately narrow and never the only line of
-// defense.
-const MOBILE_UA_PATTERN = /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i;
 
 authRoutes.post('/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
@@ -81,10 +70,6 @@ authRoutes.post('/login', async (c) => {
 
   if (!username || !password) return jsonError(c, 400, 'اسم المستخدم وكلمة المرور مطلوبان', 'MISSING_FIELDS');
 
-  const uaHeader = c.req.header('user-agent') || '';
-  if (MOBILE_UA_PATTERN.test(uaHeader)) {
-    return jsonError(c, 403, 'هذا النظام يعمل من جهاز كمبيوتر فقط', 'DESKTOP_ONLY');
-  }
 
   const db = c.env.DB;
   // A per-username snapshot of the users row, cached in the SessionStore DO
