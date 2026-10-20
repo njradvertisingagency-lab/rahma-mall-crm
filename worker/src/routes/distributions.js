@@ -142,6 +142,7 @@ distributionRoutes.post('/', async (c) => {
 
   let plan; // Map<employeeId, customerId[]>
   let employees;
+  let returnedToPrevious = 0; // عدد الأرقام المكررة اللي رجعت لنفس الموظف
 
   if (method === 'MANUAL') {
     const manual = body.manualAssignments || {};
@@ -159,7 +160,47 @@ distributionRoutes.post('/', async (c) => {
     if (employees.length === 0) {
       return jsonError(c, 400, 'لا يوجد موظف متاح — اختر الموظفين يدويًا أو حدد بعضهم كـ"متاح"', 'NO_ELIGIBLE_EMPLOYEES');
     }
-    plan = method === 'ROUND_ROBIN' ? planRoundRobin(customerIds, employees) : planEqual(customerIds, employees);
+
+    // ── Duplicate routing: customers that were previously assigned to an
+    //    employee get routed back to the SAME employee instead of being
+    //    distributed to someone new. We look up the most recent non-null
+    //    assignment from customer_assignments for each customer. ──
+    const eligibleSet = new Set(employees.map((e) => e.id));
+    const previousAssignments = await selectByIds(db, {
+      table: 'customer_assignments',
+      selectSql: 'customer_id, employee_id',
+      ids: customerIds,
+      idColumn: 'customer_id',
+      extraWhereSql: 'employee_id IS NOT NULL',
+    });
+    // Build map: customer_id → last assigned employee (latest id = latest row).
+    const prevMap = new Map();
+    for (const row of previousAssignments) {
+      prevMap.set(row.customer_id, row.employee_id);
+    }
+
+    // Split: customers with a previous eligible employee vs truly new ones.
+    const returnIds = [];   // routed back to previous employee
+    const freshIds = [];    // distributed normally
+    plan = new Map(employees.map((e) => [e.id, []]));
+    for (const cid of customerIds) {
+      const prevEmp = prevMap.get(cid);
+      if (prevEmp && eligibleSet.has(prevEmp)) {
+        plan.get(prevEmp).push(cid);
+        returnIds.push(cid);
+        returnedToPrevious++;
+      } else {
+        freshIds.push(cid);
+      }
+    }
+
+    // Distribute only the fresh (non-duplicate) customers equally/round-robin.
+    if (freshIds.length > 0) {
+      const freshPlan = method === 'ROUND_ROBIN' ? planRoundRobin(freshIds, employees) : planEqual(freshIds, employees);
+      for (const [empId, ids] of freshPlan) {
+        plan.get(empId).push(...ids);
+      }
+    }
   }
 
   const totalAssigned = [...plan.values()].reduce((s, arr) => s + arr.length, 0);
@@ -195,7 +236,7 @@ distributionRoutes.post('/', async (c) => {
     action: 'DISTRIBUTION_CREATED',
     entityType: 'distribution',
     entityId: String(distributionId),
-    metadata: { method, total: totalAssigned, perEmployee: Object.fromEntries([...plan].map(([k, v]) => [k, v.length])) },
+    metadata: { method, total: totalAssigned, returnedToPrevious, perEmployee: Object.fromEntries([...plan].map(([k, v]) => [k, v.length])) },
   });
 
   // 3. Notify + broadcast to every affected employee, and the team leader.
@@ -206,7 +247,7 @@ distributionRoutes.post('/', async (c) => {
   }
   await broadcast(c.env, 'DISTRIBUTION_COMPLETED', { distributionId, label, total: totalAssigned }, { scope: 'role', role: 'team_leader' });
 
-  return c.json({ distribution: { id: distributionId, label, total: totalAssigned }, perEmployee: Object.fromEntries([...plan].map(([k, v]) => [k, v.length])) }, 201);
+  return c.json({ distribution: { id: distributionId, label, total: totalAssigned, returnedToPrevious }, perEmployee: Object.fromEntries([...plan].map(([k, v]) => [k, v.length])) }, 201);
 });
 
 // ---------------------------------------------------------------------------
