@@ -581,3 +581,5 @@ employeeRoutes.get('/:id/shift-config', requireHR, async (c) => {
   return c.json({ employeeId: emp.id, name: emp.name, shiftConfig: parsed });
 });
 
+
+// v2 deploy trigger
