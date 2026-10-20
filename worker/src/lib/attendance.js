@@ -119,10 +119,11 @@ export async function recordCheckIn(env, user) {
   const status = await getWorkHoursStatus(env.DB);
   const key = recordKey(status.dateStr, user.id);
 
-  // Per-employee custom shift (e.g. evening shift): override start time
+  // Per-employee custom shift (e.g. evening shift): override start/end time
   let empStartMin = status.startMin;
   let empStartHour = status.settings.startHour;
   let empStartMinute = status.settings.startMinute;
+  let empEndMin = status.endMin;
   try {
     const emp = await env.DB.prepare(`SELECT shift_config FROM employees WHERE user_id = ? AND active = 1`).bind(user.id).first();
     if (emp?.shift_config) {
@@ -131,6 +132,9 @@ export async function recordCheckIn(env, user) {
         empStartHour = sc.startHour;
         empStartMinute = sc.startMinute;
         empStartMin = sc.startHour * 60 + sc.startMinute;
+      }
+      if (sc.endHour != null) {
+        empEndMin = sc.endHour * 60 + (sc.endMinute ?? 0);
       }
     }
   } catch {}
@@ -145,8 +149,12 @@ export async function recordCheckIn(env, user) {
   }
 
   // إقفال البصمة — شيفت مسائي (بداية >= 19) مفتوح لحد آخر الليل.
-  if (empStartMin < 19 * 60 && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+  if (empStartMin < 19 * 60 && empEndMin <= ATTENDANCE_CLOSE_MIN && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
     return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الحضور لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
+  // شيفت ممتد (بداية صبح بس نهاية بعد ٨م): البصمة بتتقفل عند نهاية الشيفت.
+  if (empEndMin > ATTENDANCE_CLOSE_MIN && status.minutesSinceMidnight >= empEndMin) {
+    return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الحضور لهذا اليوم' };
+  }
   }
 
   const now = nowIso();
@@ -200,8 +208,8 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
       if (sc.startHour != null && sc.startMinute != null) {
         empStartMin = sc.startHour * 60 + sc.startMinute;
       }
-      if (sc.endHour != null && sc.endMinute != null) {
-        effectiveEndMin = sc.endHour * 60 + sc.endMinute;
+      if (sc.endHour != null) {
+        effectiveEndMin = sc.endHour * 60 + (sc.endMinute ?? 0);
       }
     }
   } catch {}
@@ -217,8 +225,11 @@ export async function recordCheckOut(env, user, { reason = '' } = {}) {
   // نفس إقفال الـ8 مساءً الثابت بتاع الحضور، مطبّق على الانصراف كمان — طلب
   // صريح: "البصمة تقفل الساعة 8 مساءً" يشمل تسجيل الحضور والانصراف معًا.
   // شيفت مسائي (بداية >= 19) مستثنى — نفس الاستثناء في recordCheckIn.
-  if (empStartMin < 19 * 60 && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
+  if (empStartMin < 19 * 60 && effectiveEndMin <= ATTENDANCE_CLOSE_MIN && status.minutesSinceMidnight >= ATTENDANCE_CLOSE_MIN) {
     return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الانصراف لهذا اليوم — البصمة تُقفل يوميًا الساعة 8:00 مساءً' };
+  if (effectiveEndMin > ATTENDANCE_CLOSE_MIN && status.minutesSinceMidnight >= effectiveEndMin) {
+    return { error: 'ATTENDANCE_CLOSED', message: 'تم إغلاق تسجيل الانصراف لهذا اليوم' };
+  }
   }
 
   // نفس مبدأ recordCheckIn: كل الفحوصات (مسجّل حضور؟ مسجّل انصراف بالفعل؟
