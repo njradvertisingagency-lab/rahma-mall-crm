@@ -536,3 +536,48 @@ employeeRoutes.put('/:id/hr-profile', requireHR, async (c) => {
   await broadcast(c.env, 'EMPLOYEE_HR_PROFILE_UPDATED', { employeeId: id }, { scope: 'role', role: 'team_leader' });
   return c.json({ ok: true });
 });
+
+// تحديث shift_config لموظف معين — المالك أو HR فقط.
+// الحقول المقبولة: startHour, startMinute, endHour, endMinute,
+// systemStartHour, systemEndHour, systemStartMinute, systemEndMinute,
+// reportUnlockHour, reportUnlockMinute.
+employeeRoutes.put('/:id/shift-config', requireHR, async (c) => {
+  const user = c.get('user');
+  const db = c.env.DB;
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json().catch(() => ({}));
+
+  const emp = await db.prepare(`SELECT id, shift_config FROM employees WHERE id = ? AND active = 1`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+
+  let existing = {};
+  if (emp.shift_config) {
+    try { existing = JSON.parse(emp.shift_config); } catch {}
+  }
+
+  const ALLOWED = ['startHour', 'startMinute', 'endHour', 'endMinute',
+    'systemStartHour', 'systemEndHour', 'systemStartMinute', 'systemEndMinute',
+    'reportUnlockHour', 'reportUnlockMinute'];
+  for (const key of ALLOWED) {
+    if (body[key] !== undefined) {
+      existing[key] = body[key] === null ? undefined : Number(body[key]);
+    }
+  }
+  const cleaned = Object.fromEntries(Object.entries(existing).filter(([, v]) => v !== undefined));
+  const json = Object.keys(cleaned).length > 0 ? JSON.stringify(cleaned) : null;
+
+  await db.prepare(`UPDATE employees SET shift_config = ?, updated_at = ? WHERE id = ?`).bind(json, nowIso(), id).run();
+  await logActivity(db, { actor: user, action: 'EMPLOYEE_SHIFT_CONFIG_UPDATED', entityType: 'employee', entityId: String(id), metadata: cleaned });
+
+  return c.json({ ok: true, shiftConfig: cleaned });
+});
+
+employeeRoutes.get('/:id/shift-config', requireHR, async (c) => {
+  const id = Number(c.req.param('id'));
+  const emp = await c.env.DB.prepare(`SELECT id, name, shift_config FROM employees WHERE id = ? AND active = 1`).bind(id).first();
+  if (!emp) return jsonError(c, 404, 'الموظف غير موجود', 'NOT_FOUND');
+  let parsed = null;
+  if (emp.shift_config) { try { parsed = JSON.parse(emp.shift_config); } catch {} }
+  return c.json({ employeeId: emp.id, name: emp.name, shiftConfig: parsed });
+});
+
