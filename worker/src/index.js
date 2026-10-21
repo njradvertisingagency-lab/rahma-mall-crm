@@ -20,6 +20,7 @@ import { opsReportRoutes } from './routes/opsreports.js';
 import { attendanceRoutes } from './routes/attendance.js';
 import { rewardsRoutes } from './routes/rewards.js';
 import { dailyReportRoutes } from './routes/daily-report.js';
+import { legalFileRoutes } from './routes/legal-files.js';
 import { handleWebSocketUpgrade } from './routes/ws.js';
 import { sweepPresence } from './lib/presence.js';
 import { recordDailySnapshots } from './lib/performance.js';
@@ -37,14 +38,14 @@ const app = new Hono();
 // Security headers on every response.
 app.use('*', async (c, next) => {
   await next();
-  // A WebSocket upgrade response (status 101) has immutable headers — skip it.
+  // A WebSocket upgrade response (status 101) has immutable headers â skip it.
   if (c.res && c.res.status !== 101) {
     try {
       c.res.headers.set('X-Content-Type-Options', 'nosniff');
       c.res.headers.set('X-Frame-Options', 'DENY');
       c.res.headers.set('Referrer-Policy', 'same-origin');
     } catch {
-      // Some responses (e.g. streamed) may still refuse header mutation — non-fatal.
+      // Some responses (e.g. streamed) may still refuse header mutation â non-fatal.
     }
   }
 });
@@ -52,7 +53,7 @@ app.use('*', async (c, next) => {
 // CORS support for the split-origin production deployment (frontend on
 // Cloudflare Pages, API on this Worker's own workers.dev domain). Local dev
 // serves both from the same origin via the [assets] binding, so this only
-// matters for cross-origin browsers — credentials must be explicitly
+// matters for cross-origin browsers â credentials must be explicitly
 // allowed and the origin echoed back (never '*') for cookies to work.
 const ALLOWED_ORIGINS = new Set([
   'https://rahma-mall-crm.pages.dev',
@@ -93,15 +94,16 @@ api.route('/rewards', rewardsRoutes);
 api.route('/ops-reports', opsReportRoutes);
 api.route('/attendance', attendanceRoutes);
 api.route('/daily-report', dailyReportRoutes);
+api.route('/legal-files', legalFileRoutes);
 app.route('/api', api);
 
-// Real-time WebSocket upgrade — authenticated in routes/ws.js before ever
+// Real-time WebSocket upgrade â authenticated in routes/ws.js before ever
 // reaching the Durable Object.
 app.get('/ws', (c) => handleWebSocketUpgrade(c.req.raw, c.env));
 
 app.notFound((c) => {
   if (c.req.path.startsWith('/api/') || c.req.path === '/ws') {
-    return c.json({ error: { message: 'غير موجود' } }, 404);
+    return c.json({ error: { message: 'ØºÙØ± ÙÙØ¬ÙØ¯' } }, 404);
   }
   // Fall through to static assets (the SPA's index.html handles client routes).
   return c.env.ASSETS ? c.env.ASSETS.fetch(c.req.raw) : c.text('Not found', 404);
@@ -111,7 +113,7 @@ app.notFound((c) => {
 // D1's free tier caps daily row reads, and once that cap is reached EVERY
 // query throws until it resets at midnight UTC. Individual hot endpoints
 // cache their last good payload and degrade on their own, but there are far
-// too many queries app-wide to guard each one by hand — and an unguarded
+// too many queries app-wide to guard each one by hand â and an unguarded
 // throw surfaces as a raw 500, which reads to the team as "the whole system
 // is broken" rather than "the database is busy, try again shortly".
 // Recognising the outage here, once, gives every remaining endpoint an
@@ -162,7 +164,7 @@ app.onError((err, c) => {
       {
         error: {
           message:
-            'تعذر تحميل البيانات مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق',
+            'ØªØ¹Ø°Ø± ØªØ­ÙÙÙ Ø§ÙØ¨ÙØ§ÙØ§Øª ÙØ¤ÙØªÙØ§ Ø¨Ø³Ø¨Ø¨ Ø¶ØºØ· Ø¹ÙÙ ÙØ§Ø¹Ø¯Ø© Ø§ÙØ¨ÙØ§ÙØ§Øª â Ø¨Ø±Ø¬Ø§Ø¡ Ø§ÙÙØ­Ø§ÙÙØ© Ø®ÙØ§Ù Ø¯ÙØ§Ø¦Ù',
           code: 'DB_TEMPORARILY_UNAVAILABLE',
         },
       },
@@ -173,7 +175,7 @@ app.onError((err, c) => {
   return c.json(
     {
       error: {
-        message: 'حدث خطأ غير متوقع — برجاء المحاولة مرة أخرى',
+        message: 'Ø­Ø¯Ø« Ø®Ø·Ø£ ØºÙØ± ÙØªÙÙØ¹ â Ø¨Ø±Ø¬Ø§Ø¡ Ø§ÙÙØ­Ø§ÙÙØ© ÙØ±Ø© Ø£Ø®Ø±Ù',
         code: 'INTERNAL_ERROR',
       },
     },
@@ -181,7 +183,7 @@ app.onError((err, c) => {
   );
 });
 
-// The shift is 10:00–18:00 Cairo, Thursday and Friday off. The sweep window
+// The shift is 10:00â18:00 Cairo, Thursday and Friday off. The sweep window
 // is deliberately wider than the shift at both ends, because a few sweeps
 // must fire just OUTSIDE it: the pre-shift availability restore runs before
 // 10:00, and the end-of-shift ops report plus the idle-customer auto-reclaim
@@ -190,8 +192,8 @@ app.onError((err, c) => {
 //
 // These bounds are intentionally hardcoded and D1-free: reading the
 // configurable work_hours row on every tick would cost the very reads this
-// gate exists to save. If the shift ever moves far outside 09:30–19:30,
-// widen this window to match — the settings row alone will not move it.
+// gate exists to save. If the shift ever moves far outside 09:30â19:30,
+// widen this window to match â the settings row alone will not move it.
 const SWEEP_WINDOW_START_MIN = 9 * 60 + 30;
 const SWEEP_WINDOW_END_MIN = 19 * 60 + 30;
 const SWEEP_SKIP_WEEKDAYS = ['Thursday', 'Friday'];
@@ -203,7 +205,7 @@ function sweepsShouldRunNow() {
     return minutesSinceMidnight >= SWEEP_WINDOW_START_MIN && minutesSinceMidnight <= SWEEP_WINDOW_END_MIN;
   } catch (err) {
     // If the clock lookup ever fails, run the sweeps rather than silently
-    // stopping all automation — a wasted tick is cheaper than a missed alert.
+    // stopping all automation â a wasted tick is cheaper than a missed alert.
     console.error('sweep window check failed, running sweeps anyway', err);
     return true;
   }
@@ -214,14 +216,14 @@ export default {
     return app.fetch(request, env, ctx);
   },
 
-  // Cron trigger — TWO cadences (see wrangler.toml for why): "* * * * *"
+  // Cron trigger â TWO cadences (see wrangler.toml for why): "* * * * *"
   // every minute for the one thing worth checking that often (presence),
   // and "*/5 * * * *" every 5 minutes for everything else. Each sweep stays
   // isolated so one failing never blocks the others.
   async scheduled(event, env, ctx) {
     // Every sweep below exists to watch employees while they work. Outside
     // the shift there is nobody to watch, yet the crons still fired around
-    // the clock — 1,440 + 288 runs a day, every day, each one reading D1.
+    // the clock â 1,440 + 288 runs a day, every day, each one reading D1.
     // That is the bulk of the daily read quota spent on empty office hours,
     // which is why the quota kept running out mid-morning.
     //
@@ -229,7 +231,7 @@ export default {
     // exact minute: each one already carries its own same-day dedup guard,
     // and the states they set (off-hours DND, availability) simply persist
     // overnight untouched, which is the correct resting state anyway.
-    // تنظيف الخميس ١٢:٠٠: حذف العملاء "غير مهتم" (الخميس إجازة فالـ sweeps العادية واقفة).
+    // ØªÙØ¸ÙÙ Ø§ÙØ®ÙÙØ³ Ù¡Ù¢:Ù Ù : Ø­Ø°Ù Ø§ÙØ¹ÙÙØ§Ø¡ "ØºÙØ± ÙÙØªÙ" (Ø§ÙØ®ÙÙØ³ Ø¥Ø¬Ø§Ø²Ø© ÙØ§ÙÙ sweeps Ø§ÙØ¹Ø§Ø¯ÙØ© ÙØ§ÙÙØ©).
     if (event.cron === '* * * * *' && getCairoWeekday() === 'Thursday') {
       const m = getCairoNow().minutesSinceMidnight;
       if (m >= 12 * 60 && m <= 12 * 60 + 2) {
@@ -239,33 +241,33 @@ export default {
     if (!sweepsShouldRunNow()) return;
 
     if (event.cron === '* * * * *') {
-      // كانت كل دقيقة (١٤٤٠ تشغيلة/يوم) — أهم سبب في استهلاك حصة القراءة
-      // المجانية اليومية. التواجد (presence) ما يحتاجش دقة دقيقة بدقيقة؛
-      // كل ٣ دقايق كافي جدًا وبيوفر ثلثي القراءات من غير ما حد يحس بفرق.
+      // ÙØ§ÙØª ÙÙ Ø¯ÙÙÙØ© (Ù¡Ù¤Ù¤Ù  ØªØ´ØºÙÙØ©/ÙÙÙ) â Ø£ÙÙ Ø³Ø¨Ø¨ ÙÙ Ø§Ø³ØªÙÙØ§Ù Ø­ØµØ© Ø§ÙÙØ±Ø§Ø¡Ø©
+      // Ø§ÙÙØ¬Ø§ÙÙØ© Ø§ÙÙÙÙÙØ©. Ø§ÙØªÙØ§Ø¬Ø¯ (presence) ÙØ§ ÙØ­ØªØ§Ø¬Ø´ Ø¯ÙØ© Ø¯ÙÙÙØ© Ø¨Ø¯ÙÙÙØ©Ø
+      // ÙÙ Ù£ Ø¯ÙØ§ÙÙ ÙØ§ÙÙ Ø¬Ø¯ÙØ§ ÙØ¨ÙÙÙØ± Ø«ÙØ«Ù Ø§ÙÙØ±Ø§Ø¡Ø§Øª ÙÙ ØºÙØ± ÙØ§ Ø­Ø¯ ÙØ­Ø³ Ø¨ÙØ±Ù.
       if (isDueEvery(3, 1)) {
         ctx.waitUntil(sweepPresence(env.DB, env).catch((e) => console.error('sweepPresence failed', e)));
       }
-      // إعادة التوزيع الساعة ٣ بالظبط: التشغيل الأول في أول دقيقة من الساعة ٣
-      // (والدقيقتين اللي بعدها كاحتياط لو تأخر الـ cron). بعد أول نجاح
-      // الـ dedup بيمنع التكرار، والـ */5 فاضل كشبكة أمان لو فات الموعد.
+      // Ø¥Ø¹Ø§Ø¯Ø© Ø§ÙØªÙØ²ÙØ¹ Ø§ÙØ³Ø§Ø¹Ø© Ù£ Ø¨Ø§ÙØ¸Ø¨Ø·: Ø§ÙØªØ´ØºÙÙ Ø§ÙØ£ÙÙ ÙÙ Ø£ÙÙ Ø¯ÙÙÙØ© ÙÙ Ø§ÙØ³Ø§Ø¹Ø© Ù£
+      // (ÙØ§ÙØ¯ÙÙÙØªÙÙ Ø§ÙÙÙ Ø¨Ø¹Ø¯ÙØ§ ÙØ§Ø­ØªÙØ§Ø· ÙÙ ØªØ£Ø®Ø± Ø§ÙÙ cron). Ø¨Ø¹Ø¯ Ø£ÙÙ ÙØ¬Ø§Ø­
+      // Ø§ÙÙ dedup Ø¨ÙÙÙØ¹ Ø§ÙØªÙØ±Ø§Ø±Ø ÙØ§ÙÙ */5 ÙØ§Ø¶Ù ÙØ´Ø¨ÙØ© Ø£ÙØ§Ù ÙÙ ÙØ§Øª Ø§ÙÙÙØ¹Ø¯.
       const nowMin = getCairoNow().minutesSinceMidnight;
       if (nowMin >= 16 * 60 && nowMin <= 16 * 60 + 2) {
         ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
       }
-      // التوزيع التلقائي الصبح ١١:٣٠ (نفس فكرة الدقيقتين الاحتياط).
+      // Ø§ÙØªÙØ²ÙØ¹ Ø§ÙØªÙÙØ§Ø¦Ù Ø§ÙØµØ¨Ø­ Ù¡Ù¡:Ù£Ù  (ÙÙØ³ ÙÙØ±Ø© Ø§ÙØ¯ÙÙÙØªÙÙ Ø§ÙØ§Ø­ØªÙØ§Ø·).
       if (nowMin >= 11 * 60 + 30 && nowMin <= 11 * 60 + 32) {
         ctx.waitUntil(sweepAutoDistribute(env.DB, env).catch((e) => console.error('sweepAutoDistribute failed', e)));
       }
       return;
     }
-    // '*/5 * * * *' (or any other/unrecognized cron — safe default so a
+    // '*/5 * * * *' (or any other/unrecognized cron â safe default so a
     // future trigger never silently runs nothing).
-    // sweeps الـ SLA والـ CUSTOMER_WAITING اتشالت — كانت موجودة للإشعارات بس (الحالة الحية بتتحسب من الطوابع الزمنية مباشرة).
+    // sweeps Ø§ÙÙ SLA ÙØ§ÙÙ CUSTOMER_WAITING Ø§ØªØ´Ø§ÙØª â ÙØ§ÙØª ÙÙØ¬ÙØ¯Ø© ÙÙØ¥Ø´Ø¹Ø§Ø±Ø§Øª Ø¨Ø³ (Ø§ÙØ­Ø§ÙØ© Ø§ÙØ­ÙØ© Ø¨ØªØªØ­Ø³Ø¨ ÙÙ Ø§ÙØ·ÙØ§Ø¨Ø¹ Ø§ÙØ²ÙÙÙØ© ÙØ¨Ø§Ø´Ø±Ø©).
     ctx.waitUntil(sweepOverdueFollowups(env).catch((e) => console.error('sweepOverdueFollowups failed', e)));
-    // كانت بتشتغل كل ٥ دقايق وبتعمل ٤ استعلامات لكل موظف نشط في كل تشغيلة —
-    // أكبر مستهلك لحصة القراءة اليومية بالكامل. البيانات دي لرسم بياني
-    // تاريخي (trend chart) مش شاشة لايف، فمرة كل ساعة كافية تمامًا وبتوفر
-    // ٩٢٪ من قراءات هذا الجزء تحديدًا.
+    // ÙØ§ÙØª Ø¨ØªØ´ØªØºÙ ÙÙ Ù¥ Ø¯ÙØ§ÙÙ ÙØ¨ØªØ¹ÙÙ Ù¤ Ø§Ø³ØªØ¹ÙØ§ÙØ§Øª ÙÙÙ ÙÙØ¸Ù ÙØ´Ø· ÙÙ ÙÙ ØªØ´ØºÙÙØ© â
+    // Ø£ÙØ¨Ø± ÙØ³ØªÙÙÙ ÙØ­ØµØ© Ø§ÙÙØ±Ø§Ø¡Ø© Ø§ÙÙÙÙÙØ© Ø¨Ø§ÙÙØ§ÙÙ. Ø§ÙØ¨ÙØ§ÙØ§Øª Ø¯Ù ÙØ±Ø³Ù Ø¨ÙØ§ÙÙ
+    // ØªØ§Ø±ÙØ®Ù (trend chart) ÙØ´ Ø´Ø§Ø´Ø© ÙØ§ÙÙØ ÙÙØ±Ø© ÙÙ Ø³Ø§Ø¹Ø© ÙØ§ÙÙØ© ØªÙØ§ÙÙØ§ ÙØ¨ØªÙÙØ±
+    // Ù©Ù¢Ùª ÙÙ ÙØ±Ø§Ø¡Ø§Øª ÙØ°Ø§ Ø§ÙØ¬Ø²Ø¡ ØªØ­Ø¯ÙØ¯ÙØ§.
     if (isDueEvery(180, 5)) {
       ctx.waitUntil(recordDailySnapshots(env.DB).catch((e) => console.error('recordDailySnapshots failed', e)));
     }
@@ -273,8 +275,8 @@ export default {
     ctx.waitUntil(sweepOffHoursAvailability(env.DB, env).catch((e) => console.error('sweepOffHoursAvailability failed', e)));
     ctx.waitUntil(sweepAutoReclaim(env.DB, env).catch((e) => console.error('sweepAutoReclaim failed', e)));
     ctx.waitUntil(sweepRedistribute3pm(env.DB, env).catch((e) => console.error('sweepRedistribute3pm failed', e)));
-    // خصم تأخير كتابة الملاحظة: تأخير الخصم بضع دقايق مش فارق عمليًا —
-    // كل ١٥ دقيقة بدل ٥ يقلل ثلثي مرات فحص العملاء المتأخرين.
+    // Ø®ØµÙ ØªØ£Ø®ÙØ± ÙØªØ§Ø¨Ø© Ø§ÙÙÙØ§Ø­Ø¸Ø©: ØªØ£Ø®ÙØ± Ø§ÙØ®ØµÙ Ø¨Ø¶Ø¹ Ø¯ÙØ§ÙÙ ÙØ´ ÙØ§Ø±Ù Ø¹ÙÙÙÙØ§ â
+    // ÙÙ Ù¡Ù¥ Ø¯ÙÙÙØ© Ø¨Ø¯Ù Ù¥ ÙÙÙÙ Ø«ÙØ«Ù ÙØ±Ø§Øª ÙØ­Øµ Ø§ÙØ¹ÙÙØ§Ø¡ Ø§ÙÙØªØ£Ø®Ø±ÙÙ.
     if (isDueEvery(15, 5)) {
       ctx.waitUntil(sweepLateNotePenalty(env.DB, env).catch((e) => console.error('sweepLateNotePenalty failed', e)));
     }
