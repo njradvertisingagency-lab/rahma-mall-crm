@@ -731,6 +731,12 @@ const NAV_TL = [
 const NAV_HR = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['employees', '🧑‍💼', 'خدمة العملاء'],
+  ['legal-files', '⚖️', 'الملفات القانونية'],
+];
+
+// حساب الشئون القانونية (isLegal=1) — يشوف الملفات القانونية فقط.
+const NAV_LEGAL = [
+  ['legal-files', '⚖️', 'الملفات القانونية'],
 ];
 
 // حساب "admin" (👑 الرؤية الشاملة، is_owner=1) — god-view كامل للشركة:
@@ -750,6 +756,7 @@ const NAV_ADMIN = [
   ['reports', '🧾', 'التقارير'],
   ['activity', '🕒', 'سجل الأنشطة'],
   ['settings', '⚙️', 'الإعدادات'],
+  ['legal-files', '⚖️', 'الملفات القانونية'],
 ];
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
@@ -767,7 +774,7 @@ function renderShell() {
   // بقت زي قائمة الأدمن بالظبط (بدون المظهر الذهبي المميز اللي يفضل لحساب
   // الأدمن/المالك فقط). قائد الفريق العادي لسه يشوف مبيعاته بس.
   const nav = user.role === 'team_leader'
-    ? ((isAdmin || user.isHr) ? NAV_ADMIN : NAV_TL)
+    ? ((isAdmin || user.isHr) ? NAV_ADMIN : user.isLegal ? NAV_LEGAL : NAV_TL)
     : NAV_EMPLOYEE;
   const currentPath = (location.hash || '#/dashboard').replace(/^#\//, '').split('/')[0];
 
