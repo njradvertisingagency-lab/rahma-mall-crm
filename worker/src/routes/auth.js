@@ -10,29 +10,29 @@ h
 // Public: the employee-picker screen needs names/avatars before any password
 // is entered. Only non-sensitive identity fields are exposed.
 //
-// This is the very FIRST request anyone makes — every visitor hits it on
+// This is the very FIRST request anyone makes â every visitor hits it on
 // page load, before logging in, often repeatedly if they keep retrying a
 // failed page. That made it one of the heaviest, most repetitive D1 reads
 // in the whole app (a JOIN, on every single page view). It now has two
 // layers of protection, reusing the SessionStore Durable Object (already
-// deployed, no new binding needed) purely as a small key/value cache here —
+// deployed, no new binding needed) purely as a small key/value cache here â
 // unrelated to sessions, just a convenient existing KV store:
 //   1. A 60-second cache: most page views in any given minute cost zero D1
 //      reads.
 //   2. A "last known good" fallback with no expiry: if D1 is ever
 //      unreachable (quota, outage), the picker screen still shows the
-//      employee list from the last successful read instead of an error —
+//      employee list from the last successful read instead of an error â
 //      the data is close to static (names/avatars), so a stale copy is far
 //      better than a blank screen.
 const EMPLOYEES_PUBLIC_CACHE_KEY = 'cache:employees_public';
 const EMPLOYEES_PUBLIC_CACHE_TTL_MS = 60 * 1000;
 
 authRoutes.get('/employees-public', async (c) => {
-  // كانت هنا بوابة زمنية (9ص-8م) بترجع القائمة فاضية "مغلق" برّه الوقت ده —
-  // اتشالت بالكامل: صاحب الشركة عايز النظام متاح لتسجيل الدخول في أي وقت،
-  // من غير أي قفل. القيد الوحيد المتبقي فعليًا هو منع تسجيل الحضور نفسه قبل
-  // معاد بداية الشيفت (انظر recordCheckIn) — ده إجراء منفصل تمامًا عن مجرد
-  // فتح الصفحة وتسجيل الدخول.
+  // ÙØ§ÙØª ÙÙØ§ Ø¨ÙØ§Ø¨Ø© Ø²ÙÙÙØ© (9Øµ-8Ù) Ø¨ØªØ±Ø¬Ø¹ Ø§ÙÙØ§Ø¦ÙØ© ÙØ§Ø¶ÙØ© "ÙØºÙÙ" Ø¨Ø±ÙÙ Ø§ÙÙÙØª Ø¯Ù â
+  // Ø§ØªØ´Ø§ÙØª Ø¨Ø§ÙÙØ§ÙÙ: ØµØ§Ø­Ø¨ Ø§ÙØ´Ø±ÙØ© Ø¹Ø§ÙØ² Ø§ÙÙØ¸Ø§Ù ÙØªØ§Ø­ ÙØªØ³Ø¬ÙÙ Ø§ÙØ¯Ø®ÙÙ ÙÙ Ø£Ù ÙÙØªØ
+  // ÙÙ ØºÙØ± Ø£Ù ÙÙÙ. Ø§ÙÙÙØ¯ Ø§ÙÙØ­ÙØ¯ Ø§ÙÙØªØ¨ÙÙ ÙØ¹ÙÙÙØ§ ÙÙ ÙÙØ¹ ØªØ³Ø¬ÙÙ Ø§ÙØ­Ø¶ÙØ± ÙÙØ³Ù ÙØ¨Ù
+  // ÙØ¹Ø§Ø¯ Ø¨Ø¯Ø§ÙØ© Ø§ÙØ´ÙÙØª (Ø§ÙØ¸Ø± recordCheckIn) â Ø¯Ù Ø¥Ø¬Ø±Ø§Ø¡ ÙÙÙØµÙ ØªÙØ§ÙÙØ§ Ø¹Ù ÙØ¬Ø±Ø¯
+  // ÙØªØ­ Ø§ÙØµÙØ­Ø© ÙØªØ³Ø¬ÙÙ Ø§ÙØ¯Ø®ÙÙ.
   const cached = await sessGet(c.env, EMPLOYEES_PUBLIC_CACHE_KEY).catch(() => null);
   if (cached && Date.now() - cached.cachedAt < EMPLOYEES_PUBLIC_CACHE_TTL_MS) {
     return c.json({ employees: cached.employees });
@@ -57,7 +57,7 @@ authRoutes.get('/employees-public', async (c) => {
   } catch (err) {
     console.error('employees-public: D1 unavailable, falling back to last known list', err);
     if (cached) return c.json({ employees: cached.employees, stale: true });
-    return jsonError(c, 503, 'تعذر تحميل قائمة الموظفين مؤقتًا — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+    return jsonError(c, 503, 'ØªØ¹Ø°Ø± ØªØ­ÙÙÙ ÙØ§Ø¦ÙØ© Ø§ÙÙÙØ¸ÙÙÙ ÙØ¤ÙØªÙØ§ â Ø¨Ø±Ø¬Ø§Ø¡ Ø§ÙÙØ­Ø§ÙÙØ© Ø®ÙØ§Ù Ø¯ÙØ§Ø¦Ù', 'DB_TEMPORARILY_UNAVAILABLE');
   }
 });
 
@@ -68,7 +68,7 @@ authRoutes.post('/login', async (c) => {
   const password = String(body.password || '');
   const remember = !!body.remember;
 
-  if (!username || !password) return jsonError(c, 400, 'اسم المستخدم وكلمة المرور مطلوبان', 'MISSING_FIELDS');
+  if (!username || !password) return jsonError(c, 400, 'Ø§Ø³Ù Ø§ÙÙØ³ØªØ®Ø¯Ù ÙÙÙÙØ© Ø§ÙÙØ±ÙØ± ÙØ·ÙÙØ¨Ø§Ù', 'MISSING_FIELDS');
 
 
   const db = c.env.DB;
@@ -76,7 +76,7 @@ authRoutes.post('/login', async (c) => {
   // (same reused-as-KV trick as employees-public/dashboard). There are only
   // a handful of accounts and they change rarely (password change, activate/
   // deactivate), so this is always refreshed from a fresh D1 read when D1 is
-  // up — the cache is ONLY a last-resort fallback for the one D1 read that
+  // up â the cache is ONLY a last-resort fallback for the one D1 read that
   // can never be moved off D1 entirely (credentials must be checked
   // somewhere). This closes the one remaining gap: previously, even a
   // brand-new login was blocked whenever D1's quota was exhausted, while an
@@ -87,8 +87,8 @@ authRoutes.post('/login', async (c) => {
   const userCacheKey = `cache:user:${username}`;
   let user;
   try {
-    // ONLY the D1 read belongs in this try. Anything else in here — including
-    // refreshing the cache below — would be caught by the handler underneath
+    // ONLY the D1 read belongs in this try. Anything else in here â including
+    // refreshing the cache below â would be caught by the handler underneath
     // and reported to the person as a database outage while the database is
     // perfectly healthy, locking them out of their own system.
     user = await db.prepare(`SELECT * FROM users WHERE username = ?`).bind(username).first();
@@ -99,13 +99,13 @@ authRoutes.post('/login', async (c) => {
       user = cached.user;
     } else {
       // If D1 itself is unreachable/over quota and we have no snapshot for
-      // this account, say so plainly instead of the generic "فشل الطلب" a
+      // this account, say so plainly instead of the generic "ÙØ´Ù Ø§ÙØ·ÙØ¨" a
       // raw 500 produces.
-      return jsonError(c, 503, 'تعذر تسجيل الدخول مؤقتًا بسبب ضغط على قاعدة البيانات — برجاء المحاولة خلال دقائق', 'DB_TEMPORARILY_UNAVAILABLE');
+      return jsonError(c, 503, 'ØªØ¹Ø°Ø± ØªØ³Ø¬ÙÙ Ø§ÙØ¯Ø®ÙÙ ÙØ¤ÙØªÙØ§ Ø¨Ø³Ø¨Ø¨ Ø¶ØºØ· Ø¹ÙÙ ÙØ§Ø¹Ø¯Ø© Ø§ÙØ¨ÙØ§ÙØ§Øª â Ø¨Ø±Ø¬Ø§Ø¡ Ø§ÙÙØ­Ø§ÙÙØ© Ø®ÙØ§Ù Ø¯ÙØ§Ø¦Ù', 'DB_TEMPORARILY_UNAVAILABLE');
     }
   }
 
-  // Refresh the fallback snapshot outside the try above — a failure here must
+  // Refresh the fallback snapshot outside the try above â a failure here must
   // never cost anyone their login.
   backgroundWrite(
     c,
@@ -122,18 +122,18 @@ authRoutes.post('/login', async (c) => {
     : (await verifyPassword(password, dummySalt, dummyHash), false);
 
   if (!ok) {
-    // Best-effort audit log — a wrong password must still come back as a
+    // Best-effort audit log â a wrong password must still come back as a
     // clean 401 even if D1 can't take this write right now.
     await logActivity(db, { actor: null, action: 'LOGIN_FAILED', entityType: 'user', entityId: username }).catch((err) =>
       console.error('login: could not log LOGIN_FAILED (non-fatal)', err)
     );
-    return jsonError(c, 401, 'اسم المستخدم أو كلمة المرور غير صحيحة', 'INVALID_CREDENTIALS');
+    return jsonError(c, 401, 'Ø§Ø³Ù Ø§ÙÙØ³ØªØ®Ø¯Ù Ø£Ù ÙÙÙØ© Ø§ÙÙØ±ÙØ± ØºÙØ± ØµØ­ÙØ­Ø©', 'INVALID_CREDENTIALS');
   }
 
   const userAgent = c.req.header('user-agent') || '';
 
   // From here on, the credential check has already succeeded (from D1 or the
-  // cached snapshot) — nothing below should be able to turn that into a
+  // cached snapshot) â nothing below should be able to turn that into a
   // failed login. Every remaining D1 touch is either best-effort (presence/
   // activity logging) or degrades to a safe default (availability/avatar).
   let employeeId = null;
@@ -150,21 +150,23 @@ authRoutes.post('/login', async (c) => {
     }
   }
 
-  // حساب HR منفصل عن قائد الفريق (المبيعات) لكنه يحمل نفس role='team_leader' في
-  // قاعدة البيانات (انظر التعليق في lib/auth.js). العلم مخزّن في جدول منفصل
-  // user_role_flags بدل عمود على users نفسها، لتفادي ALTER TABLE الممنوع.
+  // Ø­Ø³Ø§Ø¨ HR ÙÙÙØµÙ Ø¹Ù ÙØ§Ø¦Ø¯ Ø§ÙÙØ±ÙÙ (Ø§ÙÙØ¨ÙØ¹Ø§Øª) ÙÙÙÙ ÙØ­ÙÙ ÙÙØ³ role='team_leader' ÙÙ
+  // ÙØ§Ø¹Ø¯Ø© Ø§ÙØ¨ÙØ§ÙØ§Øª (Ø§ÙØ¸Ø± Ø§ÙØªØ¹ÙÙÙ ÙÙ lib/auth.js). Ø§ÙØ¹ÙÙ ÙØ®Ø²ÙÙ ÙÙ Ø¬Ø¯ÙÙ ÙÙÙØµÙ
+  // user_role_flags Ø¨Ø¯Ù Ø¹ÙÙØ¯ Ø¹ÙÙ users ÙÙØ³ÙØ§Ø ÙØªÙØ§Ø¯Ù ALTER TABLE Ø§ÙÙÙÙÙØ¹.
   let isHr = false;
+  let isLegal = false;
   if (user.role === 'team_leader') {
     try {
-      const flagRow = await db.prepare(`SELECT is_hr FROM user_role_flags WHERE user_id = ?`).bind(user.id).first();
+      const flagRow = await db.prepare(`SELECT is_hr, is_legal FROM user_role_flags WHERE user_id = ?`).bind(user.id).first();
       isHr = !!flagRow?.is_hr;
+      isLegal = !!flagRow?.is_legal;
     } catch (err) {
-      console.error('login: could not load HR flag (non-fatal)', err);
+      console.error('login: could not load HR/legal flags (non-fatal)', err);
     }
   }
 
-  // القسم الوظيفي — حاليًا "customer_service" (الافتراضي) أو "accounting" أو "legal".
-  // مخزّن في جدول employee_department المنفصل (لتفادي ALTER TABLE الممنوع).
+  // Ø§ÙÙØ³Ù Ø§ÙÙØ¸ÙÙÙ â Ø­Ø§ÙÙÙØ§ "customer_service" (Ø§ÙØ§ÙØªØ±Ø§Ø¶Ù) Ø£Ù "accounting" Ø£Ù "legal".
+  // ÙØ®Ø²ÙÙ ÙÙ Ø¬Ø¯ÙÙ employee_department Ø§ÙÙÙÙØµÙ (ÙØªÙØ§Ø¯Ù ALTER TABLE Ø§ÙÙÙÙÙØ¹).
   let department = 'customer_service';
   if (employeeId) {
     try {
@@ -175,7 +177,7 @@ authRoutes.post('/login', async (c) => {
     }
   }
 
-  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId, isHr, department });
+  const { token } = await createSession(c.env, user, { remember, userAgent, employeeId, isHr, isLegal, department });
   setSessionCookie(c, token, remember);
 
   await recordLogin(db, c.env, { userId: user.id, employeeId, token, userAgent }).catch((err) =>
@@ -200,6 +202,7 @@ authRoutes.post('/login', async (c) => {
       avatarUrl,
       isOwner: !!user.is_owner,
       isHr,
+      isLegal,
       department,
       mustChangePassword: !!user.must_change_password,
     },
@@ -233,7 +236,7 @@ authRoutes.get('/me', requireAuth, async (c) => {
     } catch (err) {
       console.error('/auth/me: could not load availability/avatar (non-fatal)', err);
     }
-    // Always look up department from DB — session may be stale (created
+    // Always look up department from DB â session may be stale (created
     // before department code was deployed) or missing the field entirely.
     try {
       const deptRow = await db.prepare(`SELECT department FROM employee_department WHERE employee_id = ?`).bind(user.employeeId).first();
@@ -250,12 +253,12 @@ authRoutes.post('/change-password', requireAuth, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { currentPassword, newPassword } = body;
   if (!currentPassword || !newPassword || String(newPassword).length < 8) {
-    return jsonError(c, 400, 'يجب أن تتكون كلمة المرور الجديدة من ٨ أحرف على الأقل', 'WEAK_PASSWORD');
+    return jsonError(c, 400, 'ÙØ¬Ø¨ Ø£Ù ØªØªÙÙÙ ÙÙÙØ© Ø§ÙÙØ±ÙØ± Ø§ÙØ¬Ø¯ÙØ¯Ø© ÙÙ Ù¨ Ø£Ø­Ø±Ù Ø¹ÙÙ Ø§ÙØ£ÙÙ', 'WEAK_PASSWORD');
   }
   const db = c.env.DB;
   const row = await db.prepare(`SELECT * FROM users WHERE id = ?`).bind(user.id).first();
   const ok = await verifyPassword(currentPassword, row.password_salt, row.password_hash);
-  if (!ok) return jsonError(c, 401, 'كلمة المرور الحالية غير صحيحة', 'BAD_CURRENT_PASSWORD');
+  if (!ok) return jsonError(c, 401, 'ÙÙÙØ© Ø§ÙÙØ±ÙØ± Ø§ÙØ­Ø§ÙÙØ© ØºÙØ± ØµØ­ÙØ­Ø©', 'BAD_CURRENT_PASSWORD');
 
   const salt = randomSaltHex();
   const hash = await hashPassword(newPassword, salt);
