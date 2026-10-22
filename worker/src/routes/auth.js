@@ -6,7 +6,7 @@ import { recordLogin, recordLogout } from '../lib/presence.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
-h
+
 // Public: the employee-picker screen needs names/avatars before any password
 // is entered. Only non-sensitive identity fields are exposed.
 //
