@@ -3,22 +3,22 @@
   const { el, api, toast } = App;
 
   const ACTION_AR = {
-    CREATED: 'Ø¥ÙØ´Ø§Ø¡ ÙÙÙ',
-    EDITED: 'ØªØ¹Ø¯ÙÙ Ø¨ÙØ§ÙØ§Øª',
-    DOCUMENT_ADDED: 'Ø±ÙØ¹ ÙØ³ØªÙØ¯',
-    DOCUMENT_REMOVED: 'Ø­Ø°Ù ÙØ³ØªÙØ¯',
-    MOVED_TO_LEGAL: 'ÙÙÙ ÙÙØ´Ø¦ÙÙ Ø§ÙÙØ§ÙÙÙÙØ©',
-    MOVED_TO_HR: 'ÙÙÙ ÙÙ HR',
-    ARCHIVED: 'Ø£Ø±Ø´ÙØ©',
-    RESTORED: 'Ø§Ø³ØªØ¹Ø§Ø¯Ø© ÙÙ Ø§ÙØ£Ø±Ø´ÙÙ',
-    TRANSFER_REQUESTED: 'Ø·ÙØ¨ ÙÙÙ',
-    TRANSFER_APPROVED: 'ÙÙØ§ÙÙØ© Ø¹ÙÙ ÙÙÙ',
-    TRANSFER_REJECTED: 'Ø±ÙØ¶ Ø·ÙØ¨ ÙÙÙ',
+    CREATED: 'إنشاء ملف',
+    EDITED: 'تعديل بيانات',
+    DOCUMENT_ADDED: 'رفع مستند',
+    DOCUMENT_REMOVED: 'حذف مستند',
+    MOVED_TO_LEGAL: 'نقل للشئون القانونية',
+    MOVED_TO_HR: 'نقل لـ HR',
+    ARCHIVED: 'أرشفة',
+    RESTORED: 'استعادة من الأرشيف',
+    TRANSFER_REQUESTED: 'طلب نقل',
+    TRANSFER_APPROVED: 'موافقة على نقل',
+    TRANSFER_REJECTED: 'رفض طلب نقل',
   };
 
-  // ââââââ Helpers ââââââ
+  // ────── Helpers ──────
   function fmtDate(iso) {
-    if (!iso) return 'â';
+    if (!iso) return '—';
     const d = new Date(iso);
     return d.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
@@ -30,7 +30,7 @@
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  // ââââââ ÙÙÙÙ Ø±ÙØ¹ Ø§ÙÙÙÙØ§Øª Drag & Drop (ÙØ´ØªØ±Ù) ââââââ
+  // ────── مكون رفع الملفات Drag & Drop (مشترك) ──────
   function createDropZone(maxFiles) {
     let selectedFiles = [];
     const previewGrid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-top:10px' });
@@ -46,9 +46,9 @@
       style: 'border:2px dashed var(--border);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg)',
       onclick: () => hiddenInput.click(),
     }, [
-      el('div', { style: 'font-size:36px;margin-bottom:8px;opacity:.6' }, ['ð']),
-      el('div', { style: 'font-size:14px;font-weight:600;color:var(--text)' }, ['Ø§Ø³Ø­Ø¨ Ø§ÙÙÙÙØ§Øª ÙÙØ§ Ø£Ù Ø§Ø¶ØºØ· ÙÙØ§Ø®ØªÙØ§Ø±']),
-      el('div', { style: 'font-size:12px;color:var(--text-2);margin-top:4px' }, ['ØµÙØ± Ø¨Ø£Ù ØµÙØºØ© Ø£Ù PDF â Ø­Ø¯ Ø£ÙØµÙ ' + maxFiles + ' ÙÙÙ â Ø£ÙØµÙ Ø­Ø¬Ù 5 ÙÙØ¬Ø§ ÙÙÙÙÙ']),
+      el('div', { style: 'font-size:36px;margin-bottom:8px;opacity:.6' }, ['📁']),
+      el('div', { style: 'font-size:14px;font-weight:600;color:var(--text)' }, ['اسحب الملفات هنا أو اضغط للاختيار']),
+      el('div', { style: 'font-size:12px;color:var(--text-2);margin-top:4px' }, ['صور بأي صيغة أو PDF — حد أقصى ' + maxFiles + ' ملف — أقصى حجم 5 ميجا للملف']),
       hiddenInput,
     ]);
 
@@ -73,9 +73,9 @@
       if (!fileList) return;
       for (let i = 0; i < fileList.length; i++) {
         const f = fileList[i];
-        if (!f.type.startsWith('image/') && f.type !== 'application/pdf') { toast('â ï¸ ' + f.name + ' â ØµÙØºØ© ØºÙØ± ÙØ¯Ø¹ÙÙØ©'); continue; }
-        if (f.size > 5 * 1024 * 1024) { toast('â ' + f.name + ' Ø£ÙØ¨Ø± ÙÙ 5 ÙÙØ¬Ø§'); continue; }
-        if (selectedFiles.length >= maxFiles) { toast('â ï¸ Ø§ÙØ­Ø¯ Ø§ÙØ£ÙØµÙ ' + maxFiles + ' ÙÙÙ'); break; }
+        if (!f.type.startsWith('image/') && f.type !== 'application/pdf') { toast('⚠️ ' + f.name + ' — صيغة غير مدعومة'); continue; }
+        if (f.size > 5 * 1024 * 1024) { toast('❌ ' + f.name + ' أكبر من 5 ميجا'); continue; }
+        if (selectedFiles.length >= maxFiles) { toast('⚠️ الحد الأقصى ' + maxFiles + ' ملف'); break; }
         if (selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) continue;
         selectedFiles.push(f);
       }
@@ -84,7 +84,7 @@
 
     function renderPreviews() {
       previewGrid.innerHTML = '';
-      countLabel.textContent = selectedFiles.length > 0 ? ('ØªÙ Ø§Ø®ØªÙØ§Ø± ' + selectedFiles.length + ' ÙÙÙ') : '';
+      countLabel.textContent = selectedFiles.length > 0 ? ('تم اختيار ' + selectedFiles.length + ' ملف') : '';
       selectedFiles.forEach((f, idx) => {
         const thumb = el('div', {
           style: 'position:relative;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px;text-align:center;overflow:hidden',
@@ -92,7 +92,7 @@
         const removeBtn = el('button', {
           style: 'position:absolute;top:2px;left:2px;background:var(--danger);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:20px;padding:0;z-index:1',
           onclick: (e) => { e.stopPropagation(); selectedFiles.splice(idx, 1); renderPreviews(); },
-        }, ['â']);
+        }, ['✕']);
         thumb.appendChild(removeBtn);
 
         if (f.type.startsWith('image/')) {
@@ -102,7 +102,7 @@
           img.onload = () => URL.revokeObjectURL(url);
           thumb.appendChild(img);
         } else {
-          thumb.appendChild(el('div', { style: 'font-size:28px;padding:12px 0' }, ['ð']));
+          thumb.appendChild(el('div', { style: 'font-size:28px;padding:12px 0' }, ['📄']));
         }
         thumb.appendChild(el('div', { style: 'font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 4px' }, [f.name]));
         previewGrid.appendChild(thumb);
@@ -110,7 +110,7 @@
     }
 
     const container = el('div', { style: 'margin-top:12px' }, [
-      el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-2)' }, ['ð Ø§ÙÙØ³ØªÙØ¯Ø§Øª ÙØ§ÙØµÙØ±']),
+      el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-2)' }, ['📎 المستندات والصور']),
       dropArea,
       countLabel,
       previewGrid,
@@ -131,41 +131,41 @@
     });
   }
 
-  // ââââââ Ø§ÙØµÙØ­Ø© Ø§ÙØ±Ø¦ÙØ³ÙØ©: ÙØ§Ø¦ÙØ© Ø§ÙÙÙÙØ§Øª ââââââ
+  // ────── الصفحة الرئيسية: قائمة الملفات ──────
   App.route('/legal-files', async () => {
     const user = App.state.user;
     const container = el('div');
 
-    let currentSection = null; // null = Ø§ÙÙÙ
+    let currentSection = null; // null = الكل
     let currentStatus = 'ACTIVE';
     let searchQ = '';
     let page = 1;
 
-    // ââ Ø§ÙØ¥Ø­ØµØ§Ø¦ÙØ§Øª  ââ
+    // ── الإحصائيات ──
     const statsRow = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px' });
 
-    // ââ Ø§ÙØªØ¨ÙÙØ¨Ø§Øª ââ
+    // ── التبويبات ──
     const tabsRow = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px' });
 
-    // ââ Ø§ÙØ¨Ø­Ø« ââ
+    // ── البحث ──
     const searchInput = el('input', {
-      type: 'text', placeholder: 'Ø§Ø¨Ø­Ø« Ø¨Ø±ÙÙ Ø§ÙÙÙÙ Ø£Ù Ø§Ø³Ù Ø§ÙØ¹ÙÙÙ Ø£Ù Ø§ÙÙØ§ØªÙà¦',
+      type: 'text', placeholder: 'ابحث برقم الملف أو اسم العميل أو الهاتف…',
       style: 'width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)',
       onkeydown: (e) => { if (e.key === 'Enter') { searchQ = e.target.value.trim(); page = 1; loadFiles(); } },
     });
 
-    // ââ Ø·ÙØ¨Ø§Øª Ø§ÙÙÙÙ Ø§ÙÙØ§Ø±Ø¯Ø© ââ
+    // ── طلبات النقل الواردة ──
     const transfersSection = el('div');
 
-    // ââ ÙØ§Ø¦ÙØ© Ø§ÙÙÙÙØ§Øª ââ
+    // ── قائمة الملفات ──
     const filesList = el('div');
     const pagination = el('div', { style: 'display:flex;justify-content:center;gap:8px;margin-top:16px' });
 
     container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['âï¸ Ø§ÙÙÙÙØ§Øª Ø§ÙÙØ§ÙÙÙÙØ©']),
+      el('div', { class: 'page-title' }, ['⚖️ الملفات القانونية']),
       el('div', { class: 'page-actions', style: 'display:flex;gap:8px' }, [
-        el('button', { class: 'btn btn-outline', onclick: () => loadAll() }, ['ð ØªØ­Ø¯ÙØ«']),
-        el('button', { class: 'btn btn-primary', onclick: () => showCreateForm() }, ['â ÙÙÙ Ø¬Ø¯ÙØ¯']),
+        el('button', { class: 'btn btn-outline', onclick: () => loadAll() }, ['🔄 تحديث']),
+        el('button', { class: 'btn btn-primary', onclick: () => showCreateForm() }, ['➕ ملف جديد']),
       ]),
     ]));
     container.appendChild(statsRow);
@@ -180,11 +180,11 @@
         const r = await api('/legal-files/stats/summary');
         statsRow.innerHTML = '';
         const cards = [
-          ['ð HR', r.hrFiles, '#3498db'],
-          ['âï¸ ÙØ§ÙÙÙÙØ©', r.legalFiles, '#8e44ad'],
-          ['ðï¸ Ø£Ø±Ø´ÙÙ', r.archivedFiles, '#95a5a6'],
-          ['ð© Ø·ÙØ¨Ø§Øª ÙØ§Ø±Ø¯Ø©', r.pendingIncoming, '#e67e22'],
-          ['ð¤ Ø·ÙØ¨Ø§Øª ØµØ§Ø¯Ø±Ø©', r.pendingOutgoing, '#27ae60'],
+          ['📂 HR', r.hrFiles, '#3498db'],
+          ['⚖️ قانونية', r.legalFiles, '#8e44ad'],
+          ['🗄️ أرشيف', r.archivedFiles, '#95a5a6'],
+          ['📩 طلبات واردة', r.pendingIncoming, '#e67e22'],
+          ['📤 طلبات صادرة', r.pendingOutgoing, '#27ae60'],
         ];
         for (const [label, count, color] of cards) {
           statsRow.appendChild(el('div', {
@@ -192,7 +192,7 @@
           }, [
             el('div', { style: 'font-size:28px;font-weight:800;color:' + color }, [String(count)]),
             el('div', { style: 'font-size:13px;color:var(--text-2);margin-top:4px' }, [label]),
-         ]));
+          ]));
         }
       } catch (e) { console.error(e); }
     }
@@ -200,9 +200,9 @@
     function renderTabs() {
       tabsRow.innerHTML = '';
       const tabs = [
-        [null, 'Ø§ÙÙÙ'],
-        ['HR', 'ð ÙÙÙØ§Øª HR'],
-        ['LEGAL', 'âï¸ ÙÙÙØ§Øª Ø§ÙÙØ§ÙÙÙÙØ©'],
+        [null, 'الكل'],
+        ['HR', '📂 ملفات HR'],
+        ['LEGAL', '⚖️ ملفات القانونية'],
       ];
       for (const [sec, label] of tabs) {
         tabsRow.appendChild(el('button', {
@@ -211,7 +211,7 @@
           onclick: () => { currentSection = sec; page = 1; loadFiles(); renderTabs(); },
         }, [label]));
       }
-      // Ø£Ø±Ø´ÙÙ
+      // أرشيف
       tabsRow.appendChild(el('button', {
         class: 'btn ' + (currentStatus === 'ARCHIVED' ? 'btn-primary' : 'btn-outline'),
         style: 'font-size:13px',
@@ -219,7 +219,7 @@
           currentStatus = currentStatus === 'ARCHIVED' ? 'ACTIVE' : 'ARCHIVED';
           page = 1; loadFiles(); renderTabs();
         },
-      }, ['ðï¸ Ø§ÙØ£Ø±Ø´ÙÙ']));
+      }, ['🗄️ الأرشيف']));
     }
 
     async function loadTransfers() {
@@ -227,21 +227,21 @@
         const r = await api('/legal-files/transfers/pending');
         transfersSection.innerHTML = '';
         if (!r.transfers || r.transfers.length === 0) return;
-        const heading = el('div', { style: 'font-weight:700;font-size:15px;margin-bottom:8px;color:var(--warning)' }, ['ð© Ø·ÙØ¨Ø§Øª ÙÙÙ ÙØ§Ø±Ø¯Ø© (' + r.transfers.length + ')']);
+        const heading = el('div', { style: 'font-weight:700;font-size:15px;margin-bottom:8px;color:var(--warning)' }, ['📩 طلبات نقل واردة (' + r.transfers.length + ')']);
         transfersSection.appendChild(heading);
         for (const t of r.transfers) {
           const card = el('div', {
             style: 'background:var(--surface);border:1px solid var(--warning);border-radius:10px;padding:12px 16px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px',
           }, [
             el('div', {}, [
-              el('span', { style: 'font-weight:700' }, ['ÙÙÙ #' + t.file_number]),
-              ' â ', t.customer_name,
-              el('span', { style: 'color:var(--text-2);font-size:12px;margin-right:8px' }, [' ÙÙ ' + t.from_section + ' â ' + t.to_section]),
-              t.note ? el('div', { style: 'font-size:12px;color:var(--text-2)' }, ['ð¬ ' + t.note]) : null,
+              el('span', { style: 'font-weight:700' }, ['ملف #' + t.file_number]),
+              ' — ', t.customer_name,
+              el('span', { style: 'color:var(--text-2);font-size:12px;margin-right:8px' }, [' من ' + t.from_section + ' → ' + t.to_section]),
+              t.note ? el('div', { style: 'font-size:12px;color:var(--text-2)' }, ['💬 ' + t.note]) : null,
             ]),
             el('div', { style: 'display:flex;gap:6px' }, [
-              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('â ØªÙØª Ø§ÙÙÙØ§ÙÙØ©'); loadAll(); } }, ['â ÙÙØ§ÙÙØ©']),
-              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('â ØªÙ Ø§ÙØ±ÙØ¶'); loadAll(); } }, ['â Ø±ÙØ¶']),
+              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('✅ تمت الموافقة'); loadAll(); } }, ['✅ موافقة']),
+              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('❌ تم الرفض'); loadAll(); } }, ['❌ رفض']),
             ]),
           ]);
           transfersSection.appendChild(card);
@@ -257,16 +257,16 @@
         const r = await api(url);
         filesList.innerHTML = '';
         if (!r.files || r.files.length === 0) {
-          filesList.appendChild(el('div', { style: 'text-align:center;padding:40px;color:var(--text-2)' }, ['ÙØ§ ØªÙØ¬Ø¯ ÙÙÙØ§Øª']));
+          filesList.appendChild(el('div', { style: 'text-align:center;padding:40px;color:var(--text-2)' }, ['لا توجد ملفات']));
           pagination.innerHTML = '';
           return;
         }
         for (const f of r.files) {
           const sectionBadge = f.current_section === 'LEGAL'
-            ? el('span', { style: 'background:#8e44ad;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px' }, ['âï¸ ÙØ§ÙÙÙÙØ©'])
-            : el('span', { style: 'background:#3498db;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px' }, ['ð HR']);
+            ? el('span', { style: 'background:#8e44ad;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px' }, ['⚖️ قانونية'])
+            : el('span', { style: 'background:#3498db;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px' }, ['📂 HR']);
           const statusBadge = f.status === 'ARCHIVED'
-            ? el('span', { style: 'background:#95a5a6;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;margin-right:4px' }, ['ðï¸ Ø£Ø±Ø´ÙÙ'])
+            ? el('span', { style: 'background:#95a5a6;color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;margin-right:4px' }, ['🗄️ أرشيف'])
             : null;
           const card = el('div', {
             style: 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s',
@@ -283,10 +283,10 @@
               el('span', { style: 'font-size:12px;color:var(--text-2)' }, [fmtDate(f.created_at)]),
             ]),
             el('div', { style: 'margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px;font-size:13px' }, [
-              el('div', {}, ['ð¤ ', el('strong', {}, [f.customer_name])]),
-              el('div', {}, ['ð± ', f.customer_phone]),
-              f.guarantor_name ? el('div', {}, ['ð¤ ', f.guarantor_name]) : null,
-              f.sales_name ? el('div', {}, ['ð·ï¸ ', f.sales_name]) : null,
+              el('div', {}, ['👤 ', el('strong', {}, [f.customer_name])]),
+              el('div', {}, ['📱 ', f.customer_phone]),
+              f.guarantor_name ? el('div', {}, ['🤝 ', f.guarantor_name]) : null,
+              f.sales_name ? el('div', {}, ['🏷️ ', f.sales_name]) : null,
             ]),
           ]);
           filesList.appendChild(card);
@@ -303,13 +303,13 @@
         }
       } catch (e) {
         filesList.innerHTML = '';
-        filesList.appendChild(el('div', { style: 'color:var(--danger);padding:20px' }, ['â Ø®Ø·Ø£ ÙÙ ØªØ­ÙÙÙ Ø§ÙÙÙÙØ§Øª']));
+        filesList.appendChild(el('div', { style: 'color:var(--danger);padding:20px' }, ['❌ خطأ في تحميل الملفات']));
       }
     }
 
     function loadAll() { loadStats(); loadTransfers(); loadFiles(); renderTabs(); }
 
-    // ââââââ ÙÙÙØ°Ø¬ Ø¥ÙØ´Ø§Ø¡ ÙÙÙ Ø¬Ø¯ÙØ¯ ââââââ
+    // ────── نموذج إنشاء ملف جديد ──────
     function showCreateForm() {
       const overlay = el('div', {
         style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px',
@@ -317,13 +317,13 @@
       });
       const fields = {};
       const fieldDefs = [
-        ['fileNumber', 'Ø±ÙÙ Ø§ÙÙÙÙ *', 'text'],
-        ['customerName', 'Ø§Ø³Ù Ø§ÙØ¹ÙÙÙ *', 'text'],
-        ['customerPhone', 'Ø±ÙÙ ÙØ§ØªÙ Ø§ÙØ¹ÙÙÙ *', 'tel'],
-        ['guarantorName', 'Ø§Ø³Ù Ø§ÙØ¶Ø§ÙÙ', 'text'],
-        ['guarantorPhone', 'Ø±ÙÙ ÙØ§ØªÙ Ø§ÙØ¶Ø§ÙÙ', 'tel'],
-        ['salesName', 'Ø§Ø³Ù Ø§ÙØ³ÙÙØ²', 'text'],
-        ['notes', 'ÙÙØ§Ø­Ø¸Ø§Øª', 'text'],
+        ['fileNumber', 'رقم الملف *', 'text'],
+        ['customerName', 'اسم العميل *', 'text'],
+        ['customerPhone', 'رقم هاتف العميل *', 'tel'],
+        ['guarantorName', 'اسم الضامن', 'text'],
+        ['guarantorPhone', 'رقم هاتف الضامن', 'tel'],
+        ['salesName', 'اسم السيلز', 'text'],
+        ['notes', 'ملاحظات', 'text'],
       ];
       const formFields = fieldDefs.map(([key, label, type]) => {
         const input = el('input', { type, placeholder: label, style: 'width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)' });
@@ -334,7 +334,7 @@
         ]);
       });
 
-      // ÙÙØ·ÙØ© Ø±ÙØ¹ Ø§ÙÙÙÙØ§Øª
+      // منطقة رفع الملفات
       const dropZone = createDropZone(20);
 
       const errMsg = el('div', { style: 'color:var(--danger);font-size:13px;margin-top:8px;display:none' });
@@ -342,7 +342,7 @@
       const form = el('div', {
         style: 'background:var(--surface);border-radius:16px;padding:24px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto',
       }, [
-        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['â ÙÙÙ Ø¬Ø¯ÙØ¯'']),
+        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['➕ ملف جديد']),
         ...formFields,
         dropZone.container,
         errMsg,
@@ -352,7 +352,7 @@
             const data = {};
             for (const [key] of fieldDefs) data[key] = fields[key].value.trim();
             if (!data.fileNumber || !data.customerName || !data.customerPhone) {
-              errMsg.textContent = 'Ø±ÙÙ Ø§ÙÙÙÙ ÙØ§Ø³Ù Ø§ÙØ¹ÙÙÙ ÙØ±ÙÙ Ø§ÙÙØ§ØªÙ ÙØ·ÙÙØ¨ÙÙ';
+              errMsg.textContent = 'رقم الملف واسم العميل ورقم الهاتف مطلوبين';
               errMsg.style.display = 'block';
               return;
             }
@@ -360,87 +360,145 @@
               errMsg.style.display = 'none';
               const r = await api('/legal-files', { method: 'POST', body: JSON.stringify(data) });
               const fileId = r.id;
-              //
-
-}M]=­mý}¢
-}M]-¢6öç7BVæFætfÆW2ÒG&÷¦öæRævWDfÆW2°¢bVæFætfÆW2æÆVæwFâ°¢&öw&W74FbæææW$DÔÂÒrs°¢ÆWB7V66W72Ò°¢f÷"ÆWBÒ²ÂVæFætfÆW2æÆVæwF²²²°¢6öç7BfÆRÒVæFætfÆW5¶Ó°¢6öç7B&örÒVÂvFbrÂ²7GÆS¢vföçB×6¦S£'·FFæs£7rÒÂ²~(û2
-r²fÆRææÖR²~(
-buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢G'°¢6öç7B&6ScBÒvBfÆUFô&6ScBfÆR°¢vBröÆVvÂÖfÆW2òr²fÆTB²röFö7VÖVçG2rÂ°¢ÖWFöC¢uõ5BrÀ¢&öG¢¥4ôâç7G&ævg²fÆVæÖS¢fÆRææÖRÂ6öçFVçEGS¢fÆRçGRÂFF¢&6ScBÒÀ¢Ò°¢&örçFWD6öçFVçBÒ~)ÈRr²fÆRææÖS°¢&örç7GÆRæ6öÆ÷"Òwf"Ò×7V66W72s°¢7V66W72²³°¢Ò6F6R°¢&örçFWD6öçFVçBÒ~)ØÂr²fÆRææÖR²r(	Br²RæÖW76vRÇÂ}í}2r°¢&örç7GÆRæ6öÆ÷"Òwf"ÒÖFævW"s°¢Ð¢Ð¢Fö7B~)ÈR
-­R
-]mM}
-}M]M2r²"æfÆTçVÖ&W"²r
-]r²7V66W72²r
-]=­mòr°¢ÒVÇ6R°¢Fö7B~)ÈR
-­R
-]mM}
-}M]M2r²"æfÆTçVÖ&W"°¢Ð¢6WEFÖV÷WBÓâ²÷fW&Æç&VÖ÷fR²ÆöDÆÂ²ÒÂS°¢Ò6F6R°¢W'$×6rçFWD6öçFVçBÒRæÖW76vRÇÂ}í}2
-¢
-]mM}
-}M]Ms°¢W'$×6rç7GÆRæF7ÆÒv&Æö6²s°¢Ð¢×ÒÂ²	ù+â
-ÝuÒÀ¢VÂv'WGFöârÂ²6Æ73¢v'Fâ'FâÖ÷WFÆæRrÂöæ6Æ6³¢Óâ÷fW&Æç&VÖ÷fRÒÂ²}]M­}uÒÀ¢ÒÀ¢Ò°¢÷fW&ÆæVæD6ÆBf÷&Ò°¢Fö7VÖVçBæ&öGæVæD6ÆB÷fW&Æ°¢fVÆG2æfÆTçVÖ&W"æfö7W2°¢Ð ¢ÆöDÆÂ°¢&WGW&â6öçFæW#°¢Ò° ¢òò)H)H)H)H)H)H
-]Ý
-­}]­B
-}M]M)H)H)H)H)H)H ¢ç&÷WFRröÆVvÂÖfÆW2ó¦BrÂ7æ2²BÒÓâ°¢6öç7BW6W"Òç7FFRçW6W#°¢6öç7B6öçFæW"ÒVÂvFbr°¢ÆWBfÆTFFÒçVÆÃ°¢ÆWBFö72ÒµÓ° ¢7æ2gVæ7FöâÆöB°¢G'°¢6öç7B"ÒvBröÆVvÂÖfÆW2òr²B°¢fÆTFFÒ"æfÆS°¢Fö72Ò"æFö7VÖVçG2ÇÂµÓ°¢&VæFW"°¢Ò6F6R°¢6öçFæW"æææW$DÔÂÒrs°¢6öçFæW"æVæD6ÆBVÂvFbrÂ²7GÆS¢v6öÆ÷#§f"ÒÖFævW"·FFæs£C·FWBÖÆvã¦6VçFW"rÒÂ²~)ØÂr²RæÖW76vRÇÂ}í}2rÒ°¢Ð¢Ð ¢gVæ7Föâ&VæFW"°¢6öçFæW"æææW$DÔÂÒrs°¢bfÆTFF&WGW&ã°¢6öç7BbÒfÆTFF° ¢òò
-}Mm}`¢6öçFæW"æVæD6ÆBVÂvFbrÂ²6Æ73¢wvRÖVFW"rÒÂ°¢VÂvFbrÂ²7GÆS¢vF7Æ¦fÆW¶ÆvâÖFV×3¦6VçFW#¶v£'rÒÂ°¢VÂv'WGFöârÂ²6Æ73¢v'Fâ'FâÖ÷WFÆæR'Fâ×6ÒrÂöæ6Æ6³¢ÓâææfvFRr2öÆVvÂÖfÆW2rÒÂ²~(i"
-ÍuÒÀ¢VÂvFbrÂ²6Æ73¢wvR×FFÆRrÒÂ²}]M2r²bæfÆUöçVÖ&W%ÒÀ¢bæ7W'&VçE÷6V7FöâÓÓÒtÄTtÂp¢òVÂw7ârÂ²7GÆS¢v&6¶w&÷VæC¢3SCFC¶6öÆ÷#¢6ffc·FFæs£7¶&÷&FW"×&FW3£¶föçB×6¦S£'rÒÂ²~)©nûò
--}mm­uÒ¢¢VÂw7ârÂ²7GÆS¢v&6¶w&÷VæC¢33CF#¶6öÆ÷#¢6ffc·FFæs£7¶&÷&FW"×&FW3£¶föçB×6¦S£'rÒÂ²	ù8""uÒÀ¢bç7FGW2ÓÓÒt$4dTBp¢òVÂw7ârÂ²7GÆS¢v&6¶w&÷VæC¢3VVc¶6öÆ÷#¢6ffc·FFæs£7¶&÷&FW"×&FW3£¶föçB×6¦S£'rÒÂ²	ùxNûò
-=M­uÒ¢¢çVÆÂÀ¢ÒÀ¢Ò° ¢òò
-=-}
-}M]Í}} ¢6öç7B7Föç2ÒVÂvFbrÂ²7GÆS¢vF7Æ¦fÆW¶v£¶fÆW×w&§w&¶Ö&vâÖ&÷GFöÓ£#rÒ°¢bbç7FGW2ÓÓÒt5DdRr°¢7Föç2æVæD6ÆBVÂv'WGFöârÂ²6Æ73¢v'Fâ'FâÖ÷WFÆæR'Fâ×6ÒrÂöæ6Æ6³¢Óâ6÷tVFDf÷&ÒÒÂ²~)Èþûò
-­ý­B
-}M­}m}¢uÒ°¢7Föç2æVæD6ÆBVÂv'WGFöârÂ²6Æ73¢v'Fâ'FâÖ÷WFÆæR'Fâ×6ÒrÂöæ6Æ6³¢Óâ6÷uWÆöDf÷&ÒÒÂ²	ù8â
-
-]=­mòruÒ° ¢6öç7BF&vWE6V7FöâÒbæ7W'&VçE÷6V7FöâÓÓÒt"ròtÄTtÂr¢t"s°¢7Föç2æVæD6ÆBVÂv'WGFöârÂ²6Æ73¢v'Fâ'FâÖ÷WFÆæR'Fâ×6ÒrÂ7GÆS¢v&÷&FW"Ö6öÆ÷#¢3SCFC¶6öÆ÷#¢3SCFBrÂöæ6Æ6³¢7æ2Óâ°¢b6öæf&Ò}m-B
-}M]M
-]M
--=Rr²F&vWE6V7FöâÓÓÒtÄTtÂrò}}MMmb
-}M-}mm­r¢t"r²sòr&WGW&ã°¢vBröÆVvÂÖfÆW2òr²B²röÐove', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
-          toast('â ØªÙ Ø§ÙÙÙÙ');
+              // رفع المستندات المرفقة
+              const pendingFiles = dropZone.getFiles();
+              if (pendingFiles.length > 0) {
+                progressDiv.innerHTML = '';
+                let success = 0;
+                for (let i = 0; i < pendingFiles.length; i++) {
+                  const file = pendingFiles[i];
+                  const prog = el('div', { style: 'font-size:12px;padding:3px 0' }, ['⏳ رفع ' + file.name + '…']);
+                  progressDiv.appendChild(prog);
+                  try {
+                    const base64 = await fileToBase64(file);
+                    await api('/legal-files/' + fileId + '/documents', {
+                      method: 'POST',
+                      body: JSON.stringify({ filename: file.name, contentType: file.type, data: base64 }),
+                    });
+                    prog.textContent = '✅ ' + file.name;
+                    prog.style.color = 'var(--success)';
+                    success++;
+                  } catch (e) {
+                    prog.textContent = '❌ ' + file.name + ' — ' + (e.message || 'خطأ');
+                    prog.style.color = 'var(--danger)';
+                  }
+                }
+                toast('✅ تم إنشاء الملف #' + r.fileNumber + ' مع ' + success + ' مستند');
+              } else {
+                toast('✅ تم إنشاء الملف #' + r.fileNumber);
+              }
+              setTimeout(() => { overlay.remove(); loadAll(); }, 500);
+            } catch (e) {
+              errMsg.textContent = e.message || 'خطأ في إنشاء الملف';
+              errMsg.style.display = 'block';
+            }
+          }}, ['💾 حفظ']),
+          el('button', { class: 'btn btn-outline', onclick: () => overlay.remove() }, ['إلغاء']),
+        ]),
+      ]);
+      overlay.appendChild(form);
+      document.body.appendChild(overlay);
+      fields.fileNumber.focus();
+    }
+
+    loadAll();
+    return container;
+  });
+
+  // ────── صفحة تفاصيل الملف ──────
+  App.route('/legal-files/:id', async ({ id }) => {
+    const user = App.state.user;
+    const container = el('div');
+    let fileData = null;
+    let docs = [];
+
+    async function load() {
+      try {
+        const r = await api('/legal-files/' + id);
+        fileData = r.file;
+        docs = r.documents || [];
+        render();
+      } catch (e) {
+        container.innerHTML = '';
+        container.appendChild(el('div', { style: 'color:var(--danger);padding:40px;text-align:center' }, ['❌ ' + (e.message || 'خطأ')]));
+      }
+    }
+
+    function render() {
+      container.innerHTML = '';
+      if (!fileData) return;
+      const f = fileData;
+
+      // العنوان
+      container.appendChild(el('div', { class: 'page-header' }, [
+        el('div', { style: 'display:flex;align-items:center;gap:12px' }, [
+          el('button', { class: 'btn btn-outline btn-sm', onclick: () => App.navigate('#/legal-files') }, ['→ رجوع']),
+          el('div', { class: 'page-title' }, ['ملف #' + f.file_number]),
+          f.current_section === 'LEGAL'
+            ? el('span', { style: 'background:#8e44ad;color:#fff;padding:3px 10px;border-radius:8px;font-size:12px' }, ['⚖️ قانونية'])
+            : el('span', { style: 'background:#3498db;color:#fff;padding:3px 10px;border-radius:8px;font-size:12px' }, ['📂 HR']),
+          f.status === 'ARCHIVED'
+            ? el('span', { style: 'background:#95a5a6;color:#fff;padding:3px 10px;border-radius:8px;font-size:12px' }, ['🗄️ أرشيف'])
+            : null,
+        ]),
+      ]));
+
+      // أزرار الإجراءات
+      const actions = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px' });
+      if (f.status === 'ACTIVE') {
+        actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', onclick: () => showEditForm() }, ['✏️ تعديل البيانات']));
+        actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', onclick: () => showUploadForm() }, ['📎 رفع مستند']));
+
+        const targetSection = f.current_section === 'HR' ? 'LEGAL' : 'HR';
+        actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:#8e44ad;color:#8e44ad', onclick: async () => {
+          if (!confirm('نقل الملف إلى قسم ' + (targetSection === 'LEGAL' ? 'الشئون القانونية' : 'HR') + '?')) return;
+          await api('/legal-files/' + id + '/move', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
+          toast('✅ تم النقل');
           load();
-        }}, ['ð ÙÙÙ Ø¥ÙÙ ' + (targetSection === 'LEGAL' ? 'Ø§ÙÙØ§ÙÙÙÙØ©' : 'HR')]));
+        }}, ['🔀 نقل إلى ' + (targetSection === 'LEGAL' ? 'القانونية' : 'HR')]));
 
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:#e67e22;color:#e67e22', onclick: async () => {
-          const note = prompt('Ø³Ø¨Ø¨ Ø·ÙØ¨ Ø§ÙÙÙÙ (Ø§Ø®ØªÙØ§Ø±Ù):');
+          const note = prompt('سبب طلب النقل (اختياري):');
           if (note === null) return;
           try {
             await api('/legal-files/' + id + '/transfer-request', { method: 'POST', body: JSON.stringify({ note: note || '' }) });
-            toast('â ØªÙ Ø¥Ø±Ø³Ø§Ù Ø·ÙØ¨ Ø§ÙÙÙÙ');
-          } catch (e) { toast('â ' + (e.message || 'Ø®Ø·Ø£')); }
-        }}, ['ð© Ø·ÙØ¨ ÙÙÙ']));
+            toast('✅ تم إرسال طلب النقل');
+          } catch (e) { toast('❌ ' + (e.message || 'خطأ')); }
+        }}, ['📩 طلب نقل']));
 
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:var(--danger);color:var(--danger)', onclick: async () => {
-          if (!confirm('Ø£Ø±Ø´ÙØ© Ø§ÙÙÙÙØ ÙÙ ÙØ¸ÙØ± ÙÙ Ø§ÙÙØ§Ø¦ÙØ© Ø§ÙØ±Ø¦ÙØ³ÙØ©.')) return;
+          if (!confirm('أرشفة الملف؟ لن يظهر في القائمة الرئيسية.')) return;
           await api('/legal-files/' + id + '/archive', { method: 'PATCH' });
-          toast('ðï¸ ØªÙ Ø§ÙØ£Ø±Ø´ÙØ©');
+          toast('🗄️ تم الأرشفة');
           load();
-        }}, ['ðï¸ Ø£Ø±Ø´ÙØ©']));
+        }}, ['🗄️ أرشفة']));
       } else {
         actions.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
           await api('/legal-files/' + id + '/restore', { method: 'PATCH' });
-          toast('â ØªÙØª Ø§ÙØ§Ø³ØªØ¹Ø§Ø¯Ø©');
+          toast('✅ تمت الاستعادة');
           load();
-        }}, ['â»ï¸ Ø§Ø³ØªØ¹Ø§Ø¯Ø© ÙÙ Ø§ÙØ£Ø±Ø´ÙÙ']));
+        }}, ['♻️ استعادة من الأرشيف']));
       }
       container.appendChild(actions);
 
-      // Ø¨ÙØ§ÙØ§Øª Ø§ÙÙÙÙ
+      // بيانات الملف
       const infoGrid = el('div', {
         style: 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px',
       }, [
-        infoItem('ð¤ Ø§Ø³Ù Ø§ÙØ¹ÙÙÙ', f.customer_name),
-        infoItem('ð± ÙØ§ØªÙ Ø§ÙØ¹ÙÙÙ', f.customer_phone),
-        infoItem('ð¤ Ø§Ø³Ù Ø§ÙØ¶Ø§ÙÙ', f.guarantor_name || 'â'),
-        infoItem('ð± ÙØ§ØªÙ Ø§ÙØ¶Ø§ÙÙ', f.guarantor_phone || 'â'),
-        infoItem('ð·ï¸ Ø§Ø³Ù Ø§ÙØ³ÙÙØ²', f.sales_name || 'â'),
-        infoItem('ð ØªØ§Ø±ÙØ® Ø§ÙØ¥ÙØ´Ø§Ø¡', fmtDate(f.created_at)),
-        f.notes ? infoItem('ð ÙÙØ§Ø­Ø¸Ø§Øª', f.notes) : null,
+        infoItem('👤 اسم العميل', f.customer_name),
+        infoItem('📱 هاتف العميل', f.customer_phone),
+        infoItem('🤝 اسم الضامن', f.guarantor_name || '—'),
+        infoItem('📱 هاتف الضامن', f.guarantor_phone || '—'),
+        infoItem('🏷️ اسم السيلز', f.sales_name || '—'),
+        infoItem('📅 تاريخ الإنشاء', fmtDate(f.created_at)),
+        f.notes ? infoItem('📝 ملاحظات', f.notes) : null,
       ]);
       container.appendChild(infoGrid);
 
-      // Ø§ÙÙØ³ØªÙØ¯Ø§Øª
-      container.appendChild(el('div', { style: 'font-size:16px;font-weight:700;margin-bottom:10px' }, ['ð Ø§ÙÙØ³ØªÙØ¯Ø§Øª (' + docs.length + '/20)']));
+      // المستندات
+      container.appendChild(el('div', { style: 'font-size:16px;font-weight:700;margin-bottom:10px' }, ['📎 المستندات (' + docs.length + '/20)']));
       if (docs.length === 0) {
-        container.appendChild(el('div', { style: 'color:var(--text-2);padding:20px;text-align:center;background:var(--surface);border-radius:10px;border:1px dashed var(--border)' }, ['ÙØ§ ØªÙØ¬Ø¯ ÙØ³ØªÙØ¯Ø§Øª ÙØ±ÙÙØ©']));
+        container.appendChild(el('div', { style: 'color:var(--text-2);padding:20px;text-align:center;background:var(--surface);border-radius:10px;border:1px dashed var(--border)' }, ['لا توجد مستندات مرفقة']));
       } else {
         const docsGrid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:20px' });
         for (const doc of docs) {
@@ -448,7 +506,7 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
           const card = el('div', {
             style: 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center;position:relative',
           }, [
-            el('div', { style: 'font-size:32px;margin-bottom:6px' }, [isImg ? 'ð¼ï¸' : 'ð']),
+            el('div', { style: 'font-size:32px;margin-bottom:6px' }, [isImg ? '🖼️' : '📄']),
             el('div', { style: 'font-size:12px;font-weight:600;word-break:break-all' }, [doc.filename]),
             el('div', { style: 'font-size:11px;color:var(--text-2)' }, [fmtSize(doc.file_size)]),
             el('div', { style: 'display:flex;gap:4px;justify-content:center;margin-top:8px' }, [
@@ -457,22 +515,22 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
                 try {
                   const r = await api('/legal-files/' + id + '/documents/' + doc.id);
                   const d = r.document;
-                  // ÙØªØ­ ÙÙ ØªØ¨ÙÙØ¨ Ø¬Ø¯ÙØ¯
+                  // فتح في تبويب جديد
                   const w = window.open('', '_blank');
                   if (isImg) {
                     w.document.write('<html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111"><img src="data:' + d.content_type + ';base64,' + d.data + '" style="max-width:100%;max-height:100vh" /></body></html>');
                   } else {
                     w.document.write('<html><body style="margin:0"><embed src="data:' + d.content_type + ';base64,' + d.data + '" type="' + d.content_type + '" width="100%" height="100%" style="position:fixed;inset:0" /></body></html>');
                   }
-                } catch (e) { toast('â Ø®Ø·Ø£ ÙÙ ØªØ­ÙÙÙ Ø§ÙÙØ³ØªÙØ¯'); }
-              }}, ['ðï¸ Ø¹Ø±Ø¶']),
+                } catch (e) { toast('❌ خطأ في تحميل المستند'); }
+              }}, ['👁️ عرض']),
               f.status === 'ACTIVE' ? el('button', { class: 'btn btn-outline btn-sm', style: 'font-size:11px;color:var(--danger);border-color:var(--danger)', onclick: async (e) => {
                 e.stopPropagation();
-                if (!confirm('Ø­Ø°Ù Ø§ÙÙØ³ØªÙØ¯ "' + doc.filename + '"?')) return;
+                if (!confirm('حذف المستند "' + doc.filename + '"?')) return;
                 await api('/legal-files/' + id + '/documents/' + doc.id, { method: 'DELETE' });
-                toast('ðï¸ ØªÙ Ø­Ø°Ù Ø§ÙÙØ³ØªÙØ¯');
+                toast('🗑️ تم حذف المستند');
                 load();
-              }}, ['ðï¸']) : null,
+              }}, ['🗑️']) : null,
             ]),
           ]);
           docsGrid.appendChild(card);
@@ -480,8 +538,8 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
         container.appendChild(docsGrid);
       }
 
-      // Ø§ÙØªØ§Ø±ÙØ®
-      container.appendChild(el('div', { style: 'font-size:16px;font-weight:700;margin:20px 0 10px' }, ['ð Ø³Ø¬Ù Ø§ÙØ­Ø±ÙØ§Øª']));
+      // التاريخ
+      container.appendChild(el('div', { style: 'font-size:16px;font-weight:700;margin:20px 0 10px' }, ['📜 سجل الحركات']));
       const historyBox = el('div', { style: 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;max-height:400px;overflow-y:auto' });
       container.appendChild(historyBox);
       loadHistory(historyBox);
@@ -490,7 +548,7 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
     function infoItem(label, value) {
       return el('div', {}, [
         el('div', { style: 'font-size:12px;color:var(--text-2);margin-bottom:2px' }, [label]),
-        el('div', { style: 'font-size:14px;font-weight:600' }, [value || 'â']),
+        el('div', { style: 'font-size:14px;font-weight:600' }, [value || '—']),
       ]);
     }
 
@@ -499,7 +557,7 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
         const r = await api('/legal-files/' + id + '/history');
         box.innerHTML = '';
         if (!r.history || r.history.length === 0) {
-          box.appendChild(el('div', { style: 'color:var(--text-2);text-align:center' }, ['ÙØ§ ÙÙØ¬Ø¯ Ø³Ø¬Ù']));
+          box.appendChild(el('div', { style: 'color:var(--text-2);text-align:center' }, ['لا يوجد سجل']));
           return;
         }
         for (const h of r.history) {
@@ -508,11 +566,11 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
             try {
               const d = JSON.parse(h.details);
               if (h.action === 'EDITED' && typeof d === 'object') {
-                details = Object.entries(d).map(([k, v]) => k + ': ' + (v.from || 'â') + ' â ' + (v.to || 'â')).join(' | ');
+                details = Object.entries(d).map(([k, v]) => k + ': ' + (v.from || '—') + ' → ' + (v.to || '—')).join(' | ');
               } else if (h.action === 'DOCUMENT_ADDED' || h.action === 'DOCUMENT_REMOVED') {
                 details = d.filename || '';
               } else if (d.from && d.to) {
-                details = d.from + ' â ' + d.to;
+                details = d.from + ' → ' + d.to;
               } else if (d.note) {
                 details = d.note;
               }
@@ -523,16 +581,16 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
           }, [
             el('div', {}, [
               el('span', { style: 'font-weight:700;font-size:13px' }, [ACTION_AR[h.action] || h.action]),
-              details ? el('span', { style: 'font-size:12px;color:var(--text-2);margin-right:8px' }, [' â ' + details]) : null,
-              el('div', { style: 'font-size:11px;color:var(--text-2)' }, [h.performer_name || 'ÙØ³ØªØ®Ø¯Ù #' + h.performed_by]),
+              details ? el('span', { style: 'font-size:12px;color:var(--text-2);margin-right:8px' }, [' — ' + details]) : null,
+              el('div', { style: 'font-size:11px;color:var(--text-2)' }, [h.performer_name || 'مستخدم #' + h.performed_by]),
             ]),
             el('span', { style: 'font-size:11px;color:var(--text-2);white-space:nowrap' }, [fmtDate(h.performed_at)]),
           ]));
         }
-      } catch (e) { box.innerHTML = '<div style="color:var(--danger)">Ø®Ø·Ø£ ÙÙ ØªØ­ÙÙÙ Ø§ÙØ³Ø¬Ù</div>'; }
+      } catch (e) { box.innerHTML = '<div style="color:var(--danger)">خطأ في تحميل السجل</div>'; }
     }
 
-    // ââââââ ÙÙÙØ°Ø¬ Ø§ÙØªØ¹Ø¯ÙÙ ââââââ
+    // ────── نموذج التعديل ──────
     function showEditForm() {
       const f = fileData;
       const overlay = el('div', {
@@ -541,13 +599,13 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
       });
       const fields = {};
       const fieldDefs = [
-        ['fileNumber', 'Ø±ÙÙ Ø§ÙÙÙÙ', f.file_number],
-        ['customerName', 'Ø§Ø³Ù Ø§ÙØ¹ÙÙÙ', f.customer_name],
-        ['customerPhone', 'Ø±ÙÙ ÙØ§ØªÙ Ø§ÙØ¹ÙÙÙ', f.customer_phone],
-        ['guarantorName', 'Ø§Ø³Ù Ø§ÙØ¶Ø§ÙÙ', f.guarantor_name || ''],
-        ['guarantorPhone', 'Ø±ÙÙ ÙØ§ØªÙ Ø§ÙØ¶Ø§ÙÙ', f.guarantor_phone || ''],
-        ['salesName', 'Ø§Ø³Ù Ø§ÙØ³ÙÙØ²', f.sales_name || ''],
-        ['notes', 'ÙÙØ§Ø­Ø¸Ø§Øª', f.notes || ''],
+        ['fileNumber', 'رقم الملف', f.file_number],
+        ['customerName', 'اسم العميل', f.customer_name],
+        ['customerPhone', 'رقم هاتف العميل', f.customer_phone],
+        ['guarantorName', 'اسم الضامن', f.guarantor_name || ''],
+        ['guarantorPhone', 'رقم هاتف الضامن', f.guarantor_phone || ''],
+        ['salesName', 'اسم السيلز', f.sales_name || ''],
+        ['notes', 'ملاحظات', f.notes || ''],
       ];
       const formFields = fieldDefs.map(([key, label, val]) => {
         const input = el('input', { type: 'text', value: val, placeholder: label, style: 'width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)' });
@@ -561,7 +619,7 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
       overlay.appendChild(el('div', {
         style: 'background:var(--surface);border-radius:16px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto',
       }, [
-        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['âï¸ ØªØ¹Ø¯ÙÙ Ø§ÙØ¨ÙØ§ÙØ§Øª']),
+        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['✏️ تعديل البيانات']),
         ...formFields,
         errMsg,
         el('div', { style: 'display:flex;gap:8px;margin-top:16px' }, [
@@ -570,21 +628,21 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
             for (const [key] of fieldDefs) data[key] = fields[key].value.trim();
             try {
               await api('/legal-files/' + id, { method: 'PUT', body: JSON.stringify(data) });
-              toast('â ØªÙ Ø§ÙØªØ¹Ø¯ÙÙ');
+              toast('✅ تم التعديل');
               overlay.remove();
               load();
             } catch (e) {
-              errMsg.textContent = e.message || 'Ø®Ø·Ø£';
+              errMsg.textContent = e.message || 'خطأ';
               errMsg.style.display = 'block';
             }
-          }}, ['ð¾ Ø­ÙØ¸']),
-          el('button', { class: 'btn btn-outline', onclick: () => overlay.remove() }, ['Ø¥ÙØºØ§Ø¡']),
+          }}, ['💾 حفظ']),
+          el('button', { class: 'btn btn-outline', onclick: () => overlay.remove() }, ['إلغاء']),
         ]),
       ]));
       document.body.appendChild(overlay);
     }
 
-    // ââââââ ÙÙÙØ°Ø¬ Ø±ÙØ¹ ÙØ³ØªÙØ¯ ââââââ
+    // ────── نموذج رفع مستند ──────
     function showUploadForm() {
       const remaining = 20 - docs.length;
       const overlay = el('div', {
@@ -598,20 +656,20 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
       overlay.appendChild(el('div', {
         style: 'background:var(--surface);border-radius:16px;padding:24px;max-width:540px;width:100%;max-height:90vh;overflow-y:auto',
       }, [
-        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:12px' }, ['ð Ø±ÙØ¹ ÙØ³ØªÙØ¯Ø§Øª']),
+        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:12px' }, ['📎 رفع مستندات']),
         dropZone.container,
         progressDiv,
         errMsg,
         el('div', { style: 'display:flex;gap:8px;margin-top:16px' }, [
           el('button', { class: 'btn btn-primary', onclick: async () => {
             const files = dropZone.getFiles();
-            if (files.length === 0) { errMsg.textContent = 'Ø§Ø®ØªØ± ÙÙÙØ§Øª ÙÙØ±ÙØ¹'; errMsg.style.display = 'block'; return; }
+            if (files.length === 0) { errMsg.textContent = 'اختر ملفات للرفع'; errMsg.style.display = 'block'; return; }
             progressDiv.innerHTML = '';
             errMsg.style.display = 'none';
             let success = 0;
             for (let i = 0; i < files.length; i++) {
               const file = files[i];
-              const prog = el('div', { style: 'font-size:12px;padding:3px 0' }, ['â³ Ø±ÙØ¹ ' + file.name + 'â¦']);
+              const prog = el('div', { style: 'font-size:12px;padding:3px 0' }, ['⏳ رفع ' + file.name + '…']);
               progressDiv.appendChild(prog);
               try {
                 const base64 = await fileToBase64(file);
@@ -619,20 +677,20 @@ buÒ°¢&öw&W74FbæVæD6ÆB&ör°¢
                   method: 'POST',
                   body: JSON.stringify({ filename: file.name, contentType: file.type, data: base64 }),
                 });
-                prog.textContent = 'â ' + file.name;
+                prog.textContent = '✅ ' + file.name;
                 prog.style.color = 'var(--success)';
                 success++;
               } catch (e) {
-                prog.textContent = 'â ' + file.name + ' â ' + (e.message || 'Ø®Ø·Ø£');
+                prog.textContent = '❌ ' + file.name + ' — ' + (e.message || 'خطأ');
                 prog.style.color = 'var(--danger)';
               }
             }
             if (success > 0) {
-              toast('â ØªÙ Ø±ÙØ¹ ' + success + ' ÙØ³ØªÙØ¯');
+              toast('✅ تم رفع ' + success + ' مستند');
               setTimeout(() => { overlay.remove(); load(); }, 800);
             }
-          }}, ['ð¤ Ø±ÙØ¹']),
-          el('button', { class: 'btn btn-outline', onclick: () => overlay.remove() }, ['Ø¥ÙØºØ§Ø¡']),
+          }}, ['📤 رفع']),
+          el('button', { class: 'btn btn-outline', onclick: () => overlay.remove() }, ['إلغاء']),
         ]),
       ]));
       document.body.appendChild(overlay);
