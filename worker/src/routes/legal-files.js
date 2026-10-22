@@ -346,9 +346,10 @@ legalFileRoutes.post('/:id/documents', async (c) => {
   if (!contentType) return jsonError(c, 400, 'ÙÙØ¹ Ø§ÙÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_CONTENT_TYPE');
   if (!data) return jsonError(c, 400, 'Ø¨ÙØ§ÙØ§Øª Ø§ÙÙÙÙ ÙØ·ÙÙØ¨Ø©', 'MISSING_DATA');
 
-  // ØªØ­ÙÙ ÙÙ ÙÙØ¹ Ø§ÙÙÙÙ
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
-  if (!allowedTypes.includes(contentType)) return jsonError(c, 400, 'ÙÙØ¹ Ø§ÙÙÙÙ ØºÙØ± ÙØ¯Ø¹ÙÙ â ØµÙØ± Ø£Ù PDF ÙÙØ·', 'INVALID_CONTENT_TYPE');
+  // Accept any image format + PDF
+  if (!contentType.startsWith('image/') && contentType !== 'application/pdf') {
+    return jsonError(c, 400, 'نوع الملف غير مدعوم — صور أو PDF فقط', 'INVALID_CONTENT_TYPE');
+  }
 
   // ØªØ­ÙÙ ÙÙ Ø§ÙØ­Ø¬Ù (base64 â 1.33x)
   const rawSize = Math.ceil((data.length * 3) / 4);
