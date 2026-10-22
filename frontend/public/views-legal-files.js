@@ -76,7 +76,7 @@
 
     async function loadStats() {
       try {
-        const r = await api('/api/legal-files/stats/summary');
+        const r = await api('/legal-files/stats/summary');
         statsRow.innerHTML = '';
         const cards = [
           ['📂 HR', r.hrFiles, '#3498db'],
@@ -123,7 +123,7 @@
 
     async function loadTransfers() {
       try {
-        const r = await api('/api/legal-files/transfers/pending');
+        const r = await api('/legal-files/transfers/pending');
         transfersSection.innerHTML = '';
         if (!r.transfers || r.transfers.length === 0) return;
         const heading = el('div', { style: 'font-weight:700;font-size:15px;margin-bottom:8px;color:var(--warning)' }, ['📩 طلبات نقل واردة (' + r.transfers.length + ')']);
@@ -139,8 +139,8 @@
               t.note ? el('div', { style: 'font-size:12px;color:var(--text-2)' }, ['💬 ' + t.note]) : null,
             ]),
             el('div', { style: 'display:flex;gap:6px' }, [
-              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { await api('/api/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('✅ تمت الموافقة'); loadAll(); } }, ['✅ موافقة']),
-              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { await api('/api/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('❌ تم الرفض'); loadAll(); } }, ['❌ رفض']),
+              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('✅ تمت الموافقة'); loadAll(); } }, ['✅ موافقة']),
+              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('❌ تم الرفض'); loadAll(); } }, ['❌ رفض']),
             ]),
           ]);
           transfersSection.appendChild(card);
@@ -150,7 +150,7 @@
 
     async function loadFiles() {
       try {
-        let url = '/api/legal-files?status=' + currentStatus + '&page=' + page + '&limit=30';
+        let url = '/legal-files?status=' + currentStatus + '&page=' + page + '&limit=30';
         if (currentSection) url += '&section=' + currentSection;
         if (searchQ) url += '&q=' + encodeURIComponent(searchQ);
         const r = await api(url);
@@ -249,7 +249,7 @@
               return;
             }
             try {
-              const r = await api('/api/legal-files', { method: 'POST', body: JSON.stringify(data) });
+              const r = await api('/legal-files', { method: 'POST', body: JSON.stringify(data) });
               toast('✅ تم إنشاء الملف #' + r.fileNumber);
               overlay.remove();
               loadAll();
@@ -279,7 +279,7 @@
 
     async function load() {
       try {
-        const r = await api('/api/legal-files/' + id);
+        const r = await api('/legal-files/' + id);
         fileData = r.file;
         docs = r.documents || [];
         render();
@@ -317,7 +317,7 @@
         const targetSection = f.current_section === 'HR' ? 'LEGAL' : 'HR';
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:#8e44ad;color:#8e44ad', onclick: async () => {
           if (!confirm('نقل الملف إلى قسم ' + (targetSection === 'LEGAL' ? 'الشئون القانونية' : 'HR') + '?')) return;
-          await api('/api/legal-files/' + id + '/move', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
+          await api('/legal-files/' + id + '/move', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
           toast('✅ تم النقل');
           load();
         }}, ['🔀 نقل إلى ' + (targetSection === 'LEGAL' ? 'القانونية' : 'HR')]));
@@ -326,20 +326,20 @@
           const note = prompt('سبب طلب النقل (اختياري):');
           if (note === null) return;
           try {
-            await api('/api/legal-files/' + id + '/transfer-request', { method: 'POST', body: JSON.stringify({ note: note || '' }) });
+            await api('/legal-files/' + id + '/transfer-request', { method: 'POST', body: JSON.stringify({ note: note || '' }) });
             toast('✅ تم إرسال طلب النقل');
           } catch (e) { toast('❌ ' + (e.message || 'خطأ')); }
         }}, ['📩 طلب نقل']));
 
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:var(--danger);color:var(--danger)', onclick: async () => {
           if (!confirm('أرشفة الملف؟ لن يظهر في القائمة الرئيسية.')) return;
-          await api('/api/legal-files/' + id + '/archive', { method: 'PATCH' });
+          await api('/legal-files/' + id + '/archive', { method: 'PATCH' });
           toast('🗄️ تم الأرشفة');
           load();
         }}, ['🗄️ أرشفة']));
       } else {
         actions.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
-          await api('/api/legal-files/' + id + '/restore', { method: 'PATCH' });
+          await api('/legal-files/' + id + '/restore', { method: 'PATCH' });
           toast('✅ تمت الاستعادة');
           load();
         }}, ['♻️ استعادة من الأرشيف']));
@@ -378,7 +378,7 @@
               el('button', { class: 'btn btn-outline btn-sm', style: 'font-size:11px', onclick: async (e) => {
                 e.stopPropagation();
                 try {
-                  const r = await api('/api/legal-files/' + id + '/documents/' + doc.id);
+                  const r = await api('/legal-files/' + id + '/documents/' + doc.id);
                   const d = r.document;
                   // فتح في تبويب جديد
                   const w = window.open('', '_blank');
@@ -392,7 +392,7 @@
               f.status === 'ACTIVE' ? el('button', { class: 'btn btn-outline btn-sm', style: 'font-size:11px;color:var(--danger);border-color:var(--danger)', onclick: async (e) => {
                 e.stopPropagation();
                 if (!confirm('حذف المستند "' + doc.filename + '"?')) return;
-                await api('/api/legal-files/' + id + '/documents/' + doc.id, { method: 'DELETE' });
+                await api('/legal-files/' + id + '/documents/' + doc.id, { method: 'DELETE' });
                 toast('🗑️ تم حذف المستند');
                 load();
               }}, ['🗑️']) : null,
@@ -419,7 +419,7 @@
 
     async function loadHistory(box) {
       try {
-        const r = await api('/api/legal-files/' + id + '/history');
+        const r = await api('/legal-files/' + id + '/history');
         box.innerHTML = '';
         if (!r.history || r.history.length === 0) {
           box.appendChild(el('div', { style: 'color:var(--text-2);text-align:center' }, ['لا يوجد سجل']));
@@ -492,7 +492,7 @@
             const data = {};
             for (const [key] of fieldDefs) data[key] = fields[key].value.trim();
             try {
-              await api('/api/legal-files/' + id, { method: 'PUT', body: JSON.stringify(data) });
+              await api('/legal-files/' + id, { method: 'PUT', body: JSON.stringify(data) });
               toast('✅ تم التعديل');
               overlay.remove();
               load();
@@ -542,7 +542,7 @@
               progressDiv.appendChild(prog);
               try {
                 const base64 = await fileToBase64(file);
-                await api('/api/legal-files/' + id + '/documents', {
+                await api('/legal-files/' + id + '/documents', {
                   method: 'POST',
                   body: JSON.stringify({ filename: file.name, contentType: file.type, data: base64 }),
                 });
