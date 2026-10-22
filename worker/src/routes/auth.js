@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { verifyPassword, hashPassword, randomSaltHex } from '../lib/passwords.js';
 import { createSession, setSessionCookie, clearSessionCookie, requireAuth } from '../lib/auth.js';
 import { logActivity, jsonError, nowIso, backgroundWrite } from '../lib/db.js';
-import { recordLogin, recordLogout } from '../lib/presehnce.js';
+import { recordLogin, recordLogout } from '../lib/presence.js';
 import { sessDelete, sessGet, sessPut } from '../lib/sessionStore.js';
 
 export const authRoutes = new Hono();
