@@ -5,12 +5,12 @@ import { logActivity, jsonError, nowIso } from '../lib/db.js';
 export const legalFileRoutes = new Hono();
 legalFileRoutes.use('*', requireAuth, requireLegalOrHR);
 
-// Ø§ÙØ­Ø¯ Ø§ÙØ£ÙØµÙ ÙØ¹Ø¯Ø¯ Ø§ÙÙØ³ØªÙØ¯Ø§Øª ÙÙÙ ÙÙÙ
+// الحد الأقصى لعدد المستندات لكل ملف
 const MAX_DOCS_PER_FILE = 20;
-// Ø§ÙØ­Ø¯ Ø§ÙØ£ÙØµÙ ÙØ­Ø¬Ù Ø§ÙÙØ³ØªÙØ¯ Ø§ÙÙØ§Ø­Ø¯ (5 MB as base64 â 6.67 MB text)
+// الحد الأقصى لحجم المستند الواحد (5 MB as base64 ≈ 6.67 MB text)
 const MAX_DOC_SIZE_BYTES = 5 * 1024 * 1024;
 
-// ââ Helpers ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── Helpers ──────────────────────────────────────────────────────────
 function userSection(user) {
   if (user.isLegal) return 'LEGAL';
   return 'HR';
@@ -24,7 +24,7 @@ async function recordHistory(db, { fileId, action, details, userId }) {
 }
 
 // =====================================================================
-// ÙØ§Ø¦ÙØ© Ø§ÙÙÙÙØ§Øª â ÙØ¹ ÙÙØªØ± Ø­Ø³Ø¨ Ø§ÙÙØ³Ù ÙØ§ÙØ­Ø§ÙØ©
+// قائمة الملفات — مع فلتر حسب القسم والحالة
 // =====================================================================
 legalFileRoutes.get('/', async (c) => {
   const db = c.env.DB;
@@ -63,8 +63,8 @@ legalFileRoutes.get('/', async (c) => {
 });
 
 // =====================================================================
-// Ø¥Ø­ØµØ§Ø¦ÙØ§Øª Ø³Ø±ÙØ¹Ø© (Ø¹Ø¯Ø¯ Ø§ÙÙÙÙØ§Øª ÙÙ ÙÙ ÙØ³Ù + Ø·ÙØ¨Ø§Øª ÙØ¹ÙÙØ©)
-// â ÙØ¬Ø¨ Ø£Ù ØªÙÙÙ ÙØ¨Ù /:id ÙØ£Ù Hono ÙØ·Ø§Ø¨Ù Ø£ÙÙ ÙØ³Ø§Ø± ÙÙØ·Ø¨Ù
+// إحصائيات سريعة (عدد الملفات في كل قسم + طلبات معلقة)
+// — يجب أن تكون قبل /:id لأن Hono يطابق أول مسار ينطبق
 // =====================================================================
 legalFileRoutes.get('/stats/summary', async (c) => {
   const db = c.env.DB;
@@ -89,7 +89,7 @@ legalFileRoutes.get('/stats/summary', async (c) => {
 });
 
 // =====================================================================
-// ÙØ§Ø¦ÙØ© Ø·ÙØ¨Ø§Øª Ø§ÙÙÙÙ (Ø§ÙÙØ§Ø±Ø¯Ø© ÙÙ)
+// قائمة طلبات النقل (الواردة لي)
 // =====================================================================
 legalFileRoutes.get('/transfers/pending', async (c) => {
   const user = c.get('user');
@@ -108,7 +108,7 @@ legalFileRoutes.get('/transfers/pending', async (c) => {
 });
 
 // =====================================================================
-// ÙØ§Ø¦ÙØ© Ø·ÙØ¨Ø§Øª Ø§ÙÙÙÙ Ø§ÙØµØ§Ø¯Ø±Ø© ÙÙÙ
+// قائمة طلبات النقل الصادرة مني
 // =====================================================================
 legalFileRoutes.get('/transfers/sent', async (c) => {
   const user = c.get('user');
@@ -127,19 +127,25 @@ legalFileRoutes.get('/transfers/sent', async (c) => {
 });
 
 // =====================================================================
-// Ø§ÙØ±Ø¯ Ø¹ÙÙ Ø·ÙØ¨ ÙÙÙ (ÙÙØ§ÙÙØ© / Ø±ÙØ¶)
+// الرد على طلب نقل (موافقة / رفض)
 // =====================================================================
 legalFileRoutes.patch('/transfers/:transferId', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
   const transferId = Number(c.req.param('transferId'));
+  if (!transferId || isNaN(transferId)) return jsonError(c, 400, 'معرف الطلب غير صحيح', 'INVALID_ID');
   const body = await c.req.json().catch(() => ({}));
   const decision = String(body.decision || '').toUpperCase();
 
-  if (!['APPROVED', 'REJECTED'].includes(decision)) return jsonError(c, 400, 'Ø§ÙÙØ±Ø§Ø± ÙØ¬Ø¨ Ø£Ù ÙÙÙÙ APPROVED Ø£Ù REJECTED', 'INVALID_DECISION');
+  if (!['APPROVED', 'REJECTED'].includes(decision)) return jsonError(c, 400, 'القرار يجب أن يكون APPROVED أو REJECTED', 'INVALID_DECISION');
 
   const transfer = await db.prepare(`SELECT * FROM legal_file_transfers WHERE id = ? AND status = 'PENDING'`).bind(transferId).first();
-  if (!transfer) return jsonError(c, 404, 'Ø§ÙØ·ÙØ¨ ØºÙØ± ÙÙØ¬ÙØ¯ Ø£Ù ØªÙØª ÙØ¹Ø§ÙØ¬ØªÙ', 'NOT_FOUND');
+  if (!transfer) return jsonError(c, 404, 'الطلب غير موجود أو تمت معالجته', 'NOT_FOUND');
+
+  // فقط صاحب القسم المصدر يقدر يوافق أو يرفض — الطلب عبارة عن "أنا عايز الملف ده" من القسم التاني،
+  // فالمقبول/المرفوض هو القسم اللي فيه الملف حاليًا (from_section)
+  const mySection = userSection(user);
+  if (transfer.from_section !== mySection) return jsonError(c, 403, 'ليس لديك صلاحية للرد على هذا الطلب', 'FORBIDDEN');
 
   const now = nowIso();
   await db.prepare(`UPDATE legal_file_transfers SET status = ?, responded_by = ?, responded_at = ? WHERE id = ?`).bind(decision, user.id, now, transferId).run();
@@ -165,34 +171,34 @@ legalFileRoutes.patch('/transfers/:transferId', async (c) => {
 });
 
 // =====================================================================
-// ØªÙØ§ØµÙÙ ÙÙÙ ÙØ§Ø­Ø¯ + ÙØ³ØªÙØ¯Ø§ØªÙ
+// تفاصيل ملف واحد + مستنداته
 // =====================================================================
 legalFileRoutes.get('/:id', async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
   const file = await db.prepare(`SELECT * FROM legal_files WHERE id = ?`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯', 'NOT_FOUND');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'NOT_FOUND');
 
-  // Ø§ÙÙØ³ØªÙØ¯Ø§Øª â Ø¨Ø¯ÙÙ data (Ø«ÙÙÙÙ)Ø ØªØªØ­ÙÙÙ ÙØ§Ø­Ø¯Ø© ÙØ§Ø­Ø¯Ø©
+  // المستندات — بدون data (ثقيلى)، تتحمّل واحدة واحدة
   const docs = (await db.prepare(`SELECT id, filename, content_type, file_size, uploaded_by, uploaded_at FROM legal_file_documents WHERE file_id = ? ORDER BY uploaded_at`).bind(id).all()).results;
 
   return c.json({ file, documents: docs });
 });
 
 // =====================================================================
-// ØªØ­ÙÙÙ ÙØ³ØªÙØ¯ ÙØ§Ø­Ø¯ (Ø§ÙØ¨ÙØ§ÙØ§Øª Ø§ÙÙØ¹ÙÙØ©)
+// تحميل مستند واحد (البيانات الفعلية)
 // =====================================================================
 legalFileRoutes.get('/:id/documents/:docId', async (c) => {
   const db = c.env.DB;
   const fileId = Number(c.req.param('id'));
   const docId = Number(c.req.param('docId'));
   const doc = await db.prepare(`SELECT * FROM legal_file_documents WHERE id = ? AND file_id = ?`).bind(docId, fileId).first();
-  if (!doc) return jsonError(c, 404, 'Ø§ÙÙØ³ØªÙØ¯ ØºÙØ± ÙÙØ¬ÙØ¯', 'DOC_NOT_FOUND');
+  if (!doc) return jsonError(c, 404, 'المستند غير موجود', 'DOC_NOT_FOUND');
   return c.json({ document: doc });
 });
 
 // =====================================================================
-// Ø¥ÙØ´Ø§Ø¡ ÙÙÙ Ø¬Ø¯ÙØ¯
+// إنشاء ملف جديد
 // =====================================================================
 legalFileRoutes.post('/', async (c) => {
   const user = c.get('user');
@@ -207,13 +213,13 @@ legalFileRoutes.post('/', async (c) => {
   const salesName = String(body.salesName || '').trim() || null;
   const notes = String(body.notes || '').trim() || null;
 
-  if (!fileNumber) return jsonError(c, 400, 'Ø±ÙÙ Ø§ÙÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_FILE_NUMBER');
-  if (!customerName) return jsonError(c, 400, 'Ø§Ø³Ù Ø§ÙØ¹ÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_CUSTOMER_NAME');
-  if (!customerPhone) return jsonError(c, 400, 'Ø±ÙÙ ÙØ§ØªÙ Ø§ÙØ¹ÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_CUSTOMER_PHONE');
+  if (!fileNumber) return jsonError(c, 400, 'رقم الملف مطلوب', 'MISSING_FILE_NUMBER');
+  if (!customerName) return jsonError(c, 400, 'اسم العميل مطلوب', 'MISSING_CUSTOMER_NAME');
+  if (!customerPhone) return jsonError(c, 400, 'رقم هاتف العميل مطلوب', 'MISSING_CUSTOMER_PHONE');
 
-  // ØªØ­ÙÙ ÙÙ Ø¹Ø¯Ù ØªÙØ±Ø§Ø± Ø±ÙÙ Ø§ÙÙÙÙ
+  // تحقق من عدم تكرار رقم الملف
   const existing = await db.prepare(`SELECT id FROM legal_files WHERE file_number = ?`).bind(fileNumber).first();
-  if (existing) return jsonError(c, 409, 'Ø±ÙÙ Ø§ÙÙÙÙ ÙÙØ¬ÙØ¯ Ø¨Ø§ÙÙØ¹Ù', 'DUPLICATE_FILE_NUMBER');
+  if (existing) return jsonError(c, 409, 'رقم الملف موجود بالفعل', 'DUPLICATE_FILE_NUMBER');
 
   const now = nowIso();
   const result = await db
@@ -232,7 +238,7 @@ legalFileRoutes.post('/', async (c) => {
 });
 
 // =====================================================================
-// ØªØ¹Ø¯ÙÙ Ø¨ÙØ§ÙØ§Øª Ø§ÙÙÙÙ
+// تعديل بيانات الملف
 // =====================================================================
 legalFileRoutes.put('/:id', async (c) => {
   const user = c.get('user');
@@ -241,7 +247,7 @@ legalFileRoutes.put('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
 
   const file = await db.prepare(`SELECT * FROM legal_files WHERE id = ? AND status = 'ACTIVE'`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯ Ø£Ù ÙØ¤Ø±Ø´Ù', 'NOT_FOUND');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود أو مؤرشف', 'NOT_FOUND');
 
   const changes = {};
   const sets = [];
@@ -268,12 +274,12 @@ legalFileRoutes.put('/:id', async (c) => {
     }
   }
 
-  if (sets.length === 0) return c.json({ ok: true, message: 'ÙØ§ ØªÙØ¬Ø¯ ØªØºÙÙØ±Ø§Øª' });
+  if (sets.length === 0) return c.json({ ok: true, message: 'لا توجد تغييرات' });
 
-  // ÙÙ ØºÙÙØ± Ø±ÙÙ Ø§ÙÙÙÙØ ÙØªØ£ÙØ¯ ÙØ´ ÙÙØ±Ø±
+  // لو غيّر رقم الملف، نتأكد مش مكرر
   if (changes.file_number) {
     const dup = await db.prepare(`SELECT id FROM legal_files WHERE file_number = ? AND id != ?`).bind(changes.file_number.to, id).first();
-    if (dup) return jsonError(c, 409, 'Ø±ÙÙ Ø§ÙÙÙÙ ÙÙØ¬ÙØ¯ Ø¨Ø§ÙÙØ¹Ù', 'DUPLICATE_FILE_NUMBER');
+    if (dup) return jsonError(c, 409, 'رقم الملف موجود بالفعل', 'DUPLICATE_FILE_NUMBER');
   }
 
   sets.push('updated_at = ?');
@@ -287,7 +293,7 @@ legalFileRoutes.put('/:id', async (c) => {
 });
 
 // =====================================================================
-// Ø£Ø±Ø´ÙØ© ÙÙÙ (ÙØ§ Ø­Ø°Ù ÙÙØ§Ø¦Ù)
+// أرشفة ملف (لا حذف نهائي)
 // =====================================================================
 legalFileRoutes.patch('/:id/archive', async (c) => {
   const user = c.get('user');
@@ -295,8 +301,8 @@ legalFileRoutes.patch('/:id/archive', async (c) => {
   const id = Number(c.req.param('id'));
 
   const file = await db.prepare(`SELECT id, status FROM legal_files WHERE id = ?`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯', 'NOT_FOUND');
-  if (file.status === 'ARCHIVED') return jsonError(c, 400, 'Ø§ÙÙÙÙ ÙØ¤Ø±Ø´Ù Ø¨Ø§ÙÙØ¹Ù', 'ALREADY_ARCHIVED');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'NOT_FOUND');
+  if (file.status === 'ARCHIVED') return jsonError(c, 400, 'الملف مؤرشف بالفعل', 'ALREADY_ARCHIVED');
 
   await db.prepare(`UPDATE legal_files SET status = 'ARCHIVED', updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
   await recordHistory(db, { fileId: id, action: 'ARCHIVED', details: null, userId: user.id });
@@ -305,7 +311,7 @@ legalFileRoutes.patch('/:id/archive', async (c) => {
 });
 
 // =====================================================================
-// Ø§Ø³ØªØ¹Ø§Ø¯Ø© ÙÙÙ ÙÙ Ø§ÙØ£Ø±Ø´ÙÙ
+// استعادة ملف من الأرشيف
 // =====================================================================
 legalFileRoutes.patch('/:id/restore', async (c) => {
   const user = c.get('user');
@@ -313,8 +319,8 @@ legalFileRoutes.patch('/:id/restore', async (c) => {
   const id = Number(c.req.param('id'));
 
   const file = await db.prepare(`SELECT id, status FROM legal_files WHERE id = ?`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯', 'NOT_FOUND');
-  if (file.status !== 'ARCHIVED') return jsonError(c, 400, 'Ø§ÙÙÙÙ ÙÙØ³ ÙØ¤Ø±Ø´ÙÙØ§', 'NOT_ARCHIVED');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'NOT_FOUND');
+  if (file.status !== 'ARCHIVED') return jsonError(c, 400, 'الملف ليس مؤرشفًا', 'NOT_ARCHIVED');
 
   await db.prepare(`UPDATE legal_files SET status = 'ACTIVE', updated_at = ? WHERE id = ?`).bind(nowIso(), id).run();
   await recordHistory(db, { fileId: id, action: 'RESTORED', details: null, userId: user.id });
@@ -323,7 +329,7 @@ legalFileRoutes.patch('/:id/restore', async (c) => {
 });
 
 // =====================================================================
-// Ø±ÙØ¹ ÙØ³ØªÙØ¯ (ØµÙØ±Ø© / PDF) â base64
+// رفع مستند (صورة / PDF) — base64
 // =====================================================================
 legalFileRoutes.post('/:id/documents', async (c) => {
   const user = c.get('user');
@@ -331,31 +337,31 @@ legalFileRoutes.post('/:id/documents', async (c) => {
   const id = Number(c.req.param('id'));
 
   const file = await db.prepare(`SELECT id, status FROM legal_files WHERE id = ? AND status = 'ACTIVE'`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯ Ø£Ù ÙØ¤Ø±Ø´Ù', 'NOT_FOUND');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود أو مؤرشف', 'NOT_FOUND');
 
-  // Ø§ÙØªØ­ÙÙ ÙÙ Ø§ÙØ­Ø¯ Ø§ÙØ£ÙØµÙ
+  // التحقق من الحد الأقصى
   const countRow = await db.prepare(`SELECT COUNT(*) AS cnt FROM legal_file_documents WHERE file_id = ?`).bind(id).first();
-  if (countRow.cnt >= MAX_DOCS_PER_FILE) return jsonError(c, 400, `Ø§ÙØ­Ø¯ Ø§ÙØ£ÙØµÙ ${MAX_DOCS_PER_FILE} ÙØ³ØªÙØ¯ ÙÙÙ ÙÙÙ`, 'MAX_DOCS_REACHED');
+  if (countRow.cnt >= MAX_DOCS_PER_FILE) return jsonError(c, 400, `الحد الأقصى ${MAX_DOCS_PER_FILE} مستند لكل ملف`, 'MAX_DOCS_REACHED');
 
   const body = await c.req.json().catch(() => ({}));
   const filename = String(body.filename || '').trim();
   const contentType = String(body.contentType || '').trim();
   const data = String(body.data || '');
 
-  if (!filename) return jsonError(c, 400, 'Ø§Ø³Ù Ø§ÙÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_FILENAME');
-  if (!contentType) return jsonError(c, 400, 'ÙÙØ¹ Ø§ÙÙÙÙ ÙØ·ÙÙØ¨', 'MISSING_CONTENT_TYPE');
-  if (!data) return jsonError(c, 400, 'Ø¨ÙØ§ÙØ§Øª Ø§ÙÙÙÙ ÙØ·ÙÙØ¨Ø©', 'MISSING_DATA');
+  if (!filename) return jsonError(c, 400, 'اسم الملف مطلوب', 'MISSING_FILENAME');
+  if (!contentType) return jsonError(c, 400, 'نوع الملف مطلوب', 'MISSING_CONTENT_TYPE');
+  if (!data) return jsonError(c, 400, 'بيانات الملف مطلوبة', 'MISSING_DATA');
 
   // Accept any image format + PDF
   if (!contentType.startsWith('image/') && contentType !== 'application/pdf') {
     return jsonError(c, 400, 'نوع الملف غير مدعوم — صور أو PDF فقط', 'INVALID_CONTENT_TYPE');
   }
 
-  // ØªØ­ÙÙ ÙÙ Ø§ÙØ­Ø¬Ù (base64 â 1.33x)
+  // تحقق من الحجم (base64 ≈ 1.33x)
   const rawSize = Math.ceil((data.length * 3) / 4);
-  if (rawSize > MAX_DOC_SIZE_BYTES) return jsonError(c, 400, 'Ø­Ø¬Ù Ø§ÙÙÙÙ Ø£ÙØ¨Ø± ÙÙ 5 ÙÙØ¬Ø§', 'FILE_TOO_LARGE');
+  if (rawSize > MAX_DOC_SIZE_BYTES) return jsonError(c, 400, 'حجم الملف أكبر من 5 ميجا', 'FILE_TOO_LARGE');
 
-  // Ø¹Ø¯Ø¯ Ø§ÙÙØ³ØªÙØ¯Ø§Øª Ø§ÙÙØªØ¨ÙÙØ© Ø¨Ø¹Ø¯ ÙØ°Ø§ Ø§ÙØ±ÙØ¹
+  // عدد المستندات المتبقية بعد هذا الرفع
   const remaining = MAX_DOCS_PER_FILE - countRow.cnt - 1;
 
   const result = await db
@@ -370,8 +376,8 @@ legalFileRoutes.post('/:id/documents', async (c) => {
 });
 
 // =====================================================================
-// Ø­Ø°Ù ÙØ³ØªÙØ¯ (soft â ÙØ§ ÙØ­Ø°Ù ÙØ¹ÙÙÙØ§ ÙÙ DBØ Ø¨Ø³ ÙØ³Ø¬Ù ÙÙ Ø§ÙØªØ§Ø±ÙØ®)
-// ÙÙ Ø§ÙÙØ§ÙØ¹ ÙÙØ­Ø°ÙÙ ÙØ£Ù Ø§ÙÙ data ÙØ¨ÙØ±Ø©Ø ÙÙÙ Ø§ÙØªØ§Ø±ÙØ® ÙØ¨ÙÙ
+// حذف مستند (soft — لا نحذف فعليًا من DB، بس نسجل في التاريخ)
+// في الواقع هنحذفه لأن الـ data كبيرة، لكن التاريخ يبقى
 // =====================================================================
 legalFileRoutes.delete('/:id/documents/:docId', async (c) => {
   const user = c.get('user');
@@ -380,7 +386,7 @@ legalFileRoutes.delete('/:id/documents/:docId', async (c) => {
   const docId = Number(c.req.param('docId'));
 
   const doc = await db.prepare(`SELECT id, filename FROM legal_file_documents WHERE id = ? AND file_id = ?`).bind(docId, fileId).first();
-  if (!doc) return jsonError(c, 404, 'Ø§ÙÙØ³ØªÙØ¯ ØºÙØ± ÙÙØ¬ÙØ¯', 'DOC_NOT_FOUND');
+  if (!doc) return jsonError(c, 404, 'المستند غير موجود', 'DOC_NOT_FOUND');
 
   await db.prepare(`DELETE FROM legal_file_documents WHERE id = ?`).bind(docId).run();
   await db.prepare(`UPDATE legal_files SET updated_at = ? WHERE id = ?`).bind(nowIso(), fileId).run();
@@ -390,7 +396,7 @@ legalFileRoutes.delete('/:id/documents/:docId', async (c) => {
 });
 
 // =====================================================================
-// ÙÙÙ ÙÙÙ ÙØ¨Ø§Ø´Ø± (HR â LEGAL) â Ø¨Ø¯ÙÙ Ø·ÙØ¨
+// نقل ملف مباشر (HR ↔ LEGAL) — بدون طلب
 // =====================================================================
 legalFileRoutes.patch('/:id/move', async (c) => {
   const user = c.get('user');
@@ -399,11 +405,11 @@ legalFileRoutes.patch('/:id/move', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const toSection = String(body.toSection || '').toUpperCase();
 
-  if (!['HR', 'LEGAL'].includes(toSection)) return jsonError(c, 400, 'Ø§ÙÙØ³Ù Ø§ÙÙØ·ÙÙØ¨ ØºÙØ± ØµØ­ÙØ­', 'INVALID_SECTION');
+  if (!['HR', 'LEGAL'].includes(toSection)) return jsonError(c, 400, 'القسم المطلوب غير صحيح', 'INVALID_SECTION');
 
   const file = await db.prepare(`SELECT id, current_section, status FROM legal_files WHERE id = ? AND status = 'ACTIVE'`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯ Ø£Ù ÙØ¤Ø±Ø´Ù', 'NOT_FOUND');
-  if (file.current_section === toSection) return jsonError(c, 400, 'Ø§ÙÙÙÙ ÙÙØ¬ÙØ¯ Ø¨Ø§ÙÙØ¹Ù ÙÙ ÙØ°Ø§ Ø§ÙÙØ³Ù', 'SAME_SECTION');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود أو مؤرشف', 'NOT_FOUND');
+  if (file.current_section === toSection) return jsonError(c, 400, 'الملف موجود بالفعل في هذا القسم', 'SAME_SECTION');
 
   await db.prepare(`UPDATE legal_files SET current_section = ?, updated_at = ? WHERE id = ?`).bind(toSection, nowIso(), id).run();
   await recordHistory(db, {
@@ -417,7 +423,7 @@ legalFileRoutes.patch('/:id/move', async (c) => {
 });
 
 // =====================================================================
-// Ø¥ÙØ´Ø§Ø¡ Ø·ÙØ¨ ÙÙÙ
+// إنشاء طلب نقل
 // =====================================================================
 legalFileRoutes.post('/:id/transfer-request', async (c) => {
   const user = c.get('user');
@@ -427,18 +433,18 @@ legalFileRoutes.post('/:id/transfer-request', async (c) => {
   const note = String(body.note || '').trim() || null;
 
   const file = await db.prepare(`SELECT id, current_section, status FROM legal_files WHERE id = ? AND status = 'ACTIVE'`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯ Ø£Ù ÙØ¤Ø±Ø´Ù', 'NOT_FOUND');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود أو مؤرشف', 'NOT_FOUND');
 
-  // Ø§ÙØ·Ø±Ù Ø§ÙÙÙØ§Ø¨Ù
+  // الطرف المقابل
   const mySection = userSection(user);
   const fromSection = file.current_section;
-  const toSection = mySection; // Ø£ÙØ§ Ø¹Ø§ÙØ² Ø§ÙÙÙÙ ÙØ¬ÙÙÙ
+  const toSection = mySection; // أنا عايز الملف يجيلي
 
-  if (fromSection === toSection) return jsonError(c, 400, 'Ø§ÙÙÙÙ ÙÙØ¬ÙØ¯ Ø¹ÙØ¯Ù Ø¨Ø§ÙÙØ¹Ù', 'FILE_ALREADY_HERE');
+  if (fromSection === toSection) return jsonError(c, 400, 'الملف موجود عندك بالفعل', 'FILE_ALREADY_HERE');
 
-  // ØªØ­ÙÙ ÙÙÙØ´ Ø·ÙØ¨ ÙØ¹ÙÙ Ø¨Ø§ÙÙØ¹Ù
+  // تحقق مفيش طلب معلق بالفعل
   const pending = await db.prepare(`SELECT id FROM legal_file_transfers WHERE file_id = ? AND status = 'PENDING'`).bind(id).first();
-  if (pending) return jsonError(c, 409, 'ÙÙØ¬Ø¯ Ø·ÙØ¨ ÙÙÙ ÙØ¹ÙÙ Ø¨Ø§ÙÙØ¹Ù ÙÙØ°Ø§ Ø§ÙÙÙÙ', 'PENDING_EXISTS');
+  if (pending) return jsonError(c, 409, 'يوجد طلب نقل معلق بالفعل لهذا الملف', 'PENDING_EXISTS');
 
   const result = await db
     .prepare(`INSERT INTO legal_file_transfers (file_id, from_section, to_section, note, requested_by, requested_at) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -451,14 +457,14 @@ legalFileRoutes.post('/:id/transfer-request', async (c) => {
 });
 
 // =====================================================================
-// ØªØ§Ø±ÙØ® ÙÙÙ ÙØ§Ø­Ø¯
+// تاريخ ملف واحد
 // =====================================================================
 legalFileRoutes.get('/:id/history', async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param('id'));
 
   const file = await db.prepare(`SELECT id FROM legal_files WHERE id = ?`).bind(id).first();
-  if (!file) return jsonError(c, 404, 'Ø§ÙÙÙÙ ØºÙØ± ÙÙØ¬ÙØ¯', 'NOT_FOUND');
+  if (!file) return jsonError(c, 404, 'الملف غير موجود', 'NOT_FOUND');
 
   const rows = (await db.prepare(
     `SELECT h.*, u.display_name AS performer_name
