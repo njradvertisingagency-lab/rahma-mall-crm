@@ -192,7 +192,7 @@
           }, [
             el('div', { style: 'font-size:28px;font-weight:800;color:' + color }, [String(count)]),
             el('div', { style: 'font-size:13px;color:var(--text-2);margin-top:4px' }, [label]),
-          ])));
+          ]));
         }
       } catch (e) { console.error(e); }
     }
