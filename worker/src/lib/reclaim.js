@@ -317,7 +317,7 @@ export async function sweepAutoDistribute(db, env) {
   const reassignedFrom = {};
   const ids = [];
   const statements = [];
-  // حصص: زمايل مهرة عدد متساوي ومهرة أكتر منهم بـ ٧-١٠. بنختار لكل رقم المؤهل اللي باقيله أكبر حصة.
+  // حصص: التوزيع بالتساوي على جميع الموظفين — لا أولوية لأحد. بنختار لكل رقم المؤهل اللي باقيله أكبر حصة.
   const remaining = computeQuotas(items.length, onlineIds);
   let rr = 0;
   items.forEach((it) => {
