@@ -605,7 +605,7 @@ async function renderRoute() {
     return;
   }
   if (location.hash === '#/login') {
-    location.hash = '#/dashboard';
+    location.hash = App.state.user.isLegal ? '#/legal-files' : '#/dashboard';
     return;
   }
   // حساب "admin" (👑 الرؤية الشاملة — is_owner=1) بقى حساب god-view كامل:
