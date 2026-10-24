@@ -8,7 +8,7 @@
 // touches employees.last_late_alert_date, never anything presence-related.
 import { nowIso, broadcast } from './db.js';
 
-const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 18, endMinute: 0, lateAfterMinutes: 15, holidayWeekdays: ['Thursday', 'Friday'] };
+const DEFAULT_WORK_HOURS = { startHour: 10, startMinute: 0, endHour: 23, endMinute: 0, lateAfterMinutes: 15, holidayWeekdays: ['Thursday', 'Friday'] };
 const TIMEZONE = 'Africa/Cairo';
 
 /** Full English weekday name for Cairo "now" (e.g. "Thursday") — used only to compare against settings.holidayWeekdays. */
