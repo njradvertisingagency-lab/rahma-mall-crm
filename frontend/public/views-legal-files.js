@@ -133,7 +133,6 @@
 
   // ────── الصفحة الرئيسية: قائمة الملفات ──────
   App.route('/legal-files', async () => {
-    const user = App.state.user;
     const container = el('div');
 
     let currentSection = null; // null = الكل
@@ -240,8 +239,8 @@
               t.note ? el('div', { style: 'font-size:12px;color:var(--text-2)' }, ['💬 ' + t.note]) : null,
             ]),
             el('div', { style: 'display:flex;gap:6px' }, [
-              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('✅ تمت الموافقة'); loadAll(); } }, ['✅ موافقة']),
-              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('❌ تم الرفض'); loadAll(); } }, ['❌ رفض']),
+              el('button', { class: 'btn btn-primary btn-sm', onclick: async () => { try { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'APPROVED' }) }); toast('✅ تمت الموافقة'); loadAll(); } catch(e) { toast('❌ ' + (e.message || 'حدث خطأ')); } } }, ['✅ موافقة']),
+              el('button', { class: 'btn btn-outline btn-sm', onclick: async () => { try { await api('/legal-files/transfers/' + t.id, { method: 'PATCH', body: JSON.stringify({ decision: 'REJECTED' }) }); toast('❌ تم الرفض'); loadAll(); } catch(e) { toast('❌ ' + (e.message || 'حدث خطأ')); } } }, ['❌ رفض']),
             ]),
           ]);
           transfersSection.appendChild(card);
@@ -407,7 +406,6 @@
 
   // ────── صفحة تفاصيل الملف ──────
   App.route('/legal-files/:id', async ({ id }) => {
-    const user = App.state.user;
     const container = el('div');
     let fileData = null;
     let docs = [];
@@ -619,7 +617,7 @@
       overlay.appendChild(el('div', {
         style: 'background:var(--surface);border-radius:16px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto',
       }, [
-        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['��️ تعديل البيانا֪']),
+        el('div', { style: 'font-size:18px;font-weight:800;margin-bottom:16px' }, ['��️ تعديل البيانات']),
         ...formFields,
         errMsg,
         el('div', { style: 'display:flex;gap:8px;margin-top:16px' }, [
@@ -663,7 +661,7 @@
         el('div', { style: 'display:flex;gap:8px;margin-top:16px' }, [
           el('button', { class: 'btn btn-primary', onclick: async () => {
             const files = dropZone.getFiles();
-            if (files.length === 0) { errMsg.textContent = 'اختر ملفا֪ للرفع'; errMsg.style.display = 'block'; return; }
+            if (files.length === 0) { errMsg.textContent = 'اختر ملفات للرفع'; errMsg.style.display = 'block'; return; }
             progressDiv.innerHTML = '';
             errMsg.style.display = 'none';
             let success = 0;
