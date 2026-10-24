@@ -31,8 +31,11 @@ import { getWorkHoursStatus, getCairoDayBoundsUtc, getCairoNow } from './workhou
 import { getEmployeePresenceMap } from './presence.js';
 import { PROTECTED_SQL, NO_RECLAIM_SQL, protectedFirst, computeQuotas } from './protected.js';
 
-export async function sweepAutoReclaim(db, env) {
-  // فحص الوقت بدون قراءة من القاعدة: نهاية الشيفت مش ممكن تكون قبل ٢ العصر، فمفيش داعي نقرا الإعدادات كل ٥ دقايق من الصبح.
+export async function sweepAutoReclaim(_db, _env) {
+  // ❌ مُعطَّل بطلب صاحب الشركة: الأرقام تفضل عند الموظف بشكل دائم ولا تُسحب أبداً.
+  return { reclaimed: 0 };
+  // eslint-disable-next-line no-unreachable
+  const db = _db; const env = _env;
   if (getCairoNow().minutesSinceMidnight < 14 * 60) return { reclaimed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { reclaimed: 0 };
@@ -129,8 +132,11 @@ export async function sweepAutoReclaim(db, env) {
 // ---------------------------------------------------------------------------
 const REDISTRIBUTE_MIN = 17 * 60 + 45; // 5:45 PM Cairo (كان ٤ العصر — اتغير لـ ٥:٤٥ بطلب صاحب الشركة)
 
-export async function sweepRedistribute3pm(db, env) {
-  // نفس الفكرة: قبل ٥:٤٥ العصر مفيش أي قراءة من القاعدة.
+export async function sweepRedistribute3pm(_db, _env) {
+  // ❌ مُعطَّل بطلب صاحب الشركة: الأرقام تفضل عند الموظف بشكل دائم ولا تُسحب أبداً.
+  return { redistributed: 0 };
+  // eslint-disable-next-line no-unreachable
+  const db = _db; const env = _env;
   if (getCairoNow().minutesSinceMidnight < REDISTRIBUTE_MIN) return { redistributed: 0 };
   const status = await getWorkHoursStatus(db);
   if (status.isHolidayToday) return { redistributed: 0 };
@@ -290,17 +296,10 @@ export async function sweepAutoDistribute(db, env) {
     return { distributed: 0 };
   }
 
-  // المخزن (غير موزّع) + أرقام "لا يوجد رد" من الأيام اللي فاتت (تتوزع لموظف غير اللي كان معاه).
-  // الحالة والملاحظات بتفضل زي ما هي لأنها مربوطة بالعميل مش بالموظف.
-  const { dayStartIso } = getCairoDayBoundsUtc(status.dateStr);
+  // المخزن (غير موزّع فقط) — بطلب صاحب الشركة: الأرقام المعيّنة لموظف تفضل عنده دائماً
+  // ولا تُسحب ولا تُوزَّع على غيره أياً كانت حالتها.
   const pool = await db
-    .prepare(
-      `SELECT id, NULL AS prev FROM customers WHERE assigned_employee_id IS NULL AND archived = 0
-       UNION ALL
-       SELECT id, assigned_employee_id AS prev FROM customers
-       WHERE status = 'NO_ANSWER' AND archived = 0 AND assigned_employee_id IS NOT NULL AND assigned_employee_id NOT IN (${NO_RECLAIM_SQL}) AND assigned_at < ?`
-    )
-    .bind(dayStartIso)
+    .prepare(`SELECT id, NULL AS prev FROM customers WHERE assigned_employee_id IS NULL AND archived = 0`)
     .all();
   const items = pool.results;
   if (items.length === 0) {
