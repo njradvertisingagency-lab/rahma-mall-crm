@@ -135,10 +135,11 @@ distributionRoutes.post('/', async (c) => {
   // selectByIds) rather than one bound '?' per id, since D1 rejects a single
   // statement with more than 100 bound parameters — a limit a large
   // distribution batch easily exceeds.
-  const validRows = await selectByIds(db, { table: 'customers', selectSql: 'id', ids: customerIds, extraWhereSql: 'archived = 0' });
+// بطلب صاحب الشركة: الأرقام المعيّنة لموظف لا تُوزَّع أبداً — التوزيع للغير-موزَّعين فقط.
+  const validRows = await selectByIds(db, { table: 'customers', selectSql: 'id', ids: customerIds, extraWhereSql: 'archived = 0 AND assigned_employee_id IS NULL' });
   const validSet = new Set(validRows.map((r) => r.id));
   customerIds = customerIds.filter((id) => validSet.has(id));
-  if (customerIds.length === 0) return jsonError(c, 400, 'لا يوجد عميل صالح من ضمن المحددين', 'NO_VALID_CUSTOMERS');
+  if (customerIds.length === 0) return jsonError(c, 400, 'لا يوجد عميل غير موزّع ضمن المحددين — الأرقام المعيّنة لموظف لا تُنقل', 'NO_UNASSIGNED_CUSTOMERS');
 
   let plan; // Map<employeeId, customerId[]>
   let employees;
