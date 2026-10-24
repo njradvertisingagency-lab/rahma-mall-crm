@@ -8,7 +8,6 @@
     let allEmployees = [];
     let filteredEmployees = [];
     let selectedEmployee = null;
-    let activeDept = null;
     let employeesClosedInfo = null; // { shiftText, opensInText, isOffDay } when outside work hours
 
     async function render() {
@@ -29,7 +28,7 @@
               el('div', { class: 'label' }, ['الإدارة']),
               el('div', { class: 'desc' }, ['إدارة الفريق بالكامل، توزيع العملاء، ومتابعة التحليلات.']),
             ]),
-            el('div', { class: 'login-card', onclick: async () => { activeDept = 'customer_service'; screen = 'employee-pick'; await loadEmployees(); render(); } }, [
+            el('div', { class: 'login-card', onclick: async () => { screen = 'employee-pick'; await loadEmployees(); render(); } }, [
               el('div', { class: 'icon' }, ['👥']),
               el('div', { class: 'label' }, ['خدمة العملاء']),
               el('div', { class: 'desc' }, ['متابعة عملائك ومهامك الخاصة.']),
@@ -138,7 +137,7 @@
       }
 
       card.appendChild(heading);
-      if (isTeamLeader) card.appendChild(usernameField); else card.appendChild(usernameField);
+      card.appendChild(usernameField);
       card.appendChild(passwordField);
       card.appendChild(toggleRow);
       card.appendChild(errorBox);
