@@ -450,9 +450,11 @@
         const targetSection = f.current_section === 'HR' ? 'LEGAL' : 'HR';
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:#8e44ad;color:#8e44ad', onclick: async () => {
           if (!confirm('نقل الملف إلى قسم ' + (targetSection === 'LEGAL' ? 'الشئون القانونية' : 'HR') + '?')) return;
-          await api('/legal-files/' + id + '/move', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
-          toast('✅ تم النقل');
-          load();
+          try {
+            await api('/legal-files/' + id + '/move', { method: 'PATCH', body: JSON.stringify({ toSection: targetSection }) });
+            toast('✅ تم النقل');
+            load();
+          } catch (e) { toast('❌ ' + (e.message || 'خطأ في النقل')); }
         }}, ['🔀 نقل إلى ' + (targetSection === 'LEGAL' ? 'القانونية' : 'HR')]));
 
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:#e67e22;color:#e67e22', onclick: async () => {
@@ -466,15 +468,19 @@
 
         actions.appendChild(el('button', { class: 'btn btn-outline btn-sm', style: 'border-color:var(--danger);color:var(--danger)', onclick: async () => {
           if (!confirm('أرشفة الملف؟ لن يظهر في القائمة الرئيسية.')) return;
-          await api('/legal-files/' + id + '/archive', { method: 'PATCH' });
-          toast('🗄️ تم الأرشفة');
-          load();
+          try {
+            await api('/legal-files/' + id + '/archive', { method: 'PATCH' });
+            toast('🗄️ تم الأرشفة');
+            load();
+          } catch (e) { toast('❌ ' + (e.message || 'خطأ في الأرشفة')); }
         }}, ['🗄️ أرشفة']));
       } else {
         actions.appendChild(el('button', { class: 'btn btn-primary btn-sm', onclick: async () => {
-          await api('/legal-files/' + id + '/restore', { method: 'PATCH' });
-          toast('✅ تمت الاستعادة');
-          load();
+          try {
+            await api('/legal-files/' + id + '/restore', { method: 'PATCH' });
+            toast('✅ تمت الاستعادة');
+            load();
+          } catch (e) { toast('❌ ' + (e.message || 'خطأ في الاستعادة')); }
         }}, ['♻️ استعادة من الأرشيف']));
       }
       container.appendChild(actions);
@@ -515,6 +521,7 @@
                   const d = r.document;
                   // فتح في تبويب جديد
                   const w = window.open('', '_blank');
+                  if (!w) { toast('⚠️ المتصفح منع فتح نافذة جديدة — اسمح بالنوافذ المنبثقة وأعد المحاولة'); return; }
                   if (isImg) {
                     w.document.write('<html><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111"><img src="data:' + d.content_type + ';base64,' + d.data + '" style="max-width:100%;max-height:100vh" /></body></html>');
                   } else {
