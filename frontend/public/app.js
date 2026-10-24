@@ -371,86 +371,7 @@ App.toast = toast;
 // ---------------------------------------------------------------------------
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', App.state.theme);
-  // Pink theme for Mohra (user_id=5) only
-  if (App.state.user && App.state.user.id === 5) {
-    document.documentElement.setAttribute('data-user-theme', 'pink');
-  } else {
-    document.documentElement.removeAttribute('data-user-theme');
-  }
 }
-// ── Mohra Pink Theme ──
-(function() {
-  if (document.getElementById('mohra-pink-theme')) return;
-  const s = document.createElement('style');
-  s.id = 'mohra-pink-theme';
-  s.textContent = `
-    :root[data-user-theme="pink"] {
-      --bg: #fdf2f8;
-      --surface: #ffffff;
-      --surface-2: #fce7f3;
-      --border: #f9a8d4;
-      --brand: #ec4899;
-      --brand-dark: #db2777;
-      --brand-foreground: #ffffff;
-      --brand-soft: rgba(236, 72, 153, 0.12);
-      --brand-2: #f472b6;
-      --brand-2-soft: rgba(244, 114, 182, 0.15);
-      --success: #e84393;
-      --success-soft: rgba(232, 67, 147, 0.1);
-      --warning: #f06595;
-      --warning-soft: rgba(240, 101, 149, 0.12);
-      --danger: #be185d;
-      --danger-soft: rgba(190, 24, 93, 0.1);
-      --info: #d946ef;
-      --info-soft: rgba(217, 70, 239, 0.1);
-      --gray: #9d7a8a;
-      --gray-soft: #fce7f3;
-      --mono-tint: #ec4899;
-      --shadow-xs: rgba(236, 72, 153, 0.08) 0px 1px 3px 0px, rgba(236, 72, 153, 0.06) 0px 1px 2px -1px;
-      --shadow-sm: rgba(236, 72, 153, 0.08) 0px 4px 4px 0px;
-      --shadow-brand: rgba(236, 72, 153, 0.2) 0px 1px 3px 0px, rgba(236, 72, 153, 0.1) 0px 1px 0px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset;
-    }
-    :root[data-user-theme="pink"][data-theme="dark"] {
-      --bg: #1a0a12;
-      --surface: #1f0f18;
-      --surface-2: #2d1423;
-      --border: rgba(244, 114, 182, 0.2);
-      --brand: #f472b6;
-      --brand-dark: #f9a8d4;
-      --brand-foreground: #1a0a12;
-      --brand-soft: rgba(244, 114, 182, 0.16);
-      --brand-2: #ec4899;
-      --brand-2-soft: rgba(236, 72, 153, 0.2);
-      --success: #f472b6;
-      --success-soft: rgba(244, 114, 182, 0.16);
-      --warning: #f9a8d4;
-      --warning-soft: rgba(249, 168, 212, 0.16);
-      --danger: #fb7185;
-      --danger-soft: rgba(251, 113, 133, 0.16);
-      --info: #e879f9;
-      --info-soft: rgba(232, 121, 249, 0.16);
-      --gray: #c9a0b3;
-      --gray-soft: #2d1423;
-      --mono-tint: #f472b6;
-      --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
-      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
-      --shadow-brand: 0 1px 3px rgba(244, 114, 182, 0.3);
-    }
-    :root[data-user-theme="pink"] .sidebar { background: var(--surface); border-color: var(--border); }
-    :root[data-user-theme="pink"] .nav-item.active { background: var(--brand-soft); color: var(--brand); }
-    :root[data-user-theme="pink"] .topbar { border-bottom: 2px solid var(--brand-soft); }
-    :root[data-user-theme="pink"] .page-title { color: var(--brand); }
-    :root[data-user-theme="pink"] .btn-primary { background: linear-gradient(135deg, #ec4899, #db2777); }
-    :root[data-user-theme="pink"] .btn-primary:hover { background: linear-gradient(135deg, #db2777, #be185d); }
-    :root[data-user-theme="pink"] .btn-outline { border-color: #f9a8d4; }
-    :root[data-user-theme="pink"] .btn-outline:hover { background: var(--surface-2); border-color: #f472b6; }
-    :root[data-user-theme="pink"] .card { border-color: rgba(244, 114, 182, 0.15); }
-    :root[data-user-theme="pink"] .badge { border-color: rgba(244, 114, 182, 0.2); }
-    :root[data-user-theme="pink"] .link-btn { color: var(--brand); }
-    :root[data-user-theme="pink"] .spinner { border-top-color: var(--brand); }
-  `;
-  document.head.appendChild(s);
-})();
 App.toggleTheme = () => {
   App.state.theme = App.state.theme === 'dark' ? 'light' : 'dark';
   localStorage.setItem('rm_theme', App.state.theme);
@@ -806,18 +727,7 @@ function renderShell() {
     el('div', { class: 'sidebar-footer' }, [
       el('button', { class: 'btn btn-outline btn-block btn-sm', onclick: App.toggleTheme }, [App.state.theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode']),
       el('div', { class: 'dev-credit' }, ['Developed by Ahmed Nagy']),
-      ...(App.state.user && App.state.user.id === 5 ? [(function() {
-        if (!document.getElementById('mohra-hearts-css')) {
-          const css = document.createElement('style');
-          css.id = 'mohra-hearts-css';
-          css.textContent = `@keyframes mohra-pulse{0%,100%{opacity:.3;transform:scale(.7)}50%{opacity:1;transform:scale(1.2)}}.mohra-heart{display:inline-block;animation:mohra-pulse 1.2s ease-in-out infinite}`;
-          document.head.appendChild(css);
-        }
-        const h1 = el('span', { class: 'mohra-heart', style: 'animation-delay:0s' }, ['❤️']);
-        const h2 = el('span', { class: 'mohra-heart', style: 'animation-delay:.3s' }, ['❤️']);
-        const h3 = el('span', { class: 'mohra-heart', style: 'animation-delay:.6s' }, ['❤️']);
-        return el('div', { class: 'dev-credit', style: 'margin-top:4px' }, ['بحبك قد الكون ', h1, h2, h3]);
-      })()] : []),
+
     ]),
   ]);
 
@@ -1418,7 +1328,7 @@ async function boot() {
     App.startPresenceHeartbeat();
     refreshAttendanceStatus();
   }
-  applyTheme(); // re-apply after login so Mohra gets pink
+  applyTheme(); // re-apply theme after login
   renderRoute();
 }
 
