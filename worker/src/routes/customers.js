@@ -159,7 +159,8 @@ customerRoutes.get('/', async (c) => {
   }
   // Dynamic segments — every condition is derived from real, live data (never a stored tag).
   const SEGMENT_CONDS = {
-    NEW: `c.status = 'NEW'`,
+    // "جديد" = حالة جديد + لم يفتحه الموظف المعيّن له قط منذ التعيين (لم يظهر في customer_seen بعد التعيين)
+    NEW: `c.status = 'NEW' AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)`,
     INTERESTED: `c.status = 'INTERESTED'`,
     FOLLOW_UP: `c.status = 'FOLLOW_UP'`,
     NO_ANSWER: `c.status = 'NO_ANSWER'`,
