@@ -1,26 +1,22 @@
-// موظفة جديدة (مهرة) — في فترة تدريب بطلب صاحب الشغل:
-//  - مفيش أي سحب تلقائي من أرقامها.h
-//  - أولوية في التوزيع (ترتيبها الأول، فتاخد أول/أحسن الأرقام).
-//  - مستثناة من تقصير التأخير (حضور) وخصم تأخير كتابة الملاحظة.
-export const PROTECTED_EMPLOYEE_IDS = [4];
-export const PROTECTED_USER_IDS = [5];
-export const PROTECTED_SQL = PROTECTED_EMPLOYEE_IDS.join(',');
+// كل الموظفين متساوين — مفيش أي موظف له أولوية أو حماية خاصة.
+// المصفوفات فاضية عن قصد: الأرقام تتوزع بالتساوي على الجميع.
+export const PROTECTED_EMPLOYEE_IDS = [];
+export const PROTECTED_USER_IDS = [];
 
-// شيفت مسائي (أشرقت + هناء ٧م–١٠:٣٠م): مش بيشتغلوا وقت الشيفت الصبح،
-// فمفيش سحب أرقام منهم في الـ reclaim أو الـ redistribute — لازم يلاقوا
-// كل أرقامهم زي ما هي لما ييجوا يكملوا بالليل.
-export const EVENING_SHIFT_EMPLOYEE_IDS = [1, 7];
-export const EVENING_SHIFT_SQL = EVENING_SHIFT_EMPLOYEE_IDS.join(',');
-// Combined SQL for reclaim/redistribute exclusion (protected + evening shift)
-export const NO_RECLAIM_SQL = [...PROTECTED_EMPLOYEE_IDS, ...EVENING_SHIFT_EMPLOYEE_IDS].join(',');
+// '0' كـ placeholder آمن في جمل SQL IN — مفيش موظف بـ id = 0
+export const PROTECTED_SQL = '0';
 
-export const isProtectedEmployee = (id) => PROTECTED_EMPLOYEE_IDS.includes(Number(id));
-export const isProtectedUser = (id) => PROTECTED_USER_IDS.includes(Number(id));
+export const EVENING_SHIFT_EMPLOYEE_IDS = [];
+export const EVENING_SHIFT_SQL = '0';
+// Combined SQL for reclaim/redistribute exclusion — no exempt employees
+export const NO_RECLAIM_SQL = '0';
 
-// بيرجّع نسخة مترتبة: المحميين الأول، وباقي الترتيب زي ما هو (sort ثابت).
-// getId: دالة بتجيب employee id من العنصر (افتراضي: العنصر نفسه لو رقم، أو item.id).
-export function protectedFirst(list, getId = (x) => (typeof x === 'object' ? x.id : x)) {
-  return [...list].sort((a, b) => Number(isProtectedEmployee(getId(b))) - Number(isProtectedEmployee(getId(a))));
+export const isProtectedEmployee = (_id) => false;
+export const isProtectedUser = (_id) => false;
+
+// كل الموظفين بنفس الترتيب — مفيش أولوية لحد.
+export function protectedFirst(list, _getId) {
+  return [...list];
 }
 
 // حصص التوزيع: الكل بالتساوي — مفيش أي موظف بياخد أكتر من زمايله.
