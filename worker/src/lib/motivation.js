@@ -5,7 +5,7 @@
 // applyManualAdjustment من rewards.js — فيبقى الرصيد دائمًا مصدر حقيقة واحد.
 // الجدول الوحيد المُضاف (motivation_events) لا يخزّن أي رصيد؛ دوره فقط منع
 // صرف نفس المكافأة/الخصم مرتين (idempotency)، بنفس فكرة sweepOpsReports.
-import { PROTECTED_SQL, NO_RECLAIM_SQL } from './protected.js';
+import { NO_RECLAIM_SQL } from './protected.js';
 import { applyManualAdjustment } from './rewards.js';
 import { getCairoNow, getCairoDayBoundsUtc } from './workhours.js';
 
