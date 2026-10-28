@@ -41,7 +41,7 @@ whatsappRoutes.get('/customers/:id/preview', async (c) => {
 
   const message = generateMessage({ customerName: customer.name, employeeName: employeeNameAr, companyName, template });
 
-  // الموظفة الجديدة بتختار من ٥ قوالب جاهزة.
+  // TRAINEE_TEMPLATES: متاحة بس لو isProtectedEmployee بترجع true — دلوقتي دايمًا null للكل.
   const templates = user.role === 'employee' && isProtectedEmployee(user.employeeId)
     ? TRAINEE_TEMPLATES.map((t) => ({
         label: t.label,
