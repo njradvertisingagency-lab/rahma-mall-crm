@@ -158,7 +158,7 @@ export async function recordCheckIn(env, user) {
   }
 
   const now = nowIso();
-  // الموظفة الجديدة (فترة تدريب): مفيش تأخير يتحسب عليها.
+  // كل الموظفين متساوين — التأخير يُحسب على الجميع بنفس الطريقة.
   const isLate = !isProtectedUser(user.id) && !status.isHolidayToday && status.minutesSinceMidnight > empStartMin;
   const lateMinutes = isLate ? status.minutesSinceMidnight - empStartMin : 0;
 
