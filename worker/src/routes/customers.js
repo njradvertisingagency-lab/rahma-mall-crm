@@ -29,7 +29,7 @@ function customersListCacheKey(user, queryString) {
   return `cache:customers_list:${scope}:${queryString}`;
 }
 
-const STATUSES = ['NEW', 'CALLING', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
+const STATUSES = ['NEW', 'NO_ANSWER', 'FOLLOW_UP', 'AGREED', 'CLOSED'];
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 const CLOSED_REASONS = ['Purchased', 'Not Interested', 'Wrong Number', 'Already Purchased', 'Price', 'Unavailable Product', 'Other'];
 
@@ -75,12 +75,10 @@ function customerRowToJson(row) {
 /** Applies server-authoritative scoping: an employee ALWAYS sees only their own customers. */
 function scopeToUser(user, sql, binds, conds) {
   if (user.role === 'employee') {
-    // الموظف يفتح يلاقي أرقام النهارده بس (بتوقيت القاهرة) — أي رقم اتوزع
-    // قبل كده يختفي من قائمته، إلا العميل المهتم / عليه متابعة / ما ردش / موبايله
-    // مقفول أو مشغول — عشان ما يضيعش أي رقم لسه محتاج اتصال. الأرقام القديمة فاضلة في القاعدة ويشوفها المدير.
-    const { dayStartIso } = getCairoDayBoundsUtc(getCairoNow().dateStr);
-    conds.push(`c.assigned_employee_id = ? AND (c.assigned_at >= ? OR c.status IN ('NEW','INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca WHERE ca.customer_id = c.id AND ca.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`);
-    binds.push(user.employeeId, dayStartIso);
+    // الموظف يشوف كل أرقامه المعينة له بدون قيد تاريخ — طلب صريح من صاحب الشركة
+    // لإعادة كل الأرقام التي وُزّعت على كل موظف منذ بداية السيستم.
+    conds.push(`c.assigned_employee_id = ?`);
+    binds.push(user.employeeId);
   }
 }
 
@@ -160,16 +158,11 @@ customerRoutes.get('/', async (c) => {
   // Dynamic segments — every condition is derived from real, live data (never a stored tag).
   const SEGMENT_CONDS = {
     // "جديد" = حالة جديد + لم يفتحه الموظف المعيّن له قط منذ التعيين (لم يظهر في customer_seen بعد التعيين)
-    NEW: `c.status = 'NEW' AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)`,
-    INTERESTED: `c.status = 'INTERESTED'`,
-    FOLLOW_UP: `c.status = 'FOLLOW_UP'`,
+    NEW: `c.status = 'NEW'`,
     NO_ANSWER: `c.status = 'NO_ANSWER'`,
-    HIGH_PRIORITY: `c.priority IN ('HIGH','URGENT')`,
-    OVERDUE: `EXISTS (SELECT 1 FROM followups f WHERE f.customer_id = c.id AND (f.status = 'OVERDUE' OR (f.status = 'UPCOMING' AND f.scheduled_for < datetime('now'))))`,
-    WHATSAPP_CONTACTED: `c.whatsapp_contact_status = 'CONTACT_INITIATED'`,
-    NOT_SEEN: `c.assigned_employee_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)`,
-    HOT: `c.status = 'INTERESTED' AND c.updated_at >= datetime('now', '-24 hours')`,
-    VIP: `c.is_vip = 1`,
+    FOLLOW_UP: `c.status = 'FOLLOW_UP'`,
+    AGREED: `c.status = 'AGREED'`,
+    CLOSED: `c.status = 'CLOSED'`,
   };
   if (q.segment && SEGMENT_CONDS[q.segment]) {
     conds.push(SEGMENT_CONDS[q.segment]);
@@ -841,7 +834,7 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
 
 // ---------------------------------------------------------------------------
 // WHATSAPP FOLLOWUP — بعد إرسال واتساب الموظف يختار حالة العميل:
-//   INTERESTED / FOLLOW_UP → تغيير الحالة + ملاحظة (محمي من السحب)
+//   AGREED / FOLLOW_UP → تغيير الحالة + ملاحظة (محمي من السحب)
 //   AWAITING_REPLY → سحب فوري للعميل (إرجاعه للمجمع)
 // ---------------------------------------------------------------------------
 customerRoutes.post('/:id/whatsapp-followup', async (c) => {
@@ -851,7 +844,7 @@ customerRoutes.post('/:id/whatsapp-followup', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { action } = body;
 
-  const VALID_ACTIONS = ['INTERESTED', 'FOLLOW_UP', 'AWAITING_REPLY'];
+  const VALID_ACTIONS = ['AGREED', 'FOLLOW_UP', 'AWAITING_REPLY'];
   if (!VALID_ACTIONS.includes(action)) {
     return jsonError(c, 400, 'إجراء غير صالح', 'INVALID_ACTION');
   }
@@ -861,8 +854,8 @@ customerRoutes.post('/:id/whatsapp-followup', async (c) => {
 
   const ts = nowIso();
 
-  if (action === 'INTERESTED' || action === 'FOLLOW_UP') {
-    const statusLabel = action === 'INTERESTED' ? 'مهتم' : 'متابعة';
+  if (action === 'AGREED' || action === 'FOLLOW_UP') {
+    const statusLabel = action === 'AGREED' ? 'تم الاتفاق' : 'متابعة';
     await db.prepare(`UPDATE customers SET status = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(action, ts, id).run();
     await db.prepare(`INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by, note) VALUES (?, ?, ?, ?, ?)`).bind(id, existing.status, action, user.id, `واتساب — ${statusLabel}`).run();
     await db.prepare(`INSERT INTO customer_notes (customer_id, author_id, author_name, note) VALUES (?, ?, ?, ?)`).bind(id, user.id, user.displayName, `📱 واتساب — ${statusLabel}`).run();
