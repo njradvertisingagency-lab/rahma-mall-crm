@@ -15,11 +15,11 @@ async function getEligibleEmployees(db, requestedIds, onlyAvailable) {
     list = (await db.prepare(`SELECT * FROM employees WHERE active = 1`).all()).results;
   }
   if (onlyAvailable) list = list.filter((e) => e.availability === 'AVAILABLE');
-  return protectedFirst(list); // الموظفة الجديدة أول واحدة في الترتيب
+  return protectedFirst(list); // كل الموظفين متساوين — الترتيب لا يُغير الحصص.
 }
 
 function planEqual(customerIds, employees) {
-  // Contiguous blocks حسب الحصص (الموظفة الجديدة أول واحدة وبتاخد أكتر بـ ٧-١٠ أرقام).
+  // Contiguous blocks بالتساوي على جميع الموظفين.
   const quotas = computeQuotas(customerIds.length, employees.map((e) => e.id));
   const plan = new Map(employees.map((e) => [e.id, []]));
   let idx = 0;
