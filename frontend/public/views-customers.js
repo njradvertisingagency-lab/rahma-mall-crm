@@ -10,14 +10,12 @@
   }
 
   function statusOptions() {
-    return ['', 'NEW', 'NO_ANSWER', 'BUSY', 'FOLLOW_UP', 'INTERESTED', 'NOT_INTERESTED', 'CLOSED'];
+    return ['', 'NEW', 'NO_ANSWER', 'FOLLOW_UP', 'AGREED', 'CLOSED'];
   }
 
-  const SEGMENTS = ['', 'NEW', 'INTERESTED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
-  const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', INTERESTED: 'مهتم', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يوجد رد', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد', VIP: '👑 عملاء VIP' };
-  // مطابقة للحالات القابلة للاختيار يدويًا في صفحة تفاصيل العميل — "جديد"
-  // تلقائية لحد أول فتح، و"تمت الصفقة"/"مغلق" لها زر مخصص، فلا تُختار هنا.
-  const BULK_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'NOT_INTERESTED'];
+  const SEGMENTS = ['', 'NEW', 'AGREED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
+  const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', AGREED: 'تم الاتفاق', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يستجيب', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد', VIP: '👑 عملاء VIP' };
+  const BULK_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'AGREED'];
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
   function modal(title, bodyNode, footerNodes) {
@@ -115,7 +113,6 @@
     filtersBar.appendChild(clearBtn);
     container.appendChild(filtersBar);
 
-    // --- الفلاتر المحفوظة (لكل مستخدم) ---
     const savedBar = el('div', { class: 'filters-bar', style: 'margin-top:-6px' });
     const savedSel = el('select', {}, [el('option', { value: '' }, ['تحميل فلتر محفوظ…'])]);
     savedBar.appendChild(savedSel);
@@ -261,7 +258,6 @@
         rowActions.push(el('button', { class: 'btn btn-sm btn-success', onclick: () => restoreCustomer(c) }, ['↺ استعادة']));
       }
       cells.push(el('div', { class: 'flex gap-8 wrap' }, rowActions));
-      // العميل اتفتح ولسه متكتبلوش ملاحظة — يفضل أحمر لحد ما الملاحظة تتكتب.
       return el('tr', c.needsNote ? { class: 'row-needs-note', title: 'تم فتح العميل ولم تُكتب ملاحظة بعد' } : {}, cells.map((c2) => el('td', {}, [c2])));
     }
 
