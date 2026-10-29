@@ -29,7 +29,7 @@ function customersListCacheKey(user, queryString) {
   return `cache:customers_list:${scope}:${queryString}`;
 }
 
-const STATUSES = ['NEW', 'NO_ANSWER', 'FOLLOW_UP', 'AGREED', 'CLOSED'];
+const STATUSES = ['NEW', 'NO_ANSWER', 'FOLLOW_UP', 'INTERESTED', 'CLOSED'];
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 const CLOSED_REASONS = ['Purchased', 'Not Interested', 'Wrong Number', 'Already Purchased', 'Price', 'Unavailable Product', 'Other'];
 
@@ -161,7 +161,7 @@ customerRoutes.get('/', async (c) => {
     NEW: `c.status = 'NEW'`,
     NO_ANSWER: `c.status = 'NO_ANSWER'`,
     FOLLOW_UP: `c.status = 'FOLLOW_UP'`,
-    AGREED: `c.status = 'AGREED'`,
+    INTERESTED: `c.status = 'INTERESTED'`,
     CLOSED: `c.status = 'CLOSED'`,
   };
   if (q.segment && SEGMENT_CONDS[q.segment]) {
@@ -834,7 +834,7 @@ customerRoutes.post('/:id/call-attempts', async (c) => {
 
 // ---------------------------------------------------------------------------
 // WHATSAPP FOLLOWUP — بعد إرسال واتساب الموظف يختار حالة العميل:
-//   AGREED / FOLLOW_UP → تغيير الحالة + ملاحظة (محمي من السحب)
+//   INTERESTED / FOLLOW_UP → تغيير الحالة + ملاحظة (محمي من السحب)
 //   AWAITING_REPLY → سحب فوري للعميل (إرجاعه للمجمع)
 // ---------------------------------------------------------------------------
 customerRoutes.post('/:id/whatsapp-followup', async (c) => {
@@ -844,7 +844,7 @@ customerRoutes.post('/:id/whatsapp-followup', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { action } = body;
 
-  const VALID_ACTIONS = ['AGREED', 'FOLLOW_UP', 'AWAITING_REPLY'];
+  const VALID_ACTIONS = ['INTERESTED', 'FOLLOW_UP', 'AWAITING_REPLY'];
   if (!VALID_ACTIONS.includes(action)) {
     return jsonError(c, 400, 'إجراء غير صالح', 'INVALID_ACTION');
   }
@@ -854,8 +854,8 @@ customerRoutes.post('/:id/whatsapp-followup', async (c) => {
 
   const ts = nowIso();
 
-  if (action === 'AGREED' || action === 'FOLLOW_UP') {
-    const statusLabel = action === 'AGREED' ? 'تم الاتفاق' : 'متابعة';
+  if (action === 'INTERESTED' || action === 'FOLLOW_UP') {
+    const statusLabel = action === 'INTERESTED' ? 'تم الاتفاق' : 'متابعة';
     await db.prepare(`UPDATE customers SET status = ?, updated_at = ?, version = version + 1 WHERE id = ?`).bind(action, ts, id).run();
     await db.prepare(`INSERT INTO customer_status_history (customer_id, from_status, to_status, changed_by, note) VALUES (?, ?, ?, ?, ?)`).bind(id, existing.status, action, user.id, `واتساب — ${statusLabel}`).run();
     await db.prepare(`INSERT INTO customer_notes (customer_id, author_id, author_name, note) VALUES (?, ?, ?, ?)`).bind(id, user.id, user.displayName, `📱 واتساب — ${statusLabel}`).run();
