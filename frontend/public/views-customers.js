@@ -10,12 +10,12 @@
   }
 
   function statusOptions() {
-    return ['', 'NEW', 'NO_ANSWER', 'FOLLOW_UP', 'AGREED', 'CLOSED'];
+    return ['', 'NEW', 'NO_ANSWER', 'FOLLOW_UP', 'INTERESTED', 'CLOSED'];
   }
 
-  const SEGMENTS = ['', 'NEW', 'AGREED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
-  const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', AGREED: 'تم الاتفاق', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يستجيب', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد', VIP: '👑 عملاء VIP' };
-  const BULK_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'AGREED'];
+  const SEGMENTS = ['', 'NEW', 'INTERESTED', 'FOLLOW_UP', 'NO_ANSWER', 'HIGH_PRIORITY', 'OVERDUE', 'WHATSAPP_CONTACTED', 'NOT_SEEN', 'HOT', 'SLA_BREACHED', 'VIP'];
+  const SEGMENT_LABELS = { '': 'كل الفئات', NEW: 'جديد', INTERESTED: 'تم الاتفاق', FOLLOW_UP: 'متابعة', NO_ANSWER: 'لا يستجيب', HIGH_PRIORITY: 'أولوية عالية', OVERDUE: 'متابعة متأخرة', WHATSAPP_CONTACTED: 'تم التواصل واتساب', NOT_SEEN: 'لم تتم رؤيته', HOT: '🔥 مهم', SLA_BREACHED: '🔴 تجاوز الموعد', VIP: '👑 عملاء VIP' };
+  const BULK_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'INTERESTED'];
   const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 
   function modal(title, bodyNode, footerNodes) {
