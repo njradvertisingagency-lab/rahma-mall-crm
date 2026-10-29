@@ -31,10 +31,9 @@
         ['موزّعين', kpis.assigned, 'info', '#/customers'],
         ['جديد', kpis.new, 'info', '#/customers?status=NEW'],
         ['لم يُفتح بعد', kpis.unopened || 0, 'danger', '#/customers?seen=not_seen'],
-        ['لا يوجد رد', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
+        ['لا يستجيب', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
         ['متابعة', kpis.followUp, 'warning', '#/customers?status=FOLLOW_UP'],
-        ['مهتم', kpis.interested, 'success', '#/customers?status=INTERESTED'],
-        ['غير مهتم', kpis.notInterested, null, '#/customers?status=NOT_INTERESTED'],
+        ['تم الاتفاق', kpis.agreed, 'success', '#/customers?status=AGREED'],
         ['مغلق', kpis.closed, 'success', '#/customers?status=CLOSED'],
         ['متابعات متأخرة', kpis.overdue, 'danger', '#/followups?overdue=true'],
         ['عملاء اليوم', kpis.todayCustomers, 'brand', '#/customers?dateFrom=' + todayFrom],
@@ -43,6 +42,8 @@
         ['نسبة الإنجاز', Math.round(kpis.completionRate * 100) + '%', 'brand', null],
         ['واتساب اليوم', kpis.whatsappToday, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
         ['واتساب هذا الأسبوع', kpis.whatsappWeek, 'success', '#/customers?whatsappStatus=CONTACT_INITIATED'],
+        ['تواصل هاتفي', kpis.phoneContacted || 0, 'info', null],
+        ['تواصل واتساب', kpis.waContacted || 0, 'success', null],
       ];
       items.forEach(([label, value, accent, link]) => kpiGrid.appendChild(kpi(label, value, accent, link ? () => App.navigate(link) : null)));
     }
