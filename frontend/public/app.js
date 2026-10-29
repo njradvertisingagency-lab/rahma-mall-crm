@@ -108,8 +108,7 @@ function fmtDuration(totalSeconds) {
 App.fmt = { dateTime: fmtDateTime, date: fmtDate, ago: timeAgo, duration: fmtDuration };
 
 const STATUS_LABELS = {
-  NEW: 'جديد', CALLING: 'جاري الاتصال', NO_ANSWER: 'لا يوجد رد', BUSY: 'مشغول',
-  FOLLOW_UP: 'متابعة', INTERESTED: 'مهتم', NOT_INTERESTED: 'غير مهتم', CLOSED: 'مغلق',
+  NEW: 'جديد', NO_ANSWER: 'لا يستجيب', FOLLOW_UP: 'متابعة', AGREED: 'تم الاتفاق', CLOSED: 'مغلق',
 };
 function statusBadge(status) {
   return el('span', { class: 'badge badge-' + status.toLowerCase() }, [STATUS_LABELS[status] || status]);
@@ -761,6 +760,7 @@ const NAV_ADMIN = [
 const NAV_EMPLOYEE = [
   ['dashboard', '📊', 'لوحة التحكم'],
   ['my-customers', '👥', 'عملائي'],
+  ['my-agreed', '🤝', 'عملاء تم الاتفاق'],
   ['my-interested', '⭐', 'عملائك المهتمين'],
   ['followups', '⏰', 'المتابعات'],
   ['my-performance', '📈', 'أدائي'],
