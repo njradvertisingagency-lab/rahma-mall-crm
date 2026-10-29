@@ -2,16 +2,16 @@
 (function () {
   const { el, api, badges, fmt } = App;
 
-  // "عملائك المهتمين": جدول بالعملاء اللي حالتهم "مهتم" وعليهم ملاحظة حقيقية
-  // (مش "مهتم" وخلاص ولا نقط). العميل بدون ملاحظة كافية بيظهر في قسم تنبيه تحت.
-  App.route('/my-interested', async () => {
+  // "عملاء تم الاتفاق": جدول بالعملاء اللي حالتهم "AGREED" وعليهم ملاحظة حقيقية
+  // العميل بدون ملاحظة كافية بيظهر في قسم تنبيه تحت.
+  App.route('/my-agreed', async () => {
     const container = el('div');
     container.appendChild(el('div', { class: 'page-header' }, [
-      el('div', { class: 'page-title' }, ['⭐ عملائك المهتمين']),
+      el('div', { class: 'page-title' }, ['🤝 عملاء تم الاتفاق']),
       el('div', { class: 'page-actions' }, [el('button', { class: 'btn btn-outline', onclick: () => load() }, ['🔄 تحديث'])]),
     ]));
     container.appendChild(el('div', { class: 'muted mb-16' }, [
-      'العميل بيظهر هنا لما تحط حالته "مهتم" وتكتب عليه ملاحظة حقيقية بتوضح هو عايز إيه — مش كلمة "مهتم" ولا نقط.',
+      'العميل بيظهر هنا لما تحط حالته "تم الاتفاق" وتكتب عليه ملاحظة حقيقية بتوضح تفاصيل الاتفاق.',
     ]));
     const body = el('div');
     container.appendChild(body);
@@ -59,16 +59,16 @@
         return;
       }
       body.appendChild(el('div', { class: 'card card-pad mb-16' }, [
-        el('div', { style: 'font-weight:800' }, [`العملاء المهتمين (بملاحظة): ${data.customers.length}`]),
+        el('div', { style: 'font-weight:800' }, [`عملاء تم الاتفاق (بملاحظة): ${data.customers.length}`]),
       ]));
       if (data.customers.length === 0) {
-        body.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['⭐']), 'لسه مفيش عملاء مهتمين عليهم ملاحظة حقيقية.']));
+        body.appendChild(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, ['🤝']), 'لسه مفيش عملاء تم الاتفاق معهم عليهم ملاحظة حقيقية.']));
       } else {
         body.appendChild(table(data.customers, true));
       }
       if (data.needNote.length > 0) {
         body.appendChild(el('div', { class: 'card card-pad mb-16 mt-16' }, [
-          el('div', { style: 'font-weight:800;margin-bottom:6px' }, [`⚠️ ${data.needNote.length} عميل حالته "مهتم" بس مفيش عليه ملاحظة كافية`]),
+          el('div', { style: 'font-weight:800;margin-bottom:6px' }, [`⚠️ ${data.needNote.length} عميل حالته "تم الاتفاق" بس مفيش عليه ملاحظة كافية`]),
           el('div', { class: 'muted' }, ['اكتب على كل واحد منهم ملاحظة حقيقية عشان يظهر في الجدول اللي فوق.']),
         ]));
         body.appendChild(table(data.needNote, false));
