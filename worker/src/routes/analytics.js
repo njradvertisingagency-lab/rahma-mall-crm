@@ -107,7 +107,7 @@ analyticsRoutes.get('/dashboard', async (c) => {
         new: byStatus.NEW || 0,
         noAnswer: byStatus.NO_ANSWER || 0,
         followUp: byStatus.FOLLOW_UP || 0,
-        agreed: byStatus.INTERESTED || 0,
+        interested: byStatus.INTERESTED || 0,
         closed,
         phoneContacted: phoneContacted.n || 0,
         waContacted: waContacted.n || 0,
