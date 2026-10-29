@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { requireAuth } from '../lib/auth.js';
 import { jsonError, backgroundWrite } from '../lib/db.js';
 import { sessGet, sessPut } from '../lib/sessionStore.js';
-import { getCairoNow, getCairoDayBoundsUtc } from '../lib/workhours.js';
 
 export const analyticsRoutes = new Hono();
 analyticsRoutes.use('*', requireAuth);
@@ -27,16 +26,11 @@ function todayStartIso() {
 analyticsRoutes.get('/dashboard', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
-  // For employees, scope to the same visibility as the customer list:
-  // today's assignments + customers with actionable statuses + customers with pending call outcomes.
-  const { dayStartIso: empDayStart } = user.role === 'employee' ? getCairoDayBoundsUtc(getCairoNow().dateStr) : {};
+  // الموظف يشوف كل أرقامه المعيّنة — بدون قيد تاريخ (طلب صاحب الشركة)
   const scope = user.role === 'employee' ? 'AND assigned_employee_id = ?' : '';
   const binds = user.role === 'employee' ? [user.employeeId] : [];
-  // Employee-scoped visibility: same as customer list (today + actionable statuses + pending call outcomes)
-  const empVis = user.role === 'employee'
-    ? `AND (assigned_at >= ? OR status IN ('NEW','INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = customers.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
-    : '';
-  const visBinds = user.role === 'employee' ? [user.employeeId, empDayStart] : [];
+  const empVis = '';
+  const visBinds = user.role === 'employee' ? [user.employeeId] : [];
 
   const cacheKey = dashboardCacheKey(user);
   const cached = await sessGet(c.env, cacheKey).catch(() => null);
@@ -85,19 +79,21 @@ analyticsRoutes.get('/dashboard', async (c) => {
     const waBinds = user.role === 'employee' ? [user.employeeId] : [];
     const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
     const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-    const empVisC = user.role === 'employee'
-      ? `AND (c.assigned_at >= ? OR c.status IN ('NEW','INTERESTED','FOLLOW_UP','NO_ANSWER','BUSY','CALLING') OR EXISTS (SELECT 1 FROM call_attempts ca2 WHERE ca2.customer_id = c.id AND ca2.outcome IN ('NO_ANSWER','SWITCHED_OFF','BUSY')))`
-      : '';
+    const empVisC = '';
     const unopenedRow = await db.prepare(
       `SELECT COUNT(*) AS n FROM customers c WHERE c.archived = 0 AND c.assigned_employee_id IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM customer_seen cs WHERE cs.customer_id = c.id AND cs.employee_id = c.assigned_employee_id AND cs.seen_at >= c.assigned_at)
        ${scope} ${empVisC}`
     ).bind(...visBinds).first();
 
-    const [waToday, waWeek, waMonth] = await Promise.all([
+    const phoneScope = user.role === 'employee' ? 'AND ca.employee_id = ?' : '';
+    const phoneBinds = user.role === 'employee' ? [user.employeeId] : [];
+    const [waToday, waWeek, waMonth, phoneContacted, waContacted] = await Promise.all([
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(today, ...waBinds).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(weekAgo, ...waBinds).first(),
       db.prepare(`SELECT COUNT(*) AS n FROM whatsapp_interactions WHERE created_at >= ? ${waScope}`).bind(monthAgo, ...waBinds).first(),
+      db.prepare(`SELECT COUNT(DISTINCT ca.customer_id) AS n FROM call_attempts ca WHERE ca.outcome = 'ANSWERED' ${phoneScope}`).bind(...phoneBinds).first(),
+      db.prepare(`SELECT COUNT(DISTINCT customer_id) AS n FROM whatsapp_interactions ${user.role === 'employee' ? 'WHERE employee_id = ?' : 'WHERE 1=1'}`).bind(...waBinds).first(),
     ]);
 
     const payload = {
@@ -109,13 +105,12 @@ analyticsRoutes.get('/dashboard', async (c) => {
         unassigned: unassignedRow.n,
         assigned: assignedRow.n,
         new: byStatus.NEW || 0,
-        calling: byStatus.CALLING || 0,
         noAnswer: byStatus.NO_ANSWER || 0,
-        busy: byStatus.BUSY || 0,
         followUp: byStatus.FOLLOW_UP || 0,
-        interested: byStatus.INTERESTED || 0,
-        notInterested: byStatus.NOT_INTERESTED || 0,
+        agreed: byStatus.AGREED || 0,
         closed,
+        phoneContacted: phoneContacted.n || 0,
+        waContacted: waContacted.n || 0,
         unopened: unopenedRow.n,
         overdue: overdueFollowups.n,
         todayCustomers: todayCustomers.n,
