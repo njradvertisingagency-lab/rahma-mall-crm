@@ -33,7 +33,7 @@
         ['لم يُفتح بعد', kpis.unopened || 0, 'danger', '#/customers?seen=not_seen'],
         ['لا يستجيب', kpis.noAnswer, null, '#/customers?status=NO_ANSWER'],
         ['متابعة', kpis.followUp, 'warning', '#/customers?status=FOLLOW_UP'],
-        ['تم الاتفاق', kpis.agreed, 'success', '#/customers?status=INTERESTED'],
+        ['تم الاتفاق', kpis.interested, 'success', '#/customers?status=INTERESTED'],
         ['مغلق', kpis.closed, 'success', '#/customers?status=CLOSED'],
         ['متابعات متأخرة', kpis.overdue, 'danger', '#/followups?overdue=true'],
         ['عملاء اليوم', kpis.todayCustomers, 'brand', '#/customers?dateFrom=' + todayFrom],
