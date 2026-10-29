@@ -3,7 +3,7 @@
     const { el, api, toast, badges, fmt } = App;
     // الحالات القابلة للاختيار يدويًا من القائمة — 5 حالات (طلب صاحب الشركة):
    // جديد (تلقائية) ← لا يستجيب ← متابعة ← تم الاتفاق ← مغلق (عبر زر تمت الصفقة).
-   const SELECTABLE_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'AGREED'];
+   const SELECTABLE_STATUSES = ['NO_ANSWER', 'FOLLOW_UP', 'INTERESTED'];
     const STATUS_LABELS = App.labels.status;
     const SLA_LEVEL_LABELS = { OK: 'ضمن الموعد', WARNING: 'اقترب الموعد', BREACHED: 'تم تجاوز الموعد' };
     const PAYMENT_METHOD_LABELS = { CASH: 'نقدًا', CARD: 'بطاقة', INSTALLMENT: 'تقسيط', OTHER: 'أخرى' };
@@ -683,7 +683,7 @@
             const chipBaseStyle = 'color:#fff;padding:8px 6px;border-radius:20px;font-size:12.5px;font-weight:700;border:3px solid transparent;cursor:pointer;transition:all .2s ease;text-align:center;line-height:1.3';
             const chipActiveExtra = 'transform:scale(1.05);box-shadow:0 2px 8px rgba(0,0,0,.25)';
             const saveBtnStyle = 'color:#fff;font-weight:800;padding:11px 0;border-radius:14px;font-size:14px;width:100%;border:none;cursor:pointer;transition:background .2s';
-            const OUTCOME_ALLOWED_STATUSES = { ANSWERED:['FOLLOW_UP','AGREED'], NO_ANSWER:['NO_ANSWER'], BUSY:['NO_ANSWER','FOLLOW_UP'], WRONG_NUMBER:['NO_ANSWER'], SWITCHED_OFF:['NO_ANSWER','FOLLOW_UP'], REJECTED:['NO_ANSWER'] };
+            const OUTCOME_ALLOWED_STATUSES = { ANSWERED:['FOLLOW_UP','INTERESTED'], NO_ANSWER:['NO_ANSWER'], BUSY:['NO_ANSWER','FOLLOW_UP'], WRONG_NUMBER:['NO_ANSWER'], SWITCHED_OFF:['NO_ANSWER','FOLLOW_UP'], REJECTED:['NO_ANSWER'] };
             const OUTCOME_AUTO_STATUS = { NO_ANSWER:'NO_ANSWER', WRONG_NUMBER:'NO_ANSWER' };
             const unifiedSection = el('div', { style: chipSectionStyle });
             unifiedSection.appendChild(el('div', { style: chipTitleStyle }, ['سجل المكالمة']));
@@ -722,7 +722,7 @@
                       outcomeBtnsWrap.appendChild(btn);
             });
             unifiedSection.appendChild(outcomeBtnsWrap);
-            const STATUS_CHIP_COLORS = { NO_ANSWER:'#95a5a6', FOLLOW_UP:'#e67e22', AGREED:'#27ae60' };
+            const STATUS_CHIP_COLORS = { NO_ANSWER:'#95a5a6', FOLLOW_UP:'#e67e22', INTERESTED:'#27ae60' };
             const statusWrap = el('div', { style: 'display:none' });
             statusWrap.appendChild(el('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600' }, ['الحالة:']));
             const statusBtnsWrap = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px' });
@@ -860,7 +860,7 @@
               const waFollowupWrap = el('div', { style: 'background:var(--surface-2);border-radius:14px;padding:12px;margin-bottom:12px;border:1px solid var(--border)' });
                 waFollowupWrap.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;color:var(--text);text-align:center' }, ['حدد حالة العميل بعد الواتساب']));
                 const waChips = el('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px' });
-                const WA_FOLLOWUP_OPTIONS = [{ action:'AGREED', label:'تم الاتفاق', bg:'#27ae60' }, { action:'FOLLOW_UP', label:'متابعة', bg:'#e67e22' }, { action:'AWAITING_REPLY', label:'انتظار رد', bg:'#95a5a6' }];
+                const WA_FOLLOWUP_OPTIONS = [{ action:'INTERESTED', label:'تم الاتفاق', bg:'#27ae60' }, { action:'FOLLOW_UP', label:'متابعة', bg:'#e67e22' }, { action:'AWAITING_REPLY', label:'انتظار رد', bg:'#95a5a6' }];
                 const dimStyle = 'background:#d5d8dc;color:#7f8c8d;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;text-align:center;line-height:1.4';
                 let waSelectedAction = null;
                 const allWaChipBtns = [];
@@ -916,7 +916,7 @@
                 const waFollowupWrap = el('div', { style: 'background:var(--surface-2);border-radius:14px;padding:12px;margin-bottom:12px;border:1px solid var(--border)' });
                 waFollowupWrap.appendChild(el('div', { style: 'font-weight:800;font-size:13px;margin-bottom:10px;text-align:center' }, ['حدد حالة العميل بعد الواتساب']));
                 const waChips = el('div', { style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:8px' });
-                const WA_OPTS = [{ action:'AGREED', label:'تم الاتفاق', bg:'#27ae60' }, { action:'FOLLOW_UP', label:'متابعة', bg:'#e67e22' }, { action:'AWAITING_REPLY', label:'انتظار رد', bg:'#95a5a6' }];
+                const WA_OPTS = [{ action:'INTERESTED', label:'تم الاتفاق', bg:'#27ae60' }, { action:'FOLLOW_UP', label:'متابعة', bg:'#e67e22' }, { action:'AWAITING_REPLY', label:'انتظار رد', bg:'#95a5a6' }];
                 const dimSt = 'background:#d5d8dc;color:#7f8c8d;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;text-align:center';
                 let waSel = null; const waChipBtns = [];
                 WA_OPTS.forEach(opt => {
