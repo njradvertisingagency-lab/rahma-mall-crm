@@ -5,8 +5,8 @@ import { isMeaningfulNote } from '../lib/notequality.js';
 export const interestedRoutes = new Hono();
 interestedRoutes.use('*', requireAuth);
 
-// "عملائك المهتمين": العملاء اللي حالتهم "مهتم" وعليهم ملاحظة حقيقية (مش "مهتم" وخلاص
-// ولا نقط) اتكتبت بعد ما العميل اتوزّع للموظف. الموظف بيشوف عملاءه بس؛ قائد الفريق بيشوف الكل.
+// "عملاء تم الاتفاق": العملاء اللي حالتهم "AGREED" وعليهم ملاحظة حقيقية
+// اتكتبت بعد ما العميل اتوزّع للموظف. الموظف بيشوف عملاءه بس؛ قائد الفريق بيشوف الكل.
 interestedRoutes.get('/', async (c) => {
   const user = c.get('user');
   const db = c.env.DB;
@@ -19,7 +19,7 @@ interestedRoutes.get('/', async (c) => {
       `SELECT c.id, c.name, c.phone, c.normalized_phone, c.priority, c.assigned_at, c.updated_at,
               c.assigned_employee_id, e.name AS employee_name
        FROM customers c LEFT JOIN employees e ON e.id = c.assigned_employee_id
-       WHERE c.status = 'INTERESTED' AND c.archived = 0 ${empFilter}
+       WHERE c.status = 'AGREED' AND c.archived = 0 ${empFilter}
        ORDER BY c.updated_at DESC LIMIT 500`
     )
     .bind(...binds)
@@ -30,7 +30,7 @@ interestedRoutes.get('/', async (c) => {
     .prepare(
       `SELECT n.customer_id, n.note, n.created_at
        FROM customer_notes n JOIN customers c ON c.id = n.customer_id
-       WHERE c.status = 'INTERESTED' AND c.archived = 0 ${empFilter}
+       WHERE c.status = 'AGREED' AND c.archived = 0 ${empFilter}
          AND (c.assigned_at IS NULL OR n.created_at >= c.assigned_at)
        ORDER BY n.created_at DESC`
     )
