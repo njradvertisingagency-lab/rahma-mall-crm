@@ -108,7 +108,7 @@ function fmtDuration(totalSeconds) {
 App.fmt = { dateTime: fmtDateTime, date: fmtDate, ago: timeAgo, duration: fmtDuration };
 
 const STATUS_LABELS = {
-  NEW: 'جديد', NO_ANSWER: 'لا يستجيب', FOLLOW_UP: 'متابعة', AGREED: 'تم الاتفاق', CLOSED: 'مغلق',
+  NEW: 'جديد', NO_ANSWER: 'لا يستجيب', FOLLOW_UP: 'متابعة', INTERESTED: 'تم الاتفاق', CLOSED: 'مغلق',
 };
 function statusBadge(status) {
   return el('span', { class: 'badge badge-' + status.toLowerCase() }, [STATUS_LABELS[status] || status]);
